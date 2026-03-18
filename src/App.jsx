@@ -1,120 +1,84 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import axios from 'axios'
+
+// あなたのGASのウェブアプリURLをここに貼る
+const GAS_URL = "YOUR_GAS_WEB_APP_URL"
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [step, setStep] = useState('login') // login, change-password, menu
+  const [role, setRole] = useState('')      // teacher, student
+  const [userId, setUserId] = useState('')
+  const [password, setPassword] = useState('')
+  const [userName, setUserName] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  // ログイン処理
+  const handleLogin = async () => {
+    if (!userId || !password) return alert("IDとパスワードを入力してください");
+    setLoading(true);
+    try {
+      const response = await axios.post(GAS_URL, JSON.stringify({ 
+        action: "login", 
+        userId, 
+        password 
+      }), { headers: { 'Content-Type': 'text/plain' } });
+
+      if (response.data.result === "success") {
+        setUserName(response.data.name);
+        setRole(response.data.role); // GASから role: "teacher" か "student" が返ってくる想定
+
+        if (response.data.isInitial) {
+          setStep('change-password');
+        } else {
+          setStep('menu');
+        }
+      } else {
+        alert("認証に失敗しました");
+      }
+    } catch (e) {
+      alert("通信エラーが発生しました");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="container">
+      {loading && <div className="loading-overlay">通信中...</div>}
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      {/* ログイン画面 */}
+      {step === 'login' && (
+        <div className="login-box">
+          <h1>塾管理アプリ</h1>
+          <input type="text" placeholder="ユーザーID" value={userId} onChange={(e) => setUserId(e.target.value)} />
+          <input type="password" placeholder="パスワード" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <button onClick={handleLogin}>ログイン</button>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      )}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      {/* メニュー画面（ここで分岐！） */}
+      {step === 'menu' && (
+        <div className="menu-container">
+          <h2>こんにちは、{userName} {role === 'teacher' ? '先生' : 'さん'}</h2>
+          
+          {role === 'teacher' ? (
+            <div className="teacher-section">
+              <h3>【先生専用メニュー】</h3>
+              <button>生徒一覧表示</button>
+              <button>テスト作成</button>
+              <button>成績入力</button>
+            </div>
+          ) : (
+            <div className="student-section">
+              <h3>【生徒専用メニュー】</h3>
+              <button>テストを受ける</button>
+              <button>自分の成績を見る</button>
+            </div>
+          )}
+          <button onClick={() => setStep('login')}>ログアウト</button>
+        </div>
+      )}
+    </div>
   )
 }
 
