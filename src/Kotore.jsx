@@ -1,38 +1,33 @@
 import { useState } from 'react'
 import axios from 'axios'
 
-// 環境変数からGASのURLを取得
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 export default function Kotore({ userId, userName, grade }) {
-  const [sending, setSending] = useState(false);
+  // sending の初期値を null (何も送っていない状態) にする
+  const [sending, setSending] = useState(null);
 
-  // --- 先生に通知を送るメイン関数 (typeで内容を分ける) ---
   const sendCall = async (type) => {
-    // 連続クリック防止
-    if (sending) return;
+    if (sending) return; // 何か送信中なら反応しない
     
-    setSending(true);
+    setSending(type); // 'check' または 'question' をセット
 
-    // typeによって送る文字を変える
     const statusLabel = type === 'check' ? "丸付け待ち" : "質問あり";
 
     try {
-      // GASの action: "sendNotification" を呼び出す
       await axios.post(GAS_URL, JSON.stringify({ 
         action: "sendNotification", 
         userId: userId, 
         userName: userName,
         grade: grade,
-        status: statusLabel // ★ ここで「丸付け待ち」か「質問あり」をGASに送る
+        status: statusLabel 
       }), { headers: { 'Content-Type': 'text/plain' } });
       
-      alert(`${statusLabel}として先生に合図を送りました！そのまま座って待っていてね。`);
+      alert(`${statusLabel}として先生に合図を送りました！`);
     } catch (e) {
-      console.error(e);
-      alert("通信エラーが起きました。もう一度ボタンを押してみてね。");
+      alert("通信エラーが起きました。");
     } finally {
-      setSending(false);
+      setSending(null); // 送信が終わったら null に戻す
     }
   };
 
@@ -44,22 +39,22 @@ export default function Kotore({ userId, userName, grade }) {
       </p>
       
       <div style={{ display: 'flex', justifyContent: 'center', gap: '40px' }}>
-        {/* 丸付け依頼ボタン (type: 'check') */}
+        {/* 丸付け依頼ボタン */}
         <button 
           onClick={() => sendCall('check')} 
-          disabled={sending}
-          style={callButtonStyle(sending ? '#ccc' : '#e67e22')}
+          disabled={sending !== null} // 何か送信中なら両方無効化（二重送信防止）
+          style={callButtonStyle(sending === 'check' ? '#ccc' : '#e67e22')}
         >
-          {sending ? "送信中..." : "✋ 丸付けお願いします！"}
+          {sending === 'check' ? "送信中..." : "✋ 丸付けお願いします！"}
         </button>
 
-        {/* 質問ボタン (type: 'question') */}
+        {/* 質問ボタン */}
         <button 
           onClick={() => sendCall('question')} 
-          disabled={sending}
-          style={callButtonStyle(sending ? '#ccc' : '#3498db')}
+          disabled={sending !== null} 
+          style={callButtonStyle(sending === 'question' ? '#ccc' : '#3498db')}
         >
-          {sending ? "送信中..." : "🤔 質問があります"}
+          {sending === 'question' ? "送信中..." : "🤔 質問があります"}
         </button>
       </div>
 
@@ -70,7 +65,6 @@ export default function Kotore({ userId, userName, grade }) {
   );
 }
 
-// ボタンの共通スタイル
 const callButtonStyle = (color) => ({
   width: '320px',
   height: '200px',
@@ -82,9 +76,8 @@ const callButtonStyle = (color) => ({
   border: 'none',
   borderRadius: '24px',
   boxShadow: '0 10px 20px rgba(0,0,0,0.15)',
-  transition: 'transform 0.1s, background-color 0.3s',
+  transition: '0.3s',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  lineHeight: '1.4'
 });
