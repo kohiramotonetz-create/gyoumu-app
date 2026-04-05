@@ -57,11 +57,12 @@ const styles = {
     textAlign: 'center',
   },
   title: {
-    fontSize: '3rem',
+    fontSize: '2rem',       // 3rem から 2rem に縮小（これで1行に収まるはずです）
     fontWeight: 'bold',
     marginBottom: '15px',
     color: '#000',
-    letterSpacing: '2px',
+    letterSpacing: '1px',   // 文字間隔も少し詰めるとより収まりが良くなります
+    whiteSpace: 'nowrap',   // 念のため「絶対に改行しない」という指示を追加
   },
   inputGroup: {
     display: 'flex',
