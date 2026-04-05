@@ -77,6 +77,7 @@ function App() {
           {/* --- A. 生徒レイヤー --- */}
           {role === 'student' && (
             <StudentView 
+            　userId={userId}    // ← これを書き足
               userName={userName} 
               grade={grade} 
               handleLogout={handleLogout} 

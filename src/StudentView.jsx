@@ -3,14 +3,14 @@ import Kotore from './Kotore'
 import SchoolProgress from './SchoolProgress'
 import SukimaKun from './SukimaKun'
 
-export default function StudentView({ userName, grade, handleLogout }) {
-  // 右側に何を表示するかを決める状態 (デフォルトは 'kotore')
+// 引数に userId を追加
+export default function StudentView({ userId, userName, grade, handleLogout }) {
   const [activeTab, setActiveTab] = useState('kotore');
 
   return (
     <div className="student-dashboard" style={{ display: 'flex', height: '100vh' }}>
       
-      {/* --- 左側：サイドバー (約200px) --- */}
+      {/* サイドバー部分は変更なし */}
       <aside style={{ width: '220px', background: '#2c3e50', color: '#fff', padding: '20px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ marginBottom: '30px' }}>
           <h2 style={{ fontSize: '1.2rem', margin: 0 }}>{userName} さん</h2>
@@ -18,24 +18,9 @@ export default function StudentView({ userName, grade, handleLogout }) {
         </div>
 
         <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <button 
-            onClick={() => setActiveTab('kotore')}
-            style={tabStyle(activeTab === 'kotore')}
-          >
-            🎯 個トレ
-          </button>
-          <button 
-            onClick={() => setActiveTab('progress')}
-            style={tabStyle(activeTab === 'progress')}
-          >
-            🏫 学校の進度
-          </button>
-          <button 
-            onClick={() => setActiveTab('sukima')}
-            style={tabStyle(activeTab === 'sukima')}
-          >
-            ⚡ スキマくん
-          </button>
+          <button onClick={() => setActiveTab('kotore')} style={tabStyle(activeTab === 'kotore')}>🎯 個トレ</button>
+          <button onClick={() => setActiveTab('progress')} style={tabStyle(activeTab === 'progress')}>🏫 学校の進度</button>
+          <button onClick={() => setActiveTab('sukima')} style={tabStyle(activeTab === 'sukima')}>⚡ スキマくん</button>
         </nav>
 
         <button onClick={handleLogout} style={{ background: 'transparent', color: '#ecf0f1', border: '1px solid #7f8c8d', padding: '10px', cursor: 'pointer' }}>
@@ -43,9 +28,15 @@ export default function StudentView({ userName, grade, handleLogout }) {
         </button>
       </aside>
 
-      {/* --- 右側：メインコンテンツ (残り全部) --- */}
+      {/* メインコンテンツ：Kotore に userId, userName, grade を渡すように修正 */}
       <main style={{ flex: 1, padding: '30px', backgroundColor: '#f8f9fa', overflowY: 'auto' }}>
-        {activeTab === 'kotore' && <Kotore />}
+        {activeTab === 'kotore' && (
+          <Kotore 
+            userId={userId} 
+            userName={userName} 
+            grade={grade} 
+          />
+        )}
         {activeTab === 'progress' && <SchoolProgress />}
         {activeTab === 'sukima' && <SukimaKun />}
       </main>
@@ -54,15 +45,7 @@ export default function StudentView({ userName, grade, handleLogout }) {
   );
 }
 
-// ボタンの見た目を整える関数
 const tabStyle = (isActive) => ({
-  padding: '15px',
-  textAlign: 'left',
-  fontSize: '1.1rem',
-  cursor: 'pointer',
-  border: 'none',
-  borderRadius: '8px',
-  backgroundColor: isActive ? '#3498db' : 'transparent',
-  color: '#fff',
-  transition: '0.3s'
+  padding: '15px', textAlign: 'left', fontSize: '1.1rem', cursor: 'pointer', border: 'none', borderRadius: '8px',
+  backgroundColor: isActive ? '#3498db' : 'transparent', color: '#fff', transition: '0.3s'
 });
