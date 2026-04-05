@@ -105,7 +105,7 @@ export default function TeacherView({ userName, role, handleLogout }) {
 
 const styles = {
   container: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'fixed', top: 0, left: 0 },
-  header: { background: '#001529', color: '#fff', height: '50px', borderBottom: '4px solid #27ae60', zIndex: 10 },
+ header: { background: '#27ae60',color: '#fff',height: '50px',zIndex: 10,boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
   headerInner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 15px', height: '100%' },
   menuBtn: { background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer' },
   headerTitle: { fontSize: '16px', fontWeight: 'bold' },
@@ -126,12 +126,12 @@ const styles = {
   emptyState: { textAlign: 'center', padding: '50px', color: '#999' },
 
   sidebar: { position: 'fixed', top: 0, left: 0, width: '280px', height: '100%', background: '#fff', zIndex: 1000, display: 'flex', flexDirection: 'column', boxShadow: '2px 0 15px rgba(0,0,0,0.3)' },
-  sidebarHeader: { background: '#001529', color: '#fff', padding: '15px', fontWeight: 'bold', textAlign: 'center' },
+  sidebarHeader: { background: '#27ae60', color: '#fff', padding: '15px', fontWeight: 'bold', textAlign: 'center' },
   menuItem: (isActive) => ({ padding: '15px 20px', borderBottom: '1px solid #eee', cursor: 'pointer', backgroundColor: isActive ? '#f0f9f4' : '#fff', color: isActive ? '#27ae60' : '#333', fontWeight: isActive ? 'bold' : 'normal' }),
   logoutItem: { marginTop: 'auto', padding: '20px', borderTop: '1px solid #eee', color: '#e74c3c', cursor: 'pointer', textAlign: 'center' },
   overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 999 },
 
-  footer: { background: '#001529', height: '60px', borderTop: '4px solid #27ae60', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  homeIcon: { color: '#ff007f', textAlign: 'center', fontWeight: 'bold' },
+  footer: {background: '#27ae60',height: '60px',display: 'flex',alignItems: 'center',justifyContent: 'center',position: 'relative',color: '#fff'},
+  homeIcon: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
   version: { position: 'absolute', right: '10px', bottom: '5px', color: '#fff', fontSize: '10px' }
 };
