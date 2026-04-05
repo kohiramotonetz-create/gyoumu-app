@@ -1,68 +1,100 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
-export default function TeacherView({ userName, role, handleLogout }) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false); // メニューの開閉
-  const [activeContent, setActiveContent] = useState('notifications'); // 現在表示中の中身
+const GAS_URL = import.meta.env.VITE_GAS_URL;
 
-  // メニュー項目の定義（roleによって中身を変える）
+export default function TeacherView({ userName, role, handleLogout }) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [activeContent, setActiveContent] = useState('notifications');
+  const [notifications, setNotifications] = useState([]);
+
+  // 通知取得ロジック
+  const fetchNotifications = async () => {
+    try {
+      const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications" }), { headers: { 'Content-Type': 'text/plain' } });
+      if (response.data.result === "success") setNotifications(response.data.notifications);
+    } catch (e) { console.error("更新失敗"); }
+  };
+
+  const handleComplete = async (userId, targetName) => {
+    try {
+      await axios.post(GAS_URL, JSON.stringify({ action: "deleteNotification", userId, userName: targetName }), { headers: { 'Content-Type': 'text/plain' } });
+      fetchNotifications();
+    } catch (e) { alert("削除失敗"); }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    const timer = setInterval(fetchNotifications, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
   const menuItems = [
     { id: 'notifications', label: '通知履歴', icon: '🔔', roles: ['teacher', 'admin'] },
     { id: 'student-check', label: '担任生徒チェック', icon: '📈', roles: ['teacher', 'admin'] },
-    { id: 'shift', label: '講師シフト管理', icon: '📅', roles: ['admin'] }, // 社員のみ
-    { id: 'payment', label: '月謝・入金管理', icon: '💰', roles: ['admin'] }, // 社員のみ
+    { id: 'shift', label: '講師シフト管理', icon: '📅', roles: ['admin'] },
+    { id: 'payment', label: '月謝・入金管理', icon: '💰', roles: ['admin'] },
   ];
 
-  // 自分の権限で見れる項目だけを抽出
   const filteredItems = menuItems.filter(item => item.roles.includes(role));
 
   return (
     <div style={styles.container}>
-      {/* --- ヘッダー (緑) --- */}
+      {/* --- ヘッダー (画面上端に固定) --- */}
       <header style={styles.header}>
-        <button onClick={() => setIsMenuOpen(!isMenuOpen)} style={styles.menuBtn}>☰</button>
-        <div style={styles.headerTitle}>【業務メニュー】{userName} 先生</div>
-        <div style={styles.refreshIcon}>🔄</div>
+        <div style={styles.headerInner}>
+          <button onClick={() => setIsMenuOpen(true)} style={styles.menuBtn}>☰</button>
+          <div style={styles.headerTitle}>【業務メニュー】{userName} 先生</div>
+          <button onClick={fetchNotifications} style={styles.refreshIcon}>🔄</button>
+        </div>
       </header>
 
-      <div style={{ display: 'flex', flex: 1, position: 'relative' }}>
-        {/* --- サイドバーメニュー (三本線で開閉) --- */}
-        {isMenuOpen && (
-          <>
-            <div style={styles.sidebar}>
-              <div style={styles.sidebarHeader}>機能一覧</div>
-              {filteredItems.map(item => (
-                <div 
-                  key={item.id} 
-                  style={styles.menuItem(activeContent === item.id)}
-                  onClick={() => { setActiveContent(item.id); setIsMenuOpen(false); }}
-                >
-                  <span style={{ marginRight: '10px' }}>{item.icon}</span>
-                  {item.label}
-                </div>
-              ))}
-              <div style={styles.logoutItem} onClick={handleLogout}>🚪 ログアウト</div>
-            </div>
-            {/* 背景クリックで閉じるためのオーバーレイ */}
-            <div style={styles.overlay} onClick={() => setIsMenuOpen(false)} />
-          </>
+      {/* --- メインコンテンツエリア --- */}
+      <main style={styles.main}>
+        {activeContent === 'notifications' && (
+          <div style={styles.contentArea}>
+            <h2 style={styles.contentTitle}>🔔 通知履歴</h2>
+            {notifications.length === 0 ? (
+              <div style={styles.emptyState}>現在、依頼はありません。</div>
+            ) : (
+              <div style={styles.grid}>
+                {notifications.map((n, index) => (
+                  <div key={index} style={styles.card(n.status)}>
+                    <div style={styles.cardTop}>
+                      <span>{n.time}</span>
+                      <span style={styles.gradeBadge}>{n.grade}</span>
+                    </div>
+                    <div style={styles.cardBody}>
+                      <span style={styles.studentName}>{n.name} <small>さん</small></span>
+                      <div style={styles.statusLabel(n.status)}>{n.status}</div>
+                    </div>
+                    <button onClick={() => handleComplete(n.userId, n.name)} style={styles.doneBtn}>対応完了</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
+        {activeContent !== 'notifications' && <div style={styles.contentArea}>制作中...</div>}
+      </main>
 
-        {/* --- メインコンテンツエリア --- */}
-        <main style={styles.main}>
-          {activeContent === 'notifications' && (
-            <div>
-              <h2 style={{ borderBottom: '2px solid #27ae60', paddingBottom: '10px' }}>🔔 通知履歴</h2>
-              {/* ここに以前作った通知リストのロジックを入れる */}
-              <p>現在の依頼状況がここに表示されます...</p>
-            </div>
-          )}
-          {activeContent === 'student-check' && <div>担任生徒の進捗画面（制作中）</div>}
-          {activeContent === 'shift' && <div>【社員限定】シフト管理画面</div>}
-        </main>
-      </div>
+      {/* --- サイドバー (オーバーレイ形式) --- */}
+      {isMenuOpen && (
+        <>
+          <div style={styles.sidebar}>
+            <div style={styles.sidebarHeader}>機能一覧</div>
+            {filteredItems.map(item => (
+              <div key={item.id} style={styles.menuItem(activeContent === item.id)} onClick={() => { setActiveContent(item.id); setIsMenuOpen(false); }}>
+                <span style={{ marginRight: '10px' }}>{item.icon}</span>{item.label}
+              </div>
+            ))}
+            <div style={styles.logoutItem} onClick={handleLogout}>🚪 ログアウト</div>
+          </div>
+          <div style={styles.overlay} onClick={() => setIsMenuOpen(false)} />
+        </>
+      )}
 
-      {/* --- フッター (緑) --- */}
+      {/* --- フッター (画面下端に固定) --- */}
       <footer style={styles.footer}>
         <div style={styles.homeIcon}>🏠<br/><span style={{fontSize:'10px'}}>HOME</span></div>
         <div style={styles.version}>Ver.2.1.1</div>
@@ -72,21 +104,34 @@ export default function TeacherView({ userName, role, handleLogout }) {
 }
 
 const styles = {
-  container: { height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#fff', overflow: 'hidden' },
-  header: { background: '#132c4a', color: '#fff', height: '50px', display: 'flex', alignItems: 'center', padding: '0 15px', justifyContent: 'space-between', borderBottom: '4px solid #27ae60' },
+  container: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'fixed', top: 0, left: 0 },
+  header: { background: '#001529', color: '#fff', height: '50px', borderBottom: '4px solid #27ae60', zIndex: 10 },
+  headerInner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 15px', height: '100%' },
   menuBtn: { background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer' },
-  headerTitle: { fontSize: '14px', fontWeight: 'bold' },
-  refreshIcon: { fontSize: '20px', cursor: 'pointer' },
-  
-  sidebar: { position: 'absolute', top: 0, left: 0, width: '250px', height: '100%', background: '#fff', boxShadow: '2px 0 10px rgba(0,0,0,0.2)', zIndex: 1000, display: 'flex', flexDirection: 'column' },
-  sidebarHeader: { background: '#132c4a', color: '#fff', padding: '15px', fontWeight: 'bold', textAlign: 'center' },
+  headerTitle: { fontSize: '16px', fontWeight: 'bold' },
+  refreshIcon: { background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' },
+
+  main: { flex: 1, backgroundColor: '#f0f2f5', overflowY: 'auto', padding: '20px' },
+  contentArea: { maxWidth: '1000px', margin: '0 auto' },
+  contentTitle: { borderBottom: '2px solid #27ae60', paddingBottom: '10px', marginBottom: '20px' },
+
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' },
+  card: (status) => ({ backgroundColor: '#fff', borderRadius: '12px', padding: '20px', borderTop: `6px solid ${status === "丸付け待ち" ? '#e67e22' : '#3498db'}`, boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }),
+  cardTop: { display: 'flex', justifyContent: 'space-between', color: '#999', fontSize: '0.9rem', marginBottom: '10px' },
+  gradeBadge: { background: '#34495e', color: '#fff', padding: '2px 8px', borderRadius: '4px' },
+  cardBody: { textAlign: 'center', marginBottom: '15px' },
+  studentName: { fontSize: '1.6rem', fontWeight: 'bold', display: 'block' },
+  statusLabel: (status) => ({ display: 'inline-block', marginTop: '10px', padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold', backgroundColor: status === "丸付け待ち" ? '#fff3e0' : '#e3f2fd', color: status === "丸付け待ち" ? '#e67e22' : '#3498db' }),
+  doneBtn: { width: '100%', padding: '10px', background: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
+  emptyState: { textAlign: 'center', padding: '50px', color: '#999' },
+
+  sidebar: { position: 'fixed', top: 0, left: 0, width: '280px', height: '100%', background: '#fff', zIndex: 1000, display: 'flex', flexDirection: 'column', boxShadow: '2px 0 15px rgba(0,0,0,0.3)' },
+  sidebarHeader: { background: '#001529', color: '#fff', padding: '15px', fontWeight: 'bold', textAlign: 'center' },
   menuItem: (isActive) => ({ padding: '15px 20px', borderBottom: '1px solid #eee', cursor: 'pointer', backgroundColor: isActive ? '#f0f9f4' : '#fff', color: isActive ? '#27ae60' : '#333', fontWeight: isActive ? 'bold' : 'normal' }),
-  logoutItem: { marginTop: 'auto', padding: '15px 20px', borderTop: '1px solid #eee', color: '#e74c3c', cursor: 'pointer' },
-  overlay: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.3)', zIndex: 999 },
+  logoutItem: { marginTop: 'auto', padding: '20px', borderTop: '1px solid #eee', color: '#e74c3c', cursor: 'pointer', textAlign: 'center' },
+  overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 999 },
 
-  main: { flex: 1, padding: '20px', overflowY: 'auto' },
-
-  footer: { background: '#132c4a', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', borderTop: '4px solid #27ae60' },
-  homeIcon: { color: '#ff007f', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold' },
+  footer: { background: '#001529', height: '60px', borderTop: '4px solid #27ae60', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  homeIcon: { color: '#ff007f', textAlign: 'center', fontWeight: 'bold' },
   version: { position: 'absolute', right: '10px', bottom: '5px', color: '#fff', fontSize: '10px' }
 };
