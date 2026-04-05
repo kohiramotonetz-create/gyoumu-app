@@ -40,7 +40,7 @@ export default function TeacherView({ userName, role, handleLogout }) {
 
   return (
     <div style={styles.container}>
-      {/* --- ヘッダー (画面上端に固定) --- */}
+      {/* --- ヘッダー --- */}
       <header style={styles.header}>
         <div style={styles.headerInner}>
           <button onClick={() => setIsMenuOpen(true)} style={styles.menuBtn}>☰</button>
@@ -60,6 +60,9 @@ export default function TeacherView({ userName, role, handleLogout }) {
               <div style={styles.grid}>
                 {notifications.map((n, index) => (
                   <div key={index} style={styles.card(n.status)}>
+                    {/* 整理券番号バッジ */}
+                    <div style={styles.queueBadge}>{n.queueNumber}</div>
+                    
                     <div style={styles.cardTop}>
                       <span>{n.time}</span>
                       <span style={styles.gradeBadge}>{n.grade}</span>
@@ -78,7 +81,7 @@ export default function TeacherView({ userName, role, handleLogout }) {
         {activeContent !== 'notifications' && <div style={styles.contentArea}>制作中...</div>}
       </main>
 
-      {/* --- サイドバー (オーバーレイ形式) --- */}
+      {/* --- サイドバー --- */}
       {isMenuOpen && (
         <>
           <div style={styles.sidebar}>
@@ -94,7 +97,7 @@ export default function TeacherView({ userName, role, handleLogout }) {
         </>
       )}
 
-      {/* --- フッター (画面下端に固定) --- */}
+      {/* --- フッター --- */}
       <footer style={styles.footer}>
         <div style={styles.homeIcon}>🏠<br/><span style={{fontSize:'10px'}}>HOME</span></div>
         <div style={styles.version}>Ver.2.1.1</div>
@@ -105,18 +108,46 @@ export default function TeacherView({ userName, role, handleLogout }) {
 
 const styles = {
   container: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'fixed', top: 0, left: 0 },
- header: { background: '#27ae60',color: '#fff',height: '50px',zIndex: 10,boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
+  header: { background: '#27ae60', color: '#fff', height: '50px', zIndex: 10, boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
   headerInner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 15px', height: '100%' },
   menuBtn: { background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer' },
   headerTitle: { fontSize: '16px', fontWeight: 'bold' },
   refreshIcon: { background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' },
 
-  main: { flex: 1, backgroundColor: '#f0f2f5', overflowY: 'auto', padding: '20px' },
+  main: { flex: 1, backgroundColor: '#f0f2f5', overflowY: 'auto', padding: '30px 20px' },
   contentArea: { maxWidth: '1000px', margin: '0 auto' },
-  contentTitle: { borderBottom: '2px solid #27ae60', paddingBottom: '10px', marginBottom: '20px' },
+  contentTitle: { borderBottom: '2px solid #27ae60', paddingBottom: '10px', marginBottom: '30px' },
 
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' },
-  card: (status) => ({ backgroundColor: '#fff', borderRadius: '12px', padding: '20px', borderTop: `6px solid ${status === "丸付け待ち" ? '#e67e22' : '#3498db'}`, boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }),
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '30px' },
+  card: (status) => ({ 
+    position: 'relative', // 整理券配置用
+    backgroundColor: '#fff', 
+    borderRadius: '12px', 
+    padding: '20px', 
+    borderTop: `6px solid ${status === "丸付け待ち" ? '#e67e22' : '#3498db'}`, 
+    boxShadow: '0 4px 15px rgba(0,0,0,0.1)' 
+  }),
+  
+  // 整理券バッジのスタイル
+  queueBadge: {
+    position: 'absolute',
+    top: '-15px',
+    left: '-15px',
+    width: '40px',
+    height: '40px',
+    backgroundColor: '#333',
+    color: '#fff',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '1.2rem',
+    fontWeight: 'bold',
+    boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+    zIndex: 5,
+    border: '2px solid #fff'
+  },
+
   cardTop: { display: 'flex', justifyContent: 'space-between', color: '#999', fontSize: '0.9rem', marginBottom: '10px' },
   gradeBadge: { background: '#34495e', color: '#fff', padding: '2px 8px', borderRadius: '4px' },
   cardBody: { textAlign: 'center', marginBottom: '15px' },
@@ -131,7 +162,7 @@ const styles = {
   logoutItem: { marginTop: 'auto', padding: '20px', borderTop: '1px solid #eee', color: '#e74c3c', cursor: 'pointer', textAlign: 'center' },
   overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 999 },
 
-  footer: {background: '#27ae60',height: '60px',display: 'flex',alignItems: 'center',justifyContent: 'center',position: 'relative',color: '#fff'},
+  footer: { background: '#27ae60', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', color: '#fff' },
   homeIcon: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
   version: { position: 'absolute', right: '10px', bottom: '5px', color: '#fff', fontSize: '10px' }
 };
