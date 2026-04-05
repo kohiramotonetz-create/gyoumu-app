@@ -2,7 +2,7 @@ export default function Login({ userId, setUserId, password, setPassword, handle
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h1 style={styles.title}>スキマくん</h1>
+        <h1 style={styles.title}>個別ミッショントレーニング</h1>
         
         <div style={styles.inputGroup}>
           <input 
@@ -34,22 +34,25 @@ export default function Login({ userId, setUserId, password, setPassword, handle
   );
 }
 
-// デザインの設定
 const styles = {
   container: {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     height: '100vh',
-    backgroundColor: '#eef2f5', // 背景の薄いグレー
-    width: '100vw',
+    width: '100vw',        // 画面の横幅いっぱい
+    backgroundColor: '#eef2f5',
+    position: 'fixed',     // 他の要素の影響を受けないように固定
+    top: 0,                // 画面の一番上から
+    left: 0,               // 画面の一番左から
+    zIndex: 9999,          // 一番手前に表示
   },
   card: {
     backgroundColor: '#ffffff',
     padding: '40px',
     borderRadius: '20px',
     boxShadow: '0 10px 25px rgba(0,0,0,0.05)',
-    width: '100%',
+    width: '90%',          // iPadなどで少し余裕を持たせる
     maxWidth: '450px',
     textAlign: 'center',
   },
@@ -71,7 +74,7 @@ const styles = {
     fontSize: '1rem',
     borderRadius: '10px',
     border: 'none',
-    backgroundColor: '#3d3d3d', // 入力欄のダークグレー
+    backgroundColor: '#3d3d3d',
     color: '#ffffff',
     outline: 'none',
   },
@@ -81,7 +84,7 @@ const styles = {
     fontSize: '1.2rem',
     fontWeight: 'bold',
     color: '#ffffff',
-    backgroundColor: '#1d72e8', // ログインボタンの鮮やかな青
+    backgroundColor: '#1d72e8',
     border: 'none',
     borderRadius: '10px',
     cursor: 'pointer',
