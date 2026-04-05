@@ -59,7 +59,7 @@ const styles = {
   title: {
     fontSize: '3rem',
     fontWeight: 'bold',
-    marginBottom: '30px',
+    marginBottom: '15px',
     color: '#000',
     letterSpacing: '2px',
   },
