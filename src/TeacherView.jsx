@@ -316,7 +316,7 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
                 <button style={styles.closeBtn} onClick={() => setOpenPdf(null)}>×</button>
                 <iframe 
                   src={openPdf} 
-                  style={{ width: '100%', height: '100%', border: 'none' }} 
+                  style={{ width: '100%', height: '100%', minHeight: '80vh',border: 'none' }} 
                   title="PDF Viewer"
                 />
               </div>
@@ -429,7 +429,8 @@ const styles = {
     height: '90%',
     backgroundColor: '#fff',
     borderRadius: '12px',
-    overflow: 'hidden',
+    overflow: 'auto', 
+    WebkitOverflowScrolling: 'touch', // iOSでの指スクロールを滑らかにする
     boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
   },
   closeBtn: {
