@@ -315,8 +315,8 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
               <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
                 <button style={styles.closeBtn} onClick={() => setOpenPdf(null)}>×</button>
                 <iframe 
-                  src={openPdf} 
-                  style={{ width: '100%', height: '100%', minHeight: '80vh',border: 'none' }} 
+                  src={`https://docs.google.com/viewer?url=${window.location.origin}${openPdf}&embedded=true`}
+                  style={{ width: '100%', height: '100%', border: 'none' }}
                   title="PDF Viewer"
                 />
               </div>
