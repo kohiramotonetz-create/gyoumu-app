@@ -5,7 +5,7 @@ import TeacherView from './TeacherView'
 import StudentView from './StudentView'
 import './App.css'
 
-// 環境変数からGAS의 URLを取得
+// 環境変数からGASのURLを取得
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 function App() {
@@ -15,12 +15,20 @@ function App() {
   const [grade, setGrade] = useState('');
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState(''); // ★ 新規パスワード用
   const [userName, setUserName] = useState('');
   const [school, setSchool] = useState('');  // 校舎情報
-  const [unit, setUnit] = useState('');    // ★ ユニット情報を追加
+  const [unit, setUnit] = useState('');    
   const [loading, setLoading] = useState(false);
 
-  // --- ★ ユニット名をCSVから探し出す関数 ---
+  // --- ★ パスワード強度チェック関数 ---
+  const isStrongPassword = (pw) => {
+    // 半角大文字、小文字、数字を各1文字以上含み、8文字以上
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    return regex.test(pw);
+  };
+
+  // --- ユニット名をCSVから探し出す関数 ---
   const getUnitFromCSV = async (targetSchool) => {
     try {
       const response = await fetch('/schools.csv');
@@ -52,17 +60,15 @@ function App() {
 
       if (response.data.result === "success") {
         const fetchedSchool = response.data.school;
-        
-        // GASから返ってきた情報を各ステートに保存
         setUserName(response.data.name);
         setRole(response.data.role);
         setGrade(response.data.grade);
         setSchool(fetchedSchool);
 
-        // ★ ログイン成功直後にユニットを判別する
         const detectedUnit = await getUnitFromCSV(fetchedSchool);
         setUnit(detectedUnit);
 
+        // GASからの isInitial (I列) フラグで分岐
         if (response.data.isInitial) {
           setStep('change-password');
         } else {
@@ -79,16 +85,45 @@ function App() {
     }
   };
 
+  // --- ★ パスワード変更処理 ---
+  const handleChangePassword = async () => {
+    if (!isStrongPassword(newPassword)) {
+      alert("パスワードが条件を満たしていません。\n・8文字以上\n・大文字、小文字、数字を各1文字以上含める");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await axios.post(GAS_URL, JSON.stringify({ 
+        action: "changePassword", 
+        userId, 
+        newPassword 
+      }), { headers: { 'Content-Type': 'text/plain' } });
+
+      if (response.data.result === "success") {
+        alert("パスワードを更新しました。");
+        setStep('menu');
+      } else {
+        alert("更新に失敗しました。");
+      }
+    } catch (e) {
+      alert("通信エラーが発生しました。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // --- ログアウト処理 ---
   const handleLogout = () => {
     setStep('login');
     setRole('');
     setUserId('');
     setPassword('');
+    setNewPassword('');
     setUserName('');
     setGrade('');
     setSchool('');
-    setUnit(''); // ★ ユニットもクリア
+    setUnit('');
   };
 
   return (
@@ -107,8 +142,6 @@ function App() {
       {/* 2. メニュー画面 */}
       {step === 'menu' && (
         <div className="main-layout">
-          
-          {/* --- A. 生徒レイヤー --- */}
           {role === 'student' && (
             <StudentView 
               userId={userId} 
@@ -119,12 +152,8 @@ function App() {
               handleLogout={handleLogout} 
             />
           )}
-
-          {/* --- B. 講師・社員レイヤー --- */}
           {(role === 'teacher' || role === 'admin') && (
             <div className="view-container">
-              {/* ★ 赤枠（admin-special-menu）を廃止しました */}
-
               <TeacherView 
                 userName={userName} 
                 role={role} 
@@ -136,12 +165,34 @@ function App() {
         </div>
       )}
 
-      {/* パスワード変更画面 */}
+      {/* ★ 3. パスワード変更画面（スキマくん準拠・強化版） */}
       {step === 'change-password' && (
-        <div style={{ padding: '40px', textAlign: 'center' }}>
+        <div className="login-box">
           <h2>パスワード変更</h2>
-          <p>初期パスワードを変更してください（未実装）</p>
-          <button onClick={() => setStep('menu')}>スキップしてメニューへ</button>
+          <p style={{ fontSize: '13px', color: '#666', marginBottom: '15px' }}>
+            初期パスワードから変更してください。<br />
+            <span style={{ color: '#e74c3c', fontWeight: 'bold' }}>
+              ※8文字以上、英大文字・小文字・数字を<br />各1文字以上含めてください。
+            </span>
+          </p>
+          <input 
+            type="password" 
+            placeholder="新しいパスワード" 
+            value={newPassword} 
+            onChange={(e) => setNewPassword(e.target.value)} 
+            className="q-input"
+            style={{ marginBottom: '10px' }}
+          />
+          {newPassword && !isStrongPassword(newPassword) && (
+            <p style={{ color: 'red', fontSize: '11px', marginBottom: '10px' }}>条件を満たしていません</p>
+          )}
+          <button 
+            onClick={handleChangePassword}
+            disabled={!isStrongPassword(newPassword)}
+            className="nav-btn"
+          >
+            変更して開始
+          </button>
         </div>
       )}
     </div>
