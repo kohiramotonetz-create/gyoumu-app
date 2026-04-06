@@ -310,15 +310,27 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
           )}
         </div>
         {/* --- PDFポップアップ（モーダル） --- */}
+          {/* --- PDFポップアップ（モーダル） --- */}
           {openPdf && (
             <div style={styles.modalOverlay} onClick={() => setOpenPdf(null)}>
               <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
                 <button style={styles.closeBtn} onClick={() => setOpenPdf(null)}>×</button>
-                <iframe 
-                  src={`https://docs.google.com/viewer?url=${window.location.origin}${openPdf}&embedded=true`}
-                  style={{ width: '100%', height: '100%', border: 'none' }}
-                  title="PDF Viewer"
-                />
+                
+                {/* ★ iframe ではなく object タグを使用 */}
+                <object
+                  data={openPdf}
+                  type="application/pdf"
+                  style={{ width: '100%', height: '100%' }}
+                >
+                  {/* object が効かないブラウザ用のフォールバック */}
+                  <p style={{ padding: '20px', textAlign: 'center' }}>
+                    PDFを表示できません。<br />
+                    <a href={openPdf} target="_blank" rel="noopener noreferrer" style={styles.link}>
+                      こちらをクリックして直接開く
+                    </a>
+                  </p>
+                </object>
+
               </div>
             </div>
           )}
