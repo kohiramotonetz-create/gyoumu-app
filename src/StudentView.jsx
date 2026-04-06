@@ -5,15 +5,13 @@ const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 export default function StudentView({ userId, userName, grade, school, handleLogout }) {
   const [myQueueNumber, setMyQueueNumber] = useState(null);
-  const [submittingStatus, setSubmittingStatus] = useState(''); // '', 'maru', 'question'
+  const [submittingStatus, setSubmittingStatus] = useState(''); 
   const [activeMenu, setActiveMenu] = useState('kodore');
   const [showCompleteMsg, setShowCompleteMsg] = useState(false); 
   const [lastStatus, setLastStatus] = useState(''); 
 
-  // --- 1. 送信処理 ---
   const sendNotification = async (statusType) => {
     if (submittingStatus) return;
-    
     setSubmittingStatus(statusType);
     const statusText = statusType === 'maru' ? "丸付け待ち" : "質問待ち";
     setLastStatus(statusType === 'maru' ? "丸付け" : "質問");
@@ -35,7 +33,6 @@ export default function StudentView({ userId, userName, grade, school, handleLog
     }
   };
 
-  // --- 2. メッセージ表示後の5秒タイマー ---
   useEffect(() => {
     if (showCompleteMsg) {
       const timer = setTimeout(() => {
@@ -46,7 +43,6 @@ export default function StudentView({ userId, userName, grade, school, handleLog
     }
   }, [showCompleteMsg]);
 
-  // --- 3. 定期更新（順番待ち用） ---
   const checkMyStatus = async () => {
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications" }), { headers: { 'Content-Type': 'text/plain' } });
@@ -71,7 +67,6 @@ export default function StudentView({ userId, userName, grade, school, handleLog
 
   return (
     <div style={styles.container}>
-      {/* 左側サイドバー */}
       <aside style={styles.sidebar}>
         <div style={styles.profileArea}>
           <div style={styles.studentName}>{userName} <span style={{fontSize:'0.9rem'}}>さん</span></div>
@@ -93,116 +88,119 @@ export default function StudentView({ userId, userName, grade, school, handleLog
         <button onClick={handleLogout} style={styles.logoutBtn}>ログアウト</button>
       </aside>
 
-      {/* 右側メインエリア */}
       <main style={styles.main}>
         {activeMenu === 'kodore' && (
           <div style={styles.contentArea}>
             <h1 style={styles.mainTitle}>🎯 個トレ・サポート</h1>
             <p style={styles.mainSubTitle}>先生に合図を送りたい方のボタンを押してね。</p>
             
-            {showCompleteMsg ? (
-              /* 受付完了カード（絶対配置・20%縮小・位置下げ） */
-              <div style={styles.completeMsgCard}>
-                <div style={styles.checkIcon}>✅</div>
-                <h2 style={{margin: '8px 0', fontSize:'1.4rem'}}>{lastStatus}の依頼を出しました！</h2>
-                <div style={styles.queueNumberSmall}>受付番号：{myQueueNumber}番</div>
-                <p style={{fontSize:'0.9rem', color:'#666'}}>そのまま少し待っていてね。</p>
-              </div>
-            ) : myQueueNumber ? (
-              /* 順番待ちカード（位置固定） */
-              <div style={styles.waitingCard}>
-                <div style={styles.waitingTitle}>順番待ち中</div>
-                <div style={styles.queueNumber}>{myQueueNumber}<span style={{fontSize:'1.5rem'}}>番目</span></div>
-                <p style={styles.waitingText}>先生が呼ぶまでワークを進めて待っていよう！</p>
-              </div>
-            ) : (
-              /* ボタン選択画面 */
-              <div style={styles.buttonGrid}>
-                <button 
-                  onClick={() => sendNotification('maru')} 
-                  style={styles.btnMaru(submittingStatus === 'maru', !!submittingStatus)}
-                  disabled={!!submittingStatus}
-                >
-                  {submittingStatus === 'maru' ? "送信中..." : <>📝<br/>丸付けお願いします！</>}
-                </button>
-                <button 
-                  onClick={() => sendNotification('question')} 
-                  style={styles.btnQuestion(submittingStatus === 'question', !!submittingStatus)}
-                  disabled={!!submittingStatus}
-                >
-                  {submittingStatus === 'question' ? "送信中..." : <>❓<br/>質問があります</>}
-                </button>
-              </div>
-            )}
+            <div style={styles.cardContainer}>
+              {showCompleteMsg ? (
+                // ★ 依頼完了画面の構造を変更
+                <div style={styles.completeWrapper}>
+                  {/* ★ 依頼ステータスをカードの外（上）に移動 */}
+                  <h2 style={styles.requestStatusText}>{lastStatus}の依頼を出しました！</h2>
+                  
+                  {/* 受付番号カード（青枠） */}
+                  <div style={styles.completeMsgCard}>
+                    <div style={styles.checkIcon}>✅</div>
+                    <div style={styles.queueNumberSmall}>受付番号：{myQueueNumber}番</div>
+                    <p style={{fontSize:'1rem', color:'#666', margin: 0}}>そのまま少し待っていてね。</p>
+                  </div>
+                </div>
+              ) : myQueueNumber ? (
+                <div style={styles.waitingCard}>
+                  <div style={styles.waitingTitle}>順番待ち中</div>
+                  <div style={styles.queueNumber}>{myQueueNumber}<span style={{fontSize:'1.5rem'}}>番目</span></div>
+                  <p style={styles.waitingText}>先生が呼ぶまでワークを進めて待っていよう！</p>
+                </div>
+              ) : (
+                <div style={styles.buttonGrid}>
+                  <button 
+                    onClick={() => sendNotification('maru')} 
+                    style={styles.btnMaru(submittingStatus === 'maru', !!submittingStatus)}
+                    disabled={!!submittingStatus}
+                  >
+                    {submittingStatus === 'maru' ? "送信中..." : <>📝<br/>丸付けお願いします！</>}
+                  </button>
+                  <button 
+                    onClick={() => sendNotification('question')} 
+                    style={styles.btnQuestion(submittingStatus === 'question', !!submittingStatus)}
+                    disabled={!!submittingStatus}
+                  >
+                    {submittingStatus === 'question' ? "送信中..." : <>❓<br/>質問があります</>}
+                  </button>
+                </div>
+              )}
+            </div>
             
-            {/* 下部ログイン情報 */}
             <div style={styles.loginInfoBar}>
               現在のログイン：{userName} さん（{grade}）
             </div>
           </div>
         )}
-
-        {activeMenu === 'progress' && <div style={styles.emptyContent}>🏫 学校の進度確認画面（制作中）</div>}
-        {activeMenu === 'sukima' && <div style={styles.emptyContent}>⚡ スキマくん（制作中）</div>}
+        {activeMenu !== 'kodore' && <div style={styles.emptyContent}>制作中...</div>}
       </main>
     </div>
   );
 }
 
 const styles = {
+  // ... (他のスタイルは維持) ...
   container: { height: '100vh', width: '100vw', display: 'flex', backgroundColor: '#eef2f5', position: 'fixed', top: 0, left: 0, overflow: 'hidden', fontFamily: '"Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif' },
   sidebar: { width: '280px', backgroundColor: '#2c3e50', color: '#ecf0f1', display: 'flex', flexDirection: 'column', padding: '30px 20px', flexShrink: 0 },
   profileArea: { marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '20px' },
-  studentName: { fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  studentName: { fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '8px', whiteSpace: 'nowrap' },
   schoolInfo: { display: 'flex', alignItems: 'center' },
   infoBadge: { background: 'rgba(255,255,255,0.15)', padding: '4px 10px', borderRadius: '4px', fontSize: '0.85rem', color: '#ecf0f1' },
   nav: { flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' },
-  navItem: (isActive) => ({ background: isActive ? '#3498db' : 'none', color: '#fff', border: 'none', padding: '12px 15px', borderRadius: '8px', fontSize: '1.1rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'background-color 0.2s' }),
+  navItem: (isActive) => ({ background: isActive ? '#3498db' : 'none', color: '#fff', border: 'none', padding: '12px 15px', borderRadius: '8px', fontSize: '1.1rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center' }),
   navIcon: { marginRight: '15px', fontSize: '1.2rem' },
-  logoutBtn: { background: 'none', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '8px', borderRadius: '4px', fontSize: '0.9rem', cursor: 'pointer', marginTop: 'auto' },
-  
-  main: { flex: 1, padding: '50px 40px', overflowY: 'auto', position: 'relative' },
-  contentArea: { maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100%', position: 'relative' },
-  mainTitle: { fontSize: '2.8rem', fontWeight: 'bold', marginBottom: '10px', color: '#333', textAlign: 'center' },
-  mainSubTitle: { fontSize: '1.2rem', color: '#666', marginBottom: '50px', textAlign: 'center' },
-  
+  logoutBtn: { background: 'none', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '8px', borderRadius: '4px', cursor: 'pointer', marginTop: 'auto' },
+  main: { flex: 1, padding: '40px', overflowY: 'auto', backgroundColor: '#f4f7f9' },
+  contentArea: { maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100%' },
+  mainTitle: { fontSize: '2.8rem', fontWeight: 'bold', marginBottom: '10px', color: '#333' },
+  mainSubTitle: { fontSize: '1.2rem', color: '#666', marginBottom: '20px' },
+  cardContainer: { width: '100%', display: 'flex', justifyContent: 'center', marginTop: '30px' },
   buttonGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', width: '100%', maxWidth: '800px' },
-  btnMaru: (isSubmitting, isAnySubmitting) => ({ 
-    height: '220px', borderRadius: '30px', border: 'none', 
-    background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#ffcc99' : 'linear-gradient(135deg, #e67e22, #f39c12)'), 
-    color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', 
-    cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', 
-    boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(230,126,34,0.3)', transition: 'all 0.2s' 
-  }),
-  btnQuestion: (isSubmitting, isAnySubmitting) => ({ 
-    height: '220px', borderRadius: '30px', border: 'none', 
-    background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#b3e0ff' : 'linear-gradient(135deg, #3498db, #5dade2)'), 
-    color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', 
-    cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', 
-    boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(52,152,219,0.3)', transition: 'all 0.2s' 
-  }),
+  btnMaru: (isSubmitting, isAnySubmitting) => ({ height: '220px', borderRadius: '30px', border: 'none', background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#ffcc99' : 'linear-gradient(135deg, #e67e22, #f39c12)'), color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(230,126,34,0.3)' }),
+  btnQuestion: (isSubmitting, isAnySubmitting) => ({ height: '220px', borderRadius: '30px', border: 'none', background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#b3e0ff' : 'linear-gradient(135deg, #3498db, #5dade2)'), color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(52,152,219,0.3)' }),
 
+  // ★1. 依頼完了画面全体を包むラッパー
+  completeWrapper: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: '400px' // カードの幅に合わせる
+  },
+  // ★2. カードの上に表示するテキストのスタイル
+  requestStatusText: {
+    fontSize: '1.8rem', // 大きく表示
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: '20px', // カードとの間隔
+    textAlign: 'center',
+    marginTop: 0
+  },
+  // ★3. 受付番号カード（青枠）のスタイル調整
   completeMsgCard: { 
     backgroundColor: '#fff', 
-    position: 'absolute',
-    top: '250px', 
-    zIndex: 100,
-    padding: '25px 20px', 
+    padding: '30px 20px', 
     borderRadius: '24px', 
     textAlign: 'center', 
-    boxShadow: '0 20px 50px rgba(0,0,0,0.15)', 
+    boxShadow: '0 15px 30px rgba(0,0,0,0.1)', 
     border: '6px solid #3498db', 
-    width: '90%', 
-    maxWidth: '380px'
+    width: '100%',
+    marginTop: 0 // 上のテキストとの間隔は requestStatusText の marginBottom で調整
   },
-  checkIcon: { fontSize: '2.5rem', marginBottom: '5px' },
-  queueNumberSmall: { fontSize: '2.2rem', fontWeight: 'bold', color: '#3498db', margin: '8px 0' },
 
-  waitingCard: { backgroundColor: '#fff', position: 'absolute', top: '220px', padding: '60px 40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #27ae60', width: '90%', maxWidth: '480px' },
+  checkIcon: { fontSize: '2.5rem', marginBottom: '10px' },
+  queueNumberSmall: { fontSize: '2.8rem', fontWeight: 'bold', color: '#3498db', margin: '15px 0' }, // 番号を大きく強調
+  waitingCard: { backgroundColor: '#fff', padding: '50px 40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #27ae60', width: '100%', maxWidth: '480px' },
   waitingTitle: { fontSize: '1.6rem', fontWeight: 'bold', color: '#27ae60', marginBottom: '15px' },
   queueNumber: { fontSize: '7rem', fontWeight: 'bold', color: '#333', lineHeight: 1 },
   waitingText: { marginTop: '30px', color: '#666', lineHeight: '1.6', fontSize: '1.2rem' },
-  
   loginInfoBar: { width: '100%', textAlign: 'center', background: '#fff', padding: '12px 20px', borderRadius: '12px', color: '#666', fontSize: '1rem', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginTop: 'auto', marginBottom: '20px' },
   emptyContent: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', fontSize: '1.5rem', color: '#999' }
 };
