@@ -9,8 +9,10 @@ const modelAnswerBooks = [
   { id: '1-j-p', title: "中1 国語 iワークプラス", grade: "中1", subject: "国語", cover: "/covers/1_jp_plus.png", pdf: "/pdfs/1_jp_plus.pdf" },
   { id: '1-s-n', title: "中1 理科 iワークノート", grade: "中1", subject: "理科", cover: "/covers/1_sci_note.png", pdf: "/pdfs/1_sci_note.pdf" },
   { id: '1-s-p', title: "中1 理科 iワークプラス", grade: "中1", subject: "理科", cover: "/covers/1_sci_plus.png", pdf: "/pdfs/1_sci_plus.pdf" },
-  { id: '1-ss-n', title: "中1 社会 iワークノート", grade: "中1", subject: "社会", cover: "/covers/1_soc_note.png", pdf: "/pdfs/1_soc_note.pdf" },
-  { id: '1-ss-p', title: "中1 社会 iワークプラス", grade: "中1", subject: "社会", cover: "/covers/1_soc_plus.png", pdf: "/pdfs/1_soc_plus.pdf" },
+  { id: '1-sg-n', title: "中1 社会 地理ノート", grade: "中1", subject: "社会", cover: "/covers/1_soc_geo_note.png", pdf: "/pdfs/1_soc_geo_note.pdf" },
+  { id: '1-sg-p', title: "中1 社会 地理プラス", grade: "中1", subject: "社会", cover: "/covers/1_soc_geo_plus.png", pdf: "/pdfs/1_soc_geo_plus.pdf" },
+  { id: '1-sh-n', title: "中1 社会 歴史ノート", grade: "中1", subject: "社会", cover: "/covers/1_soc_his_note.png", pdf: "/pdfs/1_soc_his_note.pdf" },
+  { id: '1-sh-p', title: "中1 社会 歴史プラス", grade: "中1", subject: "社会", cover: "/covers/1_soc_his_plus.png", pdf: "/pdfs/1_soc_his_plus.pdf" },
 
   // --- 中学2年 ---
   { id: '2-e-p', title: "中2 英語 iワークプラス", grade: "中2", subject: "英語", cover: "/covers/2_eng_plus.png", pdf: "/pdfs/2_eng_plus.pdf" },
@@ -20,8 +22,10 @@ const modelAnswerBooks = [
   { id: '2-j-p', title: "中2 国語 iワークプラス", grade: "中2", subject: "国語", cover: "/covers/2_jp_plus.png", pdf: "/pdfs/2_jp_plus.pdf" },
   { id: '2-s-n', title: "中2 理科 iワークノート", grade: "中2", subject: "理科", cover: "/covers/2_sci_note.png", pdf: "/pdfs/2_sci_note.pdf" },
   { id: '2-s-p', title: "中2 理科 iワークプラス", grade: "中2", subject: "理科", cover: "/covers/2_sci_plus.png", pdf: "/pdfs/2_sci_plus.pdf" },
-  { id: '2-ss-n', title: "中2 社会 iワークノート", grade: "中2", subject: "社会", cover: "/covers/2_soc_note.png", pdf: "/pdfs/2_soc_note.pdf" },
-  { id: '2-ss-p', title: "中2 社会 iワークプラス", grade: "中2", subject: "社会", cover: "/covers/2_soc_plus.png", pdf: "/pdfs/2_soc_plus.pdf" },
+  { id: '2-sg-n', title: "中2 社会 地理ノート", grade: "中2", subject: "社会", cover: "/covers/2_soc_geo_note.png", pdf: "/pdfs/2_soc_geo_note.pdf" },
+  { id: '2-sg-p', title: "中2 社会 地理プラス", grade: "中2", subject: "社会", cover: "/covers/2_soc_geo_plus.png", pdf: "/pdfs/2_soc_geo_plus.pdf" },
+  { id: '2-sh-n', title: "中2 社会 歴史ノート", grade: "中2", subject: "社会", cover: "/covers/2_soc_his_note.png", pdf: "/pdfs/2_soc_his_note.pdf" },
+  { id: '2-sh-p', title: "中2 社会 歴史プラス", grade: "中2", subject: "社会", cover: "/covers/2_soc_his_plus.png", pdf: "/pdfs/2_soc_his_plus.pdf" },
 
   // --- 中学3年 ---
   { id: '3-e-p', title: "中3 英語 iワークプラス", grade: "中3", subject: "英語", cover: "/covers/3_eng_plus.png", pdf: "/pdfs/3_eng_plus.pdf" },
@@ -31,8 +35,8 @@ const modelAnswerBooks = [
   { id: '3-j-p', title: "中3 国語 iワークプラス", grade: "中3", subject: "国語", cover: "/covers/3_jp_plus.png", pdf: "/pdfs/3_jp_plus.pdf" },
   { id: '3-s-n', title: "中3 理科 iワークノート", grade: "中3", subject: "理科", cover: "/covers/3_sci_note.png", pdf: "/pdfs/3_sci_note.pdf" },
   { id: '3-s-p', title: "中3 理科 iワークプラス", grade: "中3", subject: "理科", cover: "/covers/3_sci_plus.png", pdf: "/pdfs/3_sci_plus.pdf" },
-  { id: '3-ss-n', title: "中学3 社会 iワークノート", grade: "中3", subject: "社会", cover: "/covers/3_soc_note.png", pdf: "/pdfs/3_soc_note.pdf" },
-  { id: '3-ss-p', title: "中学3 社会 iワークプラス", grade: "中3", subject: "社会", cover: "/covers/3_soc_plus.png", pdf: "/pdfs/3_soc_plus.pdf" },
+  { id: '3-ss-n', title: "中3 社会 iワークノート", grade: "中3", subject: "社会", cover: "/covers/3_soc_note.png", pdf: "/pdfs/3_soc_note.pdf" },
+  { id: '3-ss-p', title: "中3 社会 iワークプラス", grade: "中3", subject: "社会", cover: "/covers/3_soc_plus.png", pdf: "/pdfs/3_soc_plus.pdf" },
 ];
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
