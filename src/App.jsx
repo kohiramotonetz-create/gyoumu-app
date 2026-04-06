@@ -5,7 +5,7 @@ import TeacherView from './TeacherView'
 import StudentView from './StudentView'
 import './App.css'
 
-// 環境変数からGASのURLを取得
+// 環境変数からGAS의 URLを取得
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 function App() {
@@ -16,8 +16,28 @@ function App() {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [userName, setUserName] = useState('');
-  const [school, setSchool] = useState('');  // ★ 校舎情報を保持
+  const [school, setSchool] = useState('');  // 校舎情報
+  const [unit, setUnit] = useState('');    // ★ ユニット情報を追加
   const [loading, setLoading] = useState(false);
+
+  // --- ★ ユニット名をCSVから探し出す関数 ---
+  const getUnitFromCSV = async (targetSchool) => {
+    try {
+      const response = await fetch('/schools.csv');
+      const text = await response.text();
+      const rows = text.split('\n').map(row => row.trim()).filter(row => row !== "");
+      
+      for (let i = 1; i < rows.length; i++) {
+        const [schoolName, unitName] = rows[i].split(',');
+        if (schoolName === targetSchool) {
+          return unitName;
+        }
+      }
+    } catch (e) {
+      console.error("ユニット情報の取得に失敗しました", e);
+    }
+    return "";
+  };
 
   // --- ログイン処理 ---
   const handleLogin = async () => {
@@ -31,11 +51,17 @@ function App() {
       }), { headers: { 'Content-Type': 'text/plain' } });
 
       if (response.data.result === "success") {
+        const fetchedSchool = response.data.school;
+        
         // GASから返ってきた情報を各ステートに保存
         setUserName(response.data.name);
         setRole(response.data.role);
         setGrade(response.data.grade);
-        setSchool(response.data.school); // ★ A列から取得した校舎名を保存
+        setSchool(fetchedSchool);
+
+        // ★ ログイン成功直後にユニットを判別する
+        const detectedUnit = await getUnitFromCSV(fetchedSchool);
+        setUnit(detectedUnit);
 
         if (response.data.isInitial) {
           setStep('change-password');
@@ -61,7 +87,8 @@ function App() {
     setPassword('');
     setUserName('');
     setGrade('');
-    setSchool(''); // ログアウト時にクリア
+    setSchool('');
+    setUnit(''); // ★ ユニットもクリア
   };
 
   return (
@@ -77,7 +104,7 @@ function App() {
         />
       )}
 
-      {/* 2. メニュー画面（3つのレイヤーで分岐） */}
+      {/* 2. メニュー画面 */}
       {step === 'menu' && (
         <div className="main-layout">
           
@@ -87,7 +114,8 @@ function App() {
               userId={userId} 
               userName={userName} 
               grade={grade} 
-              school={school} // ★ 校舎情報を渡す
+              school={school} 
+              unit={unit} // ★ ユニット情報を渡す
               handleLogout={handleLogout} 
             />
           )}
@@ -95,7 +123,6 @@ function App() {
           {/* --- B. 講師レイヤー --- */}
           {(role === 'teacher' || role === 'admin') && (
             <div className="view-container">
-              {/* admin(社員)の場合のみ、専用メニューを表示 */}
               {role === 'admin' && (
                 <div className="admin-special-menu" style={{ backgroundColor: '#fdf2f2', padding: '15px', borderRadius: '8px', border: '2px solid #f87171', marginBottom: '20px', margin: '20px' }}>
                   <h2 style={{ color: '#b91c1c', marginTop: 0 }}>🛡️ 社員・スタッフ専用ツール</h2>
@@ -111,7 +138,8 @@ function App() {
               {/* 講師・社員共通のTeacherView */}
               <TeacherView 
                 userName={userName} 
-                role={role} // 権限によるメニュー出し分け用にroleも渡す
+                role={role} 
+                unit={unit} // ★ ユニット情報を渡す
                 handleLogout={handleLogout} 
               />
             </div>
@@ -120,7 +148,7 @@ function App() {
         </div>
       )}
 
-      {/* パスワード変更画面（必要に応じてコンポーネント化してください） */}
+      {/* パスワード変更画面 */}
       {step === 'change-password' && (
         <div style={{ padding: '40px', textAlign: 'center' }}>
           <h2>パスワード変更</h2>
