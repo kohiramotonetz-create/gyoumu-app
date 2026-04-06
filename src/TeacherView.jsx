@@ -1,10 +1,38 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 const modelAnswerBooks = [
-  { id: 1, title: "中1 数学", cover: "/covers/math1.png", pdf: "/pdfs/math1.pdf" },
-  { id: 2, title: "中2 数学", cover: "/covers/math2.png", pdf: "/pdfs/math2.pdf" },
-  { id: 3, title: "中3 数学", cover: "/covers/math3.png", pdf: "/pdfs/math3.pdf" },
-  // ... 本のデータを追加
+  // --- 中学1年 ---
+  { id: '1-e-p', title: "中1 英語 iワークプラス", grade: "中1", subject: "英語", cover: "/covers/1_eng_plus.png", pdf: "/pdfs/1_eng_plus.pdf" },
+  { id: '1-m-d', title: "中1 数学 iワークドリル", grade: "中1", subject: "数学", cover: "/covers/1_math_drill.png", pdf: "/pdfs/1_math_drill.pdf" },
+  { id: '1-m-p', title: "中1 数学 iワークプラス", grade: "中1", subject: "数学", cover: "/covers/1_math_plus.png", pdf: "/pdfs/1_math_plus.pdf" },
+  { id: '1-j-d', title: "中1 国語 iワークドリル", grade: "中1", subject: "国語", cover: "/covers/1_jp_drill.png", pdf: "/pdfs/1_jp_drill.pdf" },
+  { id: '1-j-p', title: "中1 国語 iワークプラス", grade: "中1", subject: "国語", cover: "/covers/1_jp_plus.png", pdf: "/pdfs/1_jp_plus.pdf" },
+  { id: '1-s-n', title: "中1 理科 iワークノート", grade: "中1", subject: "理科", cover: "/covers/1_sci_note.png", pdf: "/pdfs/1_sci_note.pdf" },
+  { id: '1-s-p', title: "中1 理科 iワークプラス", grade: "中1", subject: "理科", cover: "/covers/1_sci_plus.png", pdf: "/pdfs/1_sci_plus.pdf" },
+  { id: '1-ss-n', title: "中1 社会 iワークノート", grade: "中1", subject: "社会", cover: "/covers/1_soc_note.png", pdf: "/pdfs/1_soc_note.pdf" },
+  { id: '1-ss-p', title: "中1 社会 iワークプラス", grade: "中1", subject: "社会", cover: "/covers/1_soc_plus.png", pdf: "/pdfs/1_soc_plus.pdf" },
+
+  // --- 中学2年 ---
+  { id: '2-e-p', title: "中2 英語 iワークプラス", grade: "中2", subject: "英語", cover: "/covers/2_eng_plus.png", pdf: "/pdfs/2_eng_plus.pdf" },
+  { id: '2-m-d', title: "中2 数学 iワークドリル", grade: "中2", subject: "数学", cover: "/covers/2_math_drill.png", pdf: "/pdfs/2_math_drill.pdf" },
+  { id: '2-m-p', title: "中2 数学 iワークプラス", grade: "中2", subject: "数学", cover: "/covers/2_math_plus.png", pdf: "/pdfs/2_math_plus.pdf" },
+  { id: '2-j-d', title: "中2 国語 iワークドリル", grade: "中2", subject: "国語", cover: "/covers/2_jp_drill.png", pdf: "/pdfs/2_jp_drill.pdf" },
+  { id: '2-j-p', title: "中2 国語 iワークプラス", grade: "中2", subject: "国語", cover: "/covers/2_jp_plus.png", pdf: "/pdfs/2_jp_plus.pdf" },
+  { id: '2-s-n', title: "中2 理科 iワークノート", grade: "中2", subject: "理科", cover: "/covers/2_sci_note.png", pdf: "/pdfs/2_sci_note.pdf" },
+  { id: '2-s-p', title: "中2 理科 iワークプラス", grade: "中2", subject: "理科", cover: "/covers/2_sci_plus.png", pdf: "/pdfs/2_sci_plus.pdf" },
+  { id: '2-ss-n', title: "中2 社会 iワークノート", grade: "中2", subject: "社会", cover: "/covers/2_soc_note.png", pdf: "/pdfs/2_soc_note.pdf" },
+  { id: '2-ss-p', title: "中2 社会 iワークプラス", grade: "中2", subject: "社会", cover: "/covers/2_soc_plus.png", pdf: "/pdfs/2_soc_plus.pdf" },
+
+  // --- 中学3年 ---
+  { id: '3-e-p', title: "中3 英語 iワークプラス", grade: "中3", subject: "英語", cover: "/covers/3_eng_plus.png", pdf: "/pdfs/3_eng_plus.pdf" },
+  { id: '3-m-d', title: "中3 数学 iワークドリル", grade: "中3", subject: "数学", cover: "/covers/3_math_drill.png", pdf: "/pdfs/3_math_drill.pdf" },
+  { id: '3-m-p', title: "中3 数学 iワークプラス", grade: "中3", subject: "数学", cover: "/covers/3_math_plus.png", pdf: "/pdfs/3_math_plus.pdf" },
+  { id: '3-j-d', title: "中3 国語 iワークドリル", grade: "中3", subject: "国語", cover: "/covers/3_jp_drill.png", pdf: "/pdfs/3_jp_drill.pdf" },
+  { id: '3-j-p', title: "中3 国語 iワークプラス", grade: "中3", subject: "国語", cover: "/covers/3_jp_plus.png", pdf: "/pdfs/3_jp_plus.pdf" },
+  { id: '3-s-n', title: "中3 理科 iワークノート", grade: "中3", subject: "理科", cover: "/covers/3_sci_note.png", pdf: "/pdfs/3_sci_note.pdf" },
+  { id: '3-s-p', title: "中3 理科 iワークプラス", grade: "中3", subject: "理科", cover: "/covers/3_sci_plus.png", pdf: "/pdfs/3_sci_plus.pdf" },
+  { id: '3-ss-n', title: "中3 社会 iワークノート", grade: "中3", subject: "社会", cover: "/covers/3_soc_note.png", pdf: "/pdfs/3_soc_note.pdf" },
+  { id: '3-ss-p', title: "中3 社会 iワークプラス", grade: "中3", subject: "社会", cover: "/covers/3_soc_plus.png", pdf: "/pdfs/3_soc_plus.pdf" },
 ];
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
@@ -236,25 +264,55 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             </div>
           )}
 
-          {/* 5. 個トレ2（模範解答）本棚 */}
+          {/* 5. 個トレ2（模範解答） */}
           {activeContent === 'model-answer' && (
             <div style={styles.bookshelfContainer}>
               <h2 style={styles.contentTitle}>📚 個トレ2 模範解答</h2>
               
-              <div style={styles.bookshelf}>
-                {modelAnswerBooks.map((book) => (
-                  <div key={book.id} style={styles.bookWrapper} onClick={() => window.open(book.pdf, '_blank')}>
-                    <div style={styles.bookCover}>
-                      <img src={book.cover} alt={book.title} style={styles.coverImage} />
-                    </div>
-                    <div style={styles.bookTitle}>{book.title}</div>
-                  </div>
+              {/* 学年選択ボタン */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '30px', justifyContent: 'center' }}>
+                {['中1', '中2', '中3'].map(g => (
+                  <button 
+                    key={g} 
+                    onClick={() => setSelectedGrade(g)}
+                    style={{
+                      padding: '10px 24px',
+                      borderRadius: '25px',
+                      border: 'none',
+                      backgroundColor: selectedGrade === g ? '#3e2723' : '#fff',
+                      color: selectedGrade === g ? '#fff' : '#3e2723',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    {g}
+                  </button>
                 ))}
+              </div>
+
+              <div style={styles.bookshelf}>
+                {modelAnswerBooks
+                  .filter(book => book.grade === selectedGrade)
+                  .map((book) => (
+                    <div key={book.id} style={styles.bookWrapper} onClick={() => window.open(book.pdf, '_blank')}>
+                      <div style={styles.bookCover}>
+                        {/* 表紙画像がない場合はプレースホルダが表示されます */}
+                        <img 
+                          src={book.cover} 
+                          alt={book.title} 
+                          style={styles.coverImage} 
+                          onError={(e) => { e.target.src = "https://via.placeholder.com/100x140?text=No+Image"; }}
+                        />
+                      </div>
+                      <div style={styles.bookTitle}>{book.title}</div>
+                    </div>
+                  ))}
               </div>
             </div>
           )}
 
-          {/* 4. 残りの「制作中」メニュー */}
+          {/* 6. その他（制作中） */}
           {(activeContent === 'app-usage' || activeContent === 'school-progress') && (
             <div style={styles.emptyState}>制作中...</div>
           )}
