@@ -68,6 +68,7 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
   const [schools, setSchools] = useState([]);
   const [selectedSchool, setSelectedSchool] = useState('すべて');
   const [selectedGrade, setSelectedGrade] = useState('中1'); // ★ 追加：白飛びの原因（未定義エラー）を解消
+  const [openPdf, setOpenPdf] = useState(null); // ★ 追加：現在表示中のPDFのパスを入れる
 
   // --- 自動ログアウト（無操作15分） ---
   const timeoutRef = useRef(null);
@@ -284,7 +285,7 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
                 {modelAnswerBooks
                   .filter(book => book.grade === selectedGrade)
                   .map((book) => (
-                    <div key={book.id} style={styles.bookWrapper} onClick={() => window.open(book.pdf, '_blank')}>
+                    <div key={book.id} style={styles.bookWrapper} onClick={() => setOpenPdf(book.pdf)}>
                       <div style={styles.bookCover}>
                         <img 
                           src={book.cover} 
@@ -304,6 +305,19 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             <div style={styles.emptyState}>制作中...</div>
           )}
         </div>
+        {/* --- PDFポップアップ（モーダル） --- */}
+          {openPdf && (
+            <div style={styles.modalOverlay} onClick={() => setOpenPdf(null)}>
+              <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                <button style={styles.closeBtn} onClick={() => setOpenPdf(null)}>×</button>
+                <iframe 
+                  src={openPdf} 
+                  style={{ width: '100%', height: '100%', border: 'none' }} 
+                  title="PDF Viewer"
+                />
+              </div>
+            </div>
+          )}
       </main>
 
       {isMenuOpen && (
