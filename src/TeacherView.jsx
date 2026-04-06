@@ -309,27 +309,52 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             <div style={styles.emptyState}>制作中...</div>
           )}
         </div>
-        {/* --- PDFポップアップ（モーダル） --- */}
+        
           {/* --- PDFポップアップ（モーダル） --- */}
           {openPdf && (
             <div style={styles.modalOverlay} onClick={() => setOpenPdf(null)}>
               <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
                 <button style={styles.closeBtn} onClick={() => setOpenPdf(null)}>×</button>
                 
-                {/* ★ iframe ではなく object タグを使用 */}
-                <object
-                  data={openPdf}
-                  type="application/pdf"
-                  style={{ width: '100%', height: '100%' }}
-                >
-                  {/* object が効かないブラウザ用のフォールバック */}
-                  <p style={{ padding: '20px', textAlign: 'center' }}>
-                    PDFを表示できません。<br />
-                    <a href={openPdf} target="_blank" rel="noopener noreferrer" style={styles.link}>
-                      こちらをクリックして直接開く
-                    </a>
+                {/* 埋め込み（iframe/object）だとiPadでスクロールできないため、
+                   中央に「大きなボタン」を配置して、確実に全ページ読める別タブで開かせます。
+                */}
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  height: '100%', 
+                  padding: '20px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '50px', marginBottom: '20px' }}>📄</div>
+                  <h3 style={{ marginBottom: '20px' }}>PDFを読み込みました</h3>
+                  <p style={{ marginBottom: '30px', color: '#666' }}>
+                    iPad/iPhoneで全ページを閲覧するには、<br />
+                    下のボタンから専用ビューワーで開いてください。
                   </p>
-                </object>
+                  
+                  <button 
+                    onClick={() => {
+                      window.open(openPdf, '_blank');
+                      setOpenPdf(null); // モーダルを閉じる
+                    }}
+                    style={{
+                      padding: '15px 40px',
+                      backgroundColor: '#27ae60',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '30px',
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 15px rgba(39, 174, 96, 0.3)'
+                    }}
+                  >
+                    模範解答を全画面で開く
+                  </button>
+                </div>
 
               </div>
             </div>
