@@ -116,7 +116,6 @@ export default function StudentView({ userId, userName, grade, school, unit, han
                 <div style={styles.completeWrapper}>
                   <h2 style={styles.requestStatusText}>{lastStatus}の依頼を出しました！</h2>
                   <div style={styles.completeMsgCard}>
-                    <div style={styles.checkIcon}>✅</div>
                     <div style={styles.queueNumberSmall}>受付番号：{myQueueNumber}番</div>
                     <p style={{fontSize:'1rem', color:'#666', margin: 0}}>そのまま少し待っていてね。</p>
                   </div>
