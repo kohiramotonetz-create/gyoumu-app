@@ -5,41 +5,51 @@ const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 export default function StudentView({ userId, userName, grade, school, handleLogout }) {
   const [myQueueNumber, setMyQueueNumber] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // ★1. 送信中ステータスを共通から「個別」に変更
+  const [submittingStatus, setSubmittingStatus] = useState(''); // '', 'maru', 'question'
+  
   const [activeMenu, setActiveMenu] = useState('kodore');
   const [showCompleteMsg, setShowCompleteMsg] = useState(false); 
   const [lastStatus, setLastStatus] = useState(''); 
 
   // --- 送信処理 ---
-  const sendNotification = async (status) => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    setLastStatus(status === "丸付け待ち" ? "丸付け" : "質問");
+  const sendNotification = async (statusType) => {
+    // どちらかが送信中なら何もしない
+    if (submittingStatus) return;
+    
+    // 押されたボタンの種類（maru / question）をセット
+    setSubmittingStatus(statusType);
+    
+    // 表示用文言をセット
+    const statusText = statusType === 'maru' ? "丸付け待ち" : "質問待ち";
+    setLastStatus(statusType === 'maru' ? "丸付け" : "質問");
 
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({
         action: "sendNotification", 
-        userId: userId, userName: userName, grade: grade, school: school, status: status
+        userId: userId, userName: userName, grade: grade, school: school, 
+        status: statusText // GASへ送る正式名称
       }), { headers: { 'Content-Type': 'text/plain' } });
 
       if (response.data.result === "success") {
         setMyQueueNumber(response.data.queueNumber);
-        // ここではフラグを立てるだけ。タイマーは下の useEffect で管理。
         setShowCompleteMsg(true);
       }
     } catch (e) {
       alert("送信に失敗しました。");
-      setIsSubmitting(false);
+      // エラー時は送信中ステータスをクリア
+      setSubmittingStatus('');
     }
   };
 
-  // ★ 追加：メッセージが表示された「後」に5秒数えるロジック
+  // ★完了メッセージ表示後のロジック（タイマー終了時に個別ステータスをクリア）
   useEffect(() => {
     if (showCompleteMsg) {
       const timer = setTimeout(() => {
         setShowCompleteMsg(false);
-        setIsSubmitting(false); // 5秒経過後に送信中状態を解除
-      }, 5000); // 5000ms = 5秒
+        setSubmittingStatus(''); // ここで個別ステータスをクリア
+      }, 5000); 
       return () => clearTimeout(timer);
     }
   }, [showCompleteMsg]);
@@ -55,7 +65,7 @@ export default function StudentView({ userId, userName, grade, school, handleLog
         } else { 
           setMyQueueNumber(null);
           setShowCompleteMsg(false); 
-          setIsSubmitting(false);
+          setSubmittingStatus(''); // 対応完了したらクリア
         }
       }
     } catch (e) { console.error("更新失敗"); }
@@ -98,9 +108,9 @@ export default function StudentView({ userId, userName, grade, school, handleLog
             {showCompleteMsg ? (
               <div style={styles.completeMsgCard}>
                 <div style={styles.checkIcon}>✅</div>
-                <h2 style={{margin: '10px 0'}}>{lastStatus}の依頼を出しました！</h2>
+                <h2 style={{margin: '8px 0', fontSize:'1.4rem'}}>{lastStatus}の依頼を出しました！</h2>
                 <div style={styles.queueNumberSmall}>受付番号：{myQueueNumber}番</div>
-                <p>そのまま少し待っていてね。</p>
+                <p style={{fontSize:'0.9rem'}}>そのまま少し待っていてね。</p>
               </div>
             ) : myQueueNumber ? (
               <div style={styles.waitingCard}>
@@ -112,19 +122,20 @@ export default function StudentView({ userId, userName, grade, school, handleLog
               <>
                 <p style={styles.mainSubTitle}>先生に合図を送りたい方のボタンを押してね。</p>
                 <div style={styles.buttonGrid}>
+                  {/* ★ ボタンの中身を「個別ステータス」に応じて切り替え */}
                   <button 
-                    onClick={() => sendNotification("丸付け待ち")} 
-                    style={styles.btnMaru(isSubmitting)}
-                    disabled={isSubmitting}
+                    onClick={() => sendNotification('maru')} 
+                    style={styles.btnMaru(submittingStatus === 'maru', !!submittingStatus)}
+                    disabled={!!submittingStatus} // どちらかが送信中なら非活性
                   >
-                    {isSubmitting ? "送信中..." : <>📝<br/>丸付けお願いします！</>}
+                    {submittingStatus === 'maru' ? "送信中..." : <>📝<br/>丸付けお願いします！</>}
                   </button>
                   <button 
-                    onClick={() => sendNotification("質問待ち")} 
-                    style={styles.btnQuestion(isSubmitting)}
-                    disabled={isSubmitting}
+                    onClick={() => sendNotification('question')} 
+                    style={styles.btnQuestion(submittingStatus === 'question', !!submittingStatus)}
+                    disabled={!!submittingStatus}
                   >
-                    {isSubmitting ? "送信中..." : <>❓<br/>質問があります</>}
+                    {submittingStatus === 'question' ? "送信中..." : <>❓<br/>質問があります</>}
                   </button>
                 </div>
               </>
@@ -141,7 +152,7 @@ export default function StudentView({ userId, userName, grade, school, handleLog
 }
 
 const styles = {
-  // スタイルは前回と同じ
+  // --- 基本スタイル ---
   container: { height: '100vh', width: '100vw', display: 'flex', backgroundColor: '#eef2f5', position: 'fixed', top: 0, left: 0, overflow: 'hidden', fontFamily: '"Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif' },
   sidebar: { width: '280px', backgroundColor: '#2c3e50', color: '#ecf0f1', display: 'flex', flexDirection: 'column', padding: '30px 20px', flexShrink: 0 },
   profileArea: { marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '20px' },
@@ -157,23 +168,47 @@ const styles = {
   mainTitle: { fontSize: '2.8rem', fontWeight: 'bold', marginBottom: '10px', color: '#333', textAlign: 'center' },
   mainSubTitle: { fontSize: '1.2rem', color: '#666', marginBottom: '50px', textAlign: 'center' },
   buttonGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', width: '100%', maxWidth: '800px' },
-  btnMaru: (isSubmitting) => ({ 
+
+  // ★個別制御に対応したボタンスタイル（引数を2つに拡張）
+  // 1.isSubmitting (自分が押されたか) 2.isAnySubmitting (どちらかが押されたか)
+  btnMaru: (isSubmitting, isAnySubmitting) => ({ 
     height: '220px', borderRadius: '30px', border: 'none', 
-    background: isSubmitting ? '#ccc' : 'linear-gradient(135deg, #e67e22, #f39c12)', 
+    // 自分が押されたらグレー、他人が押されている間は薄いオレンジ、通常はオレンジ
+    background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#ffcc99' : 'linear-gradient(135deg, #e67e22, #f39c12)'), 
     color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', 
-    cursor: isSubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', 
-    boxShadow: isSubmitting ? 'none' : '0 8px 15px rgba(230,126,34,0.3)', transition: 'all 0.2s' 
+    // どちらかが押されている間はカーソルを禁止
+    cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', 
+    // 自分が押されたら影を消す
+    boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(230,126,34,0.3)', transition: 'all 0.2s' 
   }),
-  btnQuestion: (isSubmitting) => ({ 
+  btnQuestion: (isSubmitting, isAnySubmitting) => ({ 
     height: '220px', borderRadius: '30px', border: 'none', 
-    background: isSubmitting ? '#ccc' : 'linear-gradient(135deg, #3498db, #5dade2)', 
+    background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#b3e0ff' : 'linear-gradient(135deg, #3498db, #5dade2)'), 
     color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', 
-    cursor: isSubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', 
-    boxShadow: isSubmitting ? 'none' : '0 8px 15px rgba(52,152,219,0.3)', transition: 'all 0.2s' 
+    cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', 
+    boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(52,152,219,0.3)', transition: 'all 0.2s' 
   }),
-  completeMsgCard: { backgroundColor: '#fff', padding: '40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #3498db', width: '100%', maxWidth: '500px' },
-  checkIcon: { fontSize: '3rem' },
-  queueNumberSmall: { fontSize: '2.5rem', fontWeight: 'bold', color: '#3498db', margin: '15px 0' },
+
+  // ★ポップアップカードのスタイル修正
+  completeMsgCard: { 
+    backgroundColor: '#fff', 
+    // 1.位置を下げる (タイトルとの間隔を広げる)
+    marginTop: '30px', 
+    // 2.サイズを小さくする (パディングとフォントを小さく調整)
+    padding: '30px 20px', 
+    borderRadius: '24px', 
+    textAlign: 'center', 
+    boxShadow: '0 15px 30px rgba(0,0,0,0.1)', 
+    border: '6px solid #3498db', 
+    // 3.MaxWidthを20%カット (500px -> 400px)
+    width: '100%', 
+    maxWidth: '400px', 
+    animation: 'fadeIn 0.3s' 
+  },
+  checkIcon: { fontSize: '2.5rem' },
+  queueNumberSmall: { fontSize: '2rem', fontWeight: 'bold', color: '#3498db', margin: '10px 0' },
+
+  // --- 順番待ちカード ---
   waitingCard: { backgroundColor: '#fff', padding: '60px 40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #27ae60', width: '100%', maxWidth: '500px' },
   waitingTitle: { fontSize: '1.6rem', fontWeight: 'bold', color: '#27ae60', marginBottom: '15px' },
   queueNumber: { fontSize: '7rem', fontWeight: 'bold', color: '#333', lineHeight: 1 },
