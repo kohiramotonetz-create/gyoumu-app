@@ -82,7 +82,7 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
 
   const adminMenuItems = [
     { id: 'passwords', label: '各種パスワード', icon: '🔑' },
-    { id: 'manual', label: 'スタッフマニュアル', icon: '📖', isLink: true, url: 'https://example.com/manual' }, // URLは適宜変更
+    { id: 'manual', label: 'スタッフマニュアル', icon: '📖', isLink: true, url: 'https://morning-hoverfly-7d7.notion.site/22187fb597ea8051a617cc4850365bd9?pvs=74' }, // notionスタッフマニュアル
     { id: 'takamatsu-staff', label: '高松スタッフ(SharePoint)', icon: '🏢' },
     { id: 'model-answer', label: '個トレ２（模範解答）', icon: '✅' },
   ];
