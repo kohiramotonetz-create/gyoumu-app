@@ -140,15 +140,7 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             </div>
           )}
 
-          {/* admin専用コンテンツのプレースホルダ */}
-          {activeContent === 'takamatsu-staff' && (
-            <div style={{ height: '80vh' }}>
-              <h2 style={styles.contentTitle}>🏢 高松スタッフ (SharePoint)</h2>
-              <iframe src="https://example.sharepoint.com/..." style={{ width: '100%', height: '100%', border: 'none' }} title="SharePoint"></iframe>
-            </div>
-          )}
-
-          {(activeContent === 'app-usage' || activeContent === 'school-progress' || activeContent === 'passwords' || activeContent === 'model-answer') && (
+                    {(activeContent === 'app-usage' || activeContent === 'school-progress' || activeContent === 'passwords' || activeContent === 'model-answer') && (
             <div style={styles.emptyState}>制作中...</div>
           )}
         </div>
