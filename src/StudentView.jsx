@@ -38,7 +38,7 @@ export default function StudentView({ userId, userName, grade, school, handleLog
       const timer = setTimeout(() => {
         setShowCompleteMsg(false);
         setSubmittingStatus('');
-      }, 10000); 
+      }, 10000); // ご指定の10秒を維持
       return () => clearTimeout(timer);
     }
   }, [showCompleteMsg]);
@@ -65,14 +65,17 @@ export default function StudentView({ userId, userName, grade, school, handleLog
     return () => clearInterval(timer);
   }, []);
   
-  // ★ここに追加！：6時間で自動ログアウトするやつ
+  // ★ 修正箇所：6時間で自動ログアウト（不足していた閉じカッコを追加）
   useEffect(() => {
-    const SIX_HOURS = 6 * 60 * 60 * 1000; // 21,600,000ミリ秒
+    const SIX_HOURS = 6 * 60 * 60 * 1000; 
 
     const logoutTimer = setTimeout(() => {
       alert("ログインから6時間が経過したため、自動的にログアウトしました。");
       handleLogout();
     }, SIX_HOURS);
+
+    return () => clearTimeout(logoutTimer);
+  }, []); // ← ここに欠落していた閉じカッコを補完しました
 
   return (
     <div style={styles.container}>
@@ -105,12 +108,8 @@ export default function StudentView({ userId, userName, grade, school, handleLog
             
             <div style={styles.cardContainer}>
               {showCompleteMsg ? (
-                // ★ 依頼完了画面の構造を変更
                 <div style={styles.completeWrapper}>
-                  {/* ★ 依頼ステータスをカードの外（上）に移動 */}
                   <h2 style={styles.requestStatusText}>{lastStatus}の依頼を出しました！</h2>
-                  
-                  {/* 受付番号カード（青枠） */}
                   <div style={styles.completeMsgCard}>
                     <div style={styles.checkIcon}>✅</div>
                     <div style={styles.queueNumberSmall}>受付番号：{myQueueNumber}番</div>
@@ -155,7 +154,6 @@ export default function StudentView({ userId, userName, grade, school, handleLog
 }
 
 const styles = {
-  // ... (他のスタイルは維持) ...
   container: { height: '100vh', width: '100vw', display: 'flex', backgroundColor: '#eef2f5', position: 'fixed', top: 0, left: 0, overflow: 'hidden', fontFamily: '"Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif' },
   sidebar: { width: '280px', backgroundColor: '#2c3e50', color: '#ecf0f1', display: 'flex', flexDirection: 'column', padding: '30px 20px', flexShrink: 0 },
   profileArea: { marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '20px' },
@@ -175,37 +173,11 @@ const styles = {
   btnMaru: (isSubmitting, isAnySubmitting) => ({ height: '220px', borderRadius: '30px', border: 'none', background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#ffcc99' : 'linear-gradient(135deg, #e67e22, #f39c12)'), color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(230,126,34,0.3)' }),
   btnQuestion: (isSubmitting, isAnySubmitting) => ({ height: '220px', borderRadius: '30px', border: 'none', background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#b3e0ff' : 'linear-gradient(135deg, #3498db, #5dade2)'), color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(52,152,219,0.3)' }),
 
-  // ★1. 依頼完了画面全体を包むラッパー
-  completeWrapper: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: '400px' // カードの幅に合わせる
-  },
-  // ★2. カードの上に表示するテキストのスタイル
-  requestStatusText: {
-    fontSize: '1.8rem', // 大きく表示
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: '20px', // カードとの間隔
-    textAlign: 'center',
-    marginTop: 0
-  },
-  // ★3. 受付番号カード（青枠）のスタイル調整
-  completeMsgCard: { 
-    backgroundColor: '#fff', 
-    padding: '30px 20px', 
-    borderRadius: '24px', 
-    textAlign: 'center', 
-    boxShadow: '0 15px 30px rgba(0,0,0,0.1)', 
-    border: '6px solid #3498db', 
-    width: '100%',
-    marginTop: 0 // 上のテキストとの間隔は requestStatusText の marginBottom で調整
-  },
-
+  completeWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '400px' },
+  requestStatusText: { fontSize: '1.8rem', fontWeight: 'bold', color: '#333', marginBottom: '20px', textAlign: 'center', marginTop: 0 },
+  completeMsgCard: { backgroundColor: '#fff', padding: '30px 20px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 15px 30px rgba(0,0,0,0.1)', border: '6px solid #3498db', width: '100%', marginTop: 0 },
   checkIcon: { fontSize: '2.5rem', marginBottom: '10px' },
-  queueNumberSmall: { fontSize: '2.8rem', fontWeight: 'bold', color: '#3498db', margin: '15px 0' }, // 番号を大きく強調
+  queueNumberSmall: { fontSize: '2.8rem', fontWeight: 'bold', color: '#3498db', margin: '15px 0' }, 
   waitingCard: { backgroundColor: '#fff', padding: '50px 40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #27ae60', width: '100%', maxWidth: '480px' },
   waitingTitle: { fontSize: '1.6rem', fontWeight: 'bold', color: '#27ae60', marginBottom: '15px' },
   queueNumber: { fontSize: '7rem', fontWeight: 'bold', color: '#333', lineHeight: 1 },
