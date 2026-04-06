@@ -3,24 +3,18 @@ import axios from 'axios'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
-// ★ 引数に unit を追加
 export default function TeacherView({ userName, role, unit, handleLogout }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeContent, setActiveContent] = useState('notices');
   const [notifications, setNotifications] = useState([]);
-  
   const [schools, setSchools] = useState([]);
   const [selectedSchool, setSelectedSchool] = useState('すべて');
 
-  // --- ★自動ログアウト（無操作15分）のロジック ---
+  // --- 自動ログアウト（無操作15分） ---
   const timeoutRef = useRef(null);
-
   const resetTimer = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    
-    // 15分 = 15 * 60 * 1000 ms
     const TIMEOUT_DURATION = 900000;
-
     timeoutRef.current = setTimeout(() => {
       alert("15分間操作がなかったため、自動的にログアウトしました。");
       handleLogout();
@@ -28,66 +22,41 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
   };
 
   useEffect(() => {
-    // 画面表示時にタイマー開始
     resetTimer();
-
-    // 監視する操作イベント
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
     const handleUserActivity = () => resetTimer();
-
-    events.forEach(event => {
-      window.addEventListener(event, handleUserActivity);
-    });
-
-    // クリーンアップ
+    events.forEach(event => window.addEventListener(event, handleUserActivity));
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      events.forEach(event => {
-        window.removeEventListener(event, handleUserActivity);
-      });
+      events.forEach(event => window.removeEventListener(event, handleUserActivity));
     };
   }, []);
-  // --------------------------------------------
 
-  // --- 校舎リスト(CSV)を読み込む ---
+  // --- 校舎リスト読み込み ---
   useEffect(() => {
     const loadSchools = async () => {
       try {
         const response = await fetch('/schools.csv');
         const text = await response.text();
         const rows = text.split('\n').map(row => row.trim()).filter(row => row !== "");
-        const schoolList = rows.slice(1);
-        // 校舎名のみ（1列目）を取得するように調整
-        const schoolNames = schoolList.map(row => row.split(',')[0]);
+        const schoolNames = rows.slice(1).map(row => row.split(',')[0]);
         setSchools(['すべて', ...schoolNames]);
-      } catch (e) {
-        console.error("校舎リストの読み込みに失敗しました");
-      }
+      } catch (e) { console.error("校舎リスト読み込み失敗"); }
     };
     loadSchools();
   }, []);
 
-  // --- 通知取得ロジック ---
+  // --- 通知取得・完了ロジック ---
   const fetchNotifications = async () => {
     try {
-      const response = await axios.post(GAS_URL, JSON.stringify({ 
-        action: "getNotifications",
-        unit: unit // ★ ユニット情報を追加
-      }), { headers: { 'Content-Type': 'text/plain' } });
-      
+      const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications", unit: unit }), { headers: { 'Content-Type': 'text/plain' } });
       if (response.data.result === "success") setNotifications(response.data.notifications);
     } catch (e) { console.error("更新失敗"); }
   };
 
   const handleComplete = async (userId, targetName) => {
     try {
-      await axios.post(GAS_URL, JSON.stringify({ 
-        action: "deleteNotification", 
-        userId, 
-        userName: targetName,
-        unit: unit // ★ ユニット情報を追加
-      }), { headers: { 'Content-Type': 'text/plain' } });
-      
+      await axios.post(GAS_URL, JSON.stringify({ action: "deleteNotification", userId, userName: targetName, unit: unit }), { headers: { 'Content-Type': 'text/plain' } });
       fetchNotifications();
     } catch (e) { alert("削除失敗"); }
   };
@@ -103,26 +72,39 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
     return n.school === selectedSchool;
   });
 
-  const menuItems = [
+  // --- ★ ② メニュー項目の動的生成 ---
+  const baseMenuItems = [
     { id: 'notices', label: 'お知らせ', icon: '📢' },
     { id: 'notifications', label: '個トレメニュー', icon: '🎯' },
     { id: 'app-usage', label: 'アプリ利用チェック', icon: '📱' },
     { id: 'school-progress', label: '学校進捗チェック', icon: '🏫' },
   ];
 
+  const adminMenuItems = [
+    { id: 'passwords', label: '各種パスワード', icon: '🔑' },
+    { id: 'manual', label: 'スタッフマニュアル', icon: '📖', isLink: true, url: 'https://example.com/manual' }, // URLは適宜変更
+    { id: 'takamatsu-staff', label: '高松スタッフ(SharePoint)', icon: '🏢' },
+    { id: 'model-answer', label: '個トレ２（模範解答）', icon: '✅' },
+  ];
+
+  const menuItems = role === 'admin' ? [...baseMenuItems, ...adminMenuItems] : baseMenuItems;
+
   return (
     <div style={styles.container}>
       <header style={styles.header}>
         <div style={styles.headerInner}>
           <button onClick={() => setIsMenuOpen(true)} style={styles.menuBtn}>☰</button>
-          <div style={styles.headerTitle}>【業務メニュー】{userName} 先生</div>
+          {/* ★ ① ヘッダー表記の変更 */}
+          <div style={styles.headerTitle}>
+            {role === 'admin' && <span style={styles.adminLabel}>社員・スタッフ</span>}
+            【業務メニュー】{userName} 先生
+          </div>
           <button onClick={fetchNotifications} style={styles.refreshIcon}>🔄</button>
         </div>
       </header>
 
       <main style={styles.main}>
         <div style={styles.contentArea}>
-          
           {activeContent === 'notices' && (
             <div>
               <h2 style={styles.contentTitle}>📢 お知らせ</h2>
@@ -136,33 +118,20 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
                 <h2 style={styles.contentTitle}>🎯 個トレメニュー</h2>
                 <div style={styles.filterArea}>
                   <label style={styles.label}>校舎選択：</label>
-                  <select 
-                    style={styles.select} 
-                    value={selectedSchool} 
-                    onChange={(e) => setSelectedSchool(e.target.value)}
-                  >
+                  <select style={styles.select} value={selectedSchool} onChange={(e) => setSelectedSchool(e.target.value)}>
                     {schools.map((s, i) => <option key={i} value={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
-
               {filteredNotifications.length === 0 ? (
-                <div style={styles.emptyState}>
-                  {selectedSchool === 'すべて' ? "現在、依頼はありません。" : `${selectedSchool}校の依頼はありません。`}
-                </div>
+                <div style={styles.emptyState}>{selectedSchool === 'すべて' ? "現在、依頼はありません。" : `${selectedSchool}校の依頼はありません。`}</div>
               ) : (
                 <div style={styles.grid}>
                   {filteredNotifications.map((n, index) => (
                     <div key={index} style={styles.card(n.status)}>
                       <div style={styles.queueBadge}>{n.queueNumber}</div>
-                      <div style={styles.cardTop}>
-                        <span>{n.time}</span>
-                        <span style={styles.gradeBadge}>{n.grade}</span>
-                      </div>
-                      <div style={styles.cardBody}>
-                        <span style={styles.studentName}>{n.name} <small>さん</small></span>
-                        <div style={styles.statusLabel(n.status)}>{n.status}</div>
-                      </div>
+                      <div style={styles.cardTop}><span>{n.time}</span><span style={styles.gradeBadge}>{n.grade}</span></div>
+                      <div style={styles.cardBody}><span style={styles.studentName}>{n.name} <small>さん</small></span><div style={styles.statusLabel(n.status)}>{n.status}</div></div>
                       <button onClick={() => handleComplete(n.userId, n.name)} style={styles.doneBtn}>対応完了</button>
                     </div>
                   ))}
@@ -171,8 +140,17 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             </div>
           )}
 
-          {activeContent === 'app-usage' && <div style={styles.emptyState}>制作中...</div>}
-          {activeContent === 'school-progress' && <div style={styles.emptyState}>制作中...</div>}
+          {/* admin専用コンテンツのプレースホルダ */}
+          {activeContent === 'takamatsu-staff' && (
+            <div style={{ height: '80vh' }}>
+              <h2 style={styles.contentTitle}>🏢 高松スタッフ (SharePoint)</h2>
+              <iframe src="https://example.sharepoint.com/..." style={{ width: '100%', height: '100%', border: 'none' }} title="SharePoint"></iframe>
+            </div>
+          )}
+
+          {(activeContent === 'app-usage' || activeContent === 'school-progress' || activeContent === 'passwords' || activeContent === 'model-answer') && (
+            <div style={styles.emptyState}>制作中...</div>
+          )}
         </div>
       </main>
 
@@ -181,7 +159,18 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
           <div style={styles.sidebar}>
             <div style={styles.sidebarHeader}>機能一覧</div>
             {menuItems.map(item => (
-              <div key={item.id} style={styles.menuItem(activeContent === item.id)} onClick={() => { setActiveContent(item.id); setIsMenuOpen(false); }}>
+              <div 
+                key={item.id} 
+                style={styles.menuItem(activeContent === item.id)} 
+                onClick={() => { 
+                  if (item.isLink) {
+                    window.open(item.url, '_blank');
+                  } else {
+                    setActiveContent(item.id); 
+                  }
+                  setIsMenuOpen(false); 
+                }}
+              >
                 <span style={{ marginRight: '10px' }}>{item.icon}</span>{item.label}
               </div>
             ))}
@@ -192,18 +181,21 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
       )}
       <footer style={styles.footer}>
         <div style={styles.homeIcon}>🏠<br/><span style={{fontSize:'10px'}}>HOME</span></div>
-        <div style={styles.version}>Ver.2.1.2</div>
+        <div style={styles.version}>Ver.2.1.3</div>
       </footer>
     </div>
   );
 }
 
 const styles = {
+  // --- 既存のスタイル ---
   container: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'fixed', top: 0, left: 0 },
   header: { background: '#27ae60', color: '#fff', height: '50px', zIndex: 10, boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
   headerInner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 15px', height: '100%' },
   menuBtn: { background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer' },
-  headerTitle: { fontSize: '16px', fontWeight: 'bold' },
+  headerTitle: { fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' },
+  // ★ ① 社員・スタッフ用ラベルのスタイル
+  adminLabel: { backgroundColor: '#ffd700', color: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '900' },
   refreshIcon: { background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' },
   main: { flex: 1, backgroundColor: '#f0f2f5', overflowY: 'auto', padding: '30px 20px' },
   contentArea: { maxWidth: '1000px', margin: '0 auto' },

@@ -115,36 +115,24 @@ function App() {
               userName={userName} 
               grade={grade} 
               school={school} 
-              unit={unit} // ★ ユニット情報を渡す
+              unit={unit} 
               handleLogout={handleLogout} 
             />
           )}
 
-          {/* --- B. 講師レイヤー --- */}
+          {/* --- B. 講師・社員レイヤー --- */}
           {(role === 'teacher' || role === 'admin') && (
             <div className="view-container">
-              {role === 'admin' && (
-                <div className="admin-special-menu" style={{ backgroundColor: '#fdf2f2', padding: '15px', borderRadius: '8px', border: '2px solid #f87171', marginBottom: '20px', margin: '20px' }}>
-                  <h2 style={{ color: '#b91c1c', marginTop: 0 }}>🛡️ 社員・スタッフ専用ツール</h2>
-                  <div className="admin-buttons" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    <button onClick={() => alert('講師のシフト・給与管理画面へ')}>講師シフト管理</button>
-                    <button onClick={() => alert('月謝・入金管理画面へ')}>月謝管理</button>
-                    <button onClick={() => alert('全生徒・全講師のログを確認')}>全ログ閲覧</button>
-                  </div>
-                  <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '10px' }}>※以下、講師用メニューも操作可能です</p>
-                </div>
-              )}
+              {/* ★ 赤枠（admin-special-menu）を廃止しました */}
 
-              {/* 講師・社員共通のTeacherView */}
               <TeacherView 
                 userName={userName} 
                 role={role} 
-                unit={unit} // ★ ユニット情報を渡す
+                unit={unit} 
                 handleLogout={handleLogout} 
               />
             </div>
           )}
-
         </div>
       )}
 
