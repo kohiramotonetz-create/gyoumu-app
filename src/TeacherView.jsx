@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react' // ★useRefを追加
 import axios from 'axios'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
@@ -8,9 +8,45 @@ export default function TeacherView({ userName, role, handleLogout }) {
   const [activeContent, setActiveContent] = useState('notices');
   const [notifications, setNotifications] = useState([]);
   
-  // 校舎選択用のステート
   const [schools, setSchools] = useState([]);
   const [selectedSchool, setSelectedSchool] = useState('すべて');
+
+  // --- ★自動ログアウト（無操作15分）のロジック ---
+  const timeoutRef = useRef(null);
+
+  const resetTimer = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    
+    // 15分 = 15 * 60 * 1000 ms
+    const TIMEOUT_DURATION = 900000;
+
+    timeoutRef.current = setTimeout(() => {
+      alert("15分間操作がなかったため、自動的にログアウトしました。");
+      handleLogout();
+    }, TIMEOUT_DURATION);
+  };
+
+  useEffect(() => {
+    // 画面表示時にタイマー開始
+    resetTimer();
+
+    // 監視する操作イベント
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    const handleUserActivity = () => resetTimer();
+
+    events.forEach(event => {
+      window.addEventListener(event, handleUserActivity);
+    });
+
+    // クリーンアップ
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      events.forEach(event => {
+        window.removeEventListener(event, handleUserActivity);
+      });
+    };
+  }, []);
+  // --------------------------------------------
 
   // --- 校舎リスト(CSV)を読み込む ---
   useEffect(() => {
@@ -19,7 +55,6 @@ export default function TeacherView({ userName, role, handleLogout }) {
         const response = await fetch('/schools.csv');
         const text = await response.text();
         const rows = text.split('\n').map(row => row.trim()).filter(row => row !== "");
-        // ヘッダーを除いた2行目以降を取得
         const schoolList = rows.slice(1);
         setSchools(['すべて', ...schoolList]);
       } catch (e) {
@@ -50,12 +85,9 @@ export default function TeacherView({ userName, role, handleLogout }) {
     return () => clearInterval(timer);
   }, []);
 
-  // --- 表示する通知をフィルタリング ---
-  // (注: GAS側の「通知」シートに校舎情報の列があることが前提です。
-  //  もし現在ない場合は、通知表示のみを出し分けるか、シート構成の調整が必要です)
   const filteredNotifications = notifications.filter(n => {
     if (selectedSchool === 'すべて') return true;
-    return n.school === selectedSchool; // GASから返るデータに school が含まれている場合
+    return n.school === selectedSchool;
   });
 
   const menuItems = [
@@ -89,7 +121,6 @@ export default function TeacherView({ userName, role, handleLogout }) {
             <div>
               <div style={styles.contentHeader}>
                 <h2 style={styles.contentTitle}>🎯 個トレメニュー</h2>
-                {/* 校舎選択セレクトボックス */}
                 <div style={styles.filterArea}>
                   <label style={styles.label}>校舎選択：</label>
                   <select 
@@ -132,7 +163,6 @@ export default function TeacherView({ userName, role, handleLogout }) {
         </div>
       </main>
 
-      {/* サイドバーとフッターは変更なしのため省略（既存のものを使用） */}
       {isMenuOpen && (
         <>
           <div style={styles.sidebar}>
@@ -155,8 +185,8 @@ export default function TeacherView({ userName, role, handleLogout }) {
   );
 }
 
+// styles は変更なしのため省略（そのまま使用してください）
 const styles = {
-  // ...既存のスタイル...
   container: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'fixed', top: 0, left: 0 },
   header: { background: '#27ae60', color: '#fff', height: '50px', zIndex: 10, boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
   headerInner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 15px', height: '100%' },
@@ -165,14 +195,11 @@ const styles = {
   refreshIcon: { background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' },
   main: { flex: 1, backgroundColor: '#f0f2f5', overflowY: 'auto', padding: '30px 20px' },
   contentArea: { maxWidth: '1000px', margin: '0 auto' },
-  
-  // 新規追加・調整スタイル
   contentHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #27ae60', paddingBottom: '10px' },
   contentTitle: { margin: 0, color: '#333', border: 'none' },
   filterArea: { display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#fff', padding: '5px 15px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' },
   label: { fontSize: '14px', fontWeight: 'bold', color: '#666' },
   select: { padding: '8px', borderRadius: '5px', border: '1px solid #ccc', fontSize: '14px', outline: 'none', cursor: 'pointer' },
-  
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '30px' },
   card: (status) => ({ position: 'relative', backgroundColor: '#fff', borderRadius: '12px', padding: '20px', borderTop: `6px solid ${status === "丸付け待ち" ? '#e67e22' : '#3498db'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }),
   queueBadge: { position: 'absolute', top: '-15px', left: '-15px', width: '40px', height: '40px', backgroundColor: '#333', color: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 'bold', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', zIndex: 5, border: '2px solid #fff' },

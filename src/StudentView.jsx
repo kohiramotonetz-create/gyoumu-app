@@ -64,6 +64,15 @@ export default function StudentView({ userId, userName, grade, school, handleLog
     const timer = setInterval(checkMyStatus, 5000);
     return () => clearInterval(timer);
   }, []);
+  
+  // ★ここに追加！：6時間で自動ログアウトするやつ
+  useEffect(() => {
+    const SIX_HOURS = 6 * 60 * 60 * 1000; // 21,600,000ミリ秒
+
+    const logoutTimer = setTimeout(() => {
+      alert("ログインから6時間が経過したため、自動的にログアウトしました。");
+      handleLogout();
+    }, SIX_HOURS);
 
   return (
     <div style={styles.container}>
