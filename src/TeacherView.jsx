@@ -5,26 +5,26 @@ const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 // 運営管理画面データ
   const adminAccountList = [
-    { service: "atama＋ポータル", url: "https://atama.plus/", id: "netz校舎番号4桁_admin", pass: "1TO1netz" },
-    { service: "atama＋コーチ", url: "https://coach.atama.plus/", id: "netzt講師番号6桁", pass: "講師番号2回" },
-    { service: "aim@for school", url: "https://aim-at.com/", id: "netz教室番号", pass: "1TO1netz" },
-    { service: "駿台Diverseコーチ画面", url: "https://diverse.sundai.ac.jp/", id: "受講校舎番号4ケタ@edu-netz.com", pass: "coach00!" },
-    { service: "情報AIドリル管理者用栗林", url: "https://...", id: "KKS900148", pass: "u1UhZAHv" },
-    { service: "情報AIドリル管理者用木太南", url: "https://...", id: "KKS900150", pass: "3MNq6h4F" },
-    { service: "情報AIドリル管理者用水田", url: "https://...", id: "KKS900149", pass: "QZHUxf6M" },
-    { service: "情報AIドリル管理者用番町", url: "https://...", id: "KKS900147", pass: "p9HWdTHb" },
-    { service: "Lepton (教室用)", url: "https://...", id: "T00007134", pass: "netznetz" },
-    { service: "四谷大塚テスト", url: "https://...", id: "栗林:T88790037 / 木太南:T88790093 / 水田:T88790063 / 番町:T88790131", pass: "netz" },
+    { service: "atama＋ポータル", url: "https://api.atama.plus/portal/login/", id: "netz校舎番号4桁_admin", pass: "1TO1netz" },
+    { service: "atama＋コーチ", url: "https://coach.atama.plus/public/login", id: "netzt講師番号6桁", pass: "講師番号2回" },
+    { service: "aim@for school", url: "https://edunetzaim.teachers-web.jp/sign-in", id: "netz教室番号", pass: "1TO1netz" },
+    { service: "駿台Diverseコーチ画面", url: "https://lms2.s-diverse.com/coach", id: "受講校舎番号4ケタ@edu-netz.com", pass: "coach00!" },
+    { service: "情報AIドリル管理者用栗林", url: "https://drill-manager.lifeistech-lesson.jp/login", id: "KKS900148", pass: "u1UhZAHv" },
+    { service: "情報AIドリル管理者用木太南", url: "https://drill-manager.lifeistech-lesson.jp/login", id: "KKS900150", pass: "3MNq6h4F" },
+    { service: "情報AIドリル管理者用水田", url: "https://drill-manager.lifeistech-lesson.jp/login", id: "KKS900149", pass: "QZHUxf6M" },
+    { service: "情報AIドリル管理者用番町", url: "https://drill-manager.lifeistech-lesson.jp/login", id: "KKS900147", pass: "p9HWdTHb" },
+    { service: "Lepton (教室用)", url: "https://console.lepton-line.jp/login", id: "T00007134", pass: "netznetz" },
+    { service: "四谷大塚テスト", url: "https://pos.yotsuyaotsuka.net/SSO2022/SSO2/toitsu_t/SSOLogin/SSOLogin", id: "栗林:T88790037 / 木太南:T88790093 / 水田:T88790063 / 番町:T88790131", pass: "netz" },
   ];
 
   // 生徒画面データ
   const studentAccountList = [
-    { service: "atama＋", url: "https://app.atama.plus/", creator: "各教室", id: "netzs生徒番号6ケタ", pass: "誕生日4桁" },
-    { service: "aim@", url: "https://aim-at.com/", creator: "自動(毎日)", id: "netzs生徒番号6ケタ", pass: "netz生徒番号6ケタ" },
-    { service: "駿台Diverse", url: "https://...", creator: "自動(毎日)", id: "生徒番号@edu-netz.com", pass: "-" },
-    { service: "情報AIドリル", url: "https://...", creator: "教務ユニット", id: "-", pass: "-" },
-    { service: "KOOV (ロボプロ)", url: "https://...", creator: "教務ユニット", id: "生徒番号6ケタ@netz", pass: "netz生徒番号6ケタ" },
-    { service: "PROC (中プロ)", url: "https://...", creator: "教務ユニット", id: "生徒番号6ケタ@netz-proc", pass: "1TO1netz" },
+    { service: "atama＋", url: "https://student.atama.plus/", creator: "各教室", id: "netzs生徒番号6ケタ", pass: "誕生日4桁" },
+    { service: "aim@", url: "https://www.aim-at.jp/sign-in", creator: "自動(毎日)", id: "netzs生徒番号6ケタ", pass: "netz生徒番号6ケタ" },
+    { service: "駿台Diverse", url: "https://lms2.s-diverse.com/login", creator: "自動(毎日)", id: "生徒番号@edu-netz.com", pass: "-" },
+    { service: "情報AIドリル", url: "https://drill.lifeistech-lesson.jp/", creator: "教務ユニット", id: "-", pass: "-" },
+    { service: "KOOV (ロボプロ)", url: "https://www.koov.io/downloads", creator: "教務ユニット", id: "生徒番号6ケタ@netz", pass: "netz生徒番号6ケタ" },
+    { service: "PROC (中プロ)", url: "https://account.sonyged.com/users/oauth/sign_in", creator: "教務ユニット", id: "生徒番号6ケタ@netz-proc", pass: "1TO1netz" },
   ];
 
 export default function TeacherView({ userName, role, unit, handleLogout }) {
