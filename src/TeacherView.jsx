@@ -406,4 +406,37 @@ const styles = {
   bookCover: { width: '100px', height: '140px', backgroundColor: '#fff', borderRadius: '4px 8px 8px 4px', boxShadow: '5px 5px 15px rgba(0,0,0,0.3)', overflow: 'hidden', borderLeft: '4px solid rgba(0,0,0,0.1)' },
   coverImage: { width: '100%', height: '100%', objectFit: 'cover' },
   bookTitle: { marginTop: '10px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', color: '#3e2723', backgroundColor: 'rgba(255,255,255,0.7)', padding: '2px 6px', borderRadius: '4px' },
+  // --- ポップアップ用のスタイル ---
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    backgroundColor: 'rgba(0,0,0,0.8)', // 背景を暗くする
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2000,
+  },
+  modalContent: {
+    position: 'relative',
+    width: '90%',
+    height: '90%',
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: '10px',
+    right: '20px',
+    fontSize: '30px',
+    background: 'none',
+    border: 'none',
+    color: '#333',
+    cursor: 'pointer',
+    zIndex: 2001,
+  },
 };
