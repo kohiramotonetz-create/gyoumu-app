@@ -40,7 +40,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
       const timer = setTimeout(() => {
         setShowCompleteMsg(false);
         setSubmittingStatus('');
-      }, 10000); 
+      }, 30000); 
       return () => clearTimeout(timer);
     }
   }, [showCompleteMsg]);
