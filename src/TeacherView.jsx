@@ -31,8 +31,8 @@ const modelAnswerBooks = [
   { id: '3-j-p', title: "中3 国語 iワークプラス", grade: "中3", subject: "国語", cover: "/covers/3_jp_plus.png", pdf: "/pdfs/3_jp_plus.pdf" },
   { id: '3-s-n', title: "中3 理科 iワークノート", grade: "中3", subject: "理科", cover: "/covers/3_sci_note.png", pdf: "/pdfs/3_sci_note.pdf" },
   { id: '3-s-p', title: "中3 理科 iワークプラス", grade: "中3", subject: "理科", cover: "/covers/3_sci_plus.png", pdf: "/pdfs/3_sci_plus.pdf" },
-  { id: '3-ss-n', title: "中3 社会 iワークノート", grade: "中3", subject: "社会", cover: "/covers/3_soc_note.png", pdf: "/pdfs/3_soc_note.pdf" },
-  { id: '3-ss-p', title: "中3 社会 iワークプラス", grade: "中3", subject: "社会", cover: "/covers/3_soc_plus.png", pdf: "/pdfs/3_soc_plus.pdf" },
+  { id: '3-ss-n', title: "中学3 社会 iワークノート", grade: "中3", subject: "社会", cover: "/covers/3_soc_note.png", pdf: "/pdfs/3_soc_note.pdf" },
+  { id: '3-ss-p', title: "中学3 社会 iワークプラス", grade: "中3", subject: "社会", cover: "/covers/3_soc_plus.png", pdf: "/pdfs/3_soc_plus.pdf" },
 ];
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
@@ -67,6 +67,7 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
   const [notifications, setNotifications] = useState([]);
   const [schools, setSchools] = useState([]);
   const [selectedSchool, setSelectedSchool] = useState('すべて');
+  const [selectedGrade, setSelectedGrade] = useState('中1'); // ★ 追加：白飛びの原因（未定義エラー）を解消
 
   // --- 自動ログアウト（無操作15分） ---
   const timeoutRef = useRef(null);
@@ -140,7 +141,7 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
 
   const adminMenuItems = [
     { id: 'passwords', label: '各種パスワード', icon: '🔑' },
-    { id: 'manual', label: 'スタッフマニュアル', icon: '📖', isLink: true, url: 'https://morning-hoverfly-7d7.notion.site/22187fb597ea8051a617cc4850365bd9?pvs=74' }, // notionスタッフマニュアル
+    { id: 'manual', label: 'スタッフマニュアル', icon: '📖', isLink: true, url: 'https://morning-hoverfly-7d7.notion.site/22187fb597ea8051a617cc4850365bd9?pvs=74' }, 
     { id: 'takamatsu-staff', label: '高松スタッフ(SharePoint)', icon: '🏢',isLink: true, url: 'https://edunetz.sharepoint.com/sites/takamatustaff/SitePages/CollabHome.aspx?ga=1' },
     { id: 'model-answer', label: '個トレ２（模範解答）', icon: '✅' },
   ];
@@ -152,7 +153,6 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
       <header style={styles.header}>
         <div style={styles.headerInner}>
           <button onClick={() => setIsMenuOpen(true)} style={styles.menuBtn}>☰</button>
-          {/* ★ ① ヘッダー表記の変更 */}
           <div style={styles.headerTitle}>
             {role === 'admin' && <span style={styles.adminLabel}>社員・スタッフ</span>}
             【業務メニュー】{userName} 先生
@@ -164,7 +164,6 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
       <main style={styles.main}>
         <div style={styles.contentArea}>
           
-          {/* 1. お知らせ */}
           {activeContent === 'notices' && (
             <div>
               <h2 style={styles.contentTitle}>📢 お知らせ</h2>
@@ -172,7 +171,6 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             </div>
           )}
 
-          {/* 2. 個トレメニュー */}
           {activeContent === 'notifications' && (
             <div>
               <div style={styles.contentHeader}>
@@ -201,12 +199,9 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             </div>
           )}
 
-          {/* ★ 3. 各種パスワード画面（画像のデザインを反映） */}
           {activeContent === 'passwords' && (
             <div style={styles.passwordContainer}>
               <h2 style={styles.contentTitle}>🔑 各種パスワード一覧</h2>
-
-              {/* 1-1. 運営管理画面一覧 */}
               <h3 style={styles.tableTitle}>1-1. 運営管理画面一覧</h3>
               <div style={styles.tableWrapper}>
                 <table style={styles.table}>
@@ -232,8 +227,6 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
                   </tbody>
                 </table>
               </div>
-
-              {/* 1-2. 生徒画面一覧 */}
               <h3 style={styles.tableTitle}>1-2. 生徒画面一覧</h3>
               <div style={styles.tableWrapper}>
                 <table style={styles.table}>
@@ -264,12 +257,9 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             </div>
           )}
 
-          {/* 5. 個トレ2（模範解答） */}
           {activeContent === 'model-answer' && (
             <div style={styles.bookshelfContainer}>
               <h2 style={styles.contentTitle}>📚 個トレ2 模範解答</h2>
-              
-              {/* 学年選択ボタン */}
               <div style={{ display: 'flex', gap: '10px', marginBottom: '30px', justifyContent: 'center' }}>
                 {['中1', '中2', '中3'].map(g => (
                   <button 
@@ -290,14 +280,12 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
                   </button>
                 ))}
               </div>
-
               <div style={styles.bookshelf}>
                 {modelAnswerBooks
                   .filter(book => book.grade === selectedGrade)
                   .map((book) => (
                     <div key={book.id} style={styles.bookWrapper} onClick={() => window.open(book.pdf, '_blank')}>
                       <div style={styles.bookCover}>
-                        {/* 表紙画像がない場合はプレースホルダが表示されます */}
                         <img 
                           src={book.cover} 
                           alt={book.title} 
@@ -312,7 +300,6 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             </div>
           )}
 
-          {/* 6. その他（制作中） */}
           {(activeContent === 'app-usage' || activeContent === 'school-progress') && (
             <div style={styles.emptyState}>制作中...</div>
           )}
@@ -353,13 +340,11 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
 }
 
 const styles = {
-  // --- 既存のスタイル ---
   container: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'fixed', top: 0, left: 0 },
   header: { background: '#27ae60', color: '#fff', height: '50px', zIndex: 10, boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
   headerInner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 15px', height: '100%' },
   menuBtn: { background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer' },
   headerTitle: { fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' },
-  // ★ ① 社員・スタッフ用ラベルのスタイル
   adminLabel: { backgroundColor: '#ffd700', color: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '900' },
   refreshIcon: { background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' },
   main: { flex: 1, backgroundColor: '#f0f2f5', overflowY: 'auto', padding: '30px 20px' },
@@ -387,48 +372,24 @@ const styles = {
   footer: { background: '#27ae60', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', color: '#fff' },
   homeIcon: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
   version: { position: 'absolute', right: '10px', bottom: '5px', color: '#fff', fontSize: '10px' },
-  bookshelfContainer: {
-    backgroundColor: '#d2b48c', // 木の色（タン）
-    padding: '40px 20px',
-    borderRadius: '16px',
-    minHeight: '80vh',
-    boxShadow: 'inset 0 0 50px rgba(0,0,0,0.2)'
-  },
-  bookshelf: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-    gap: '40px 20px',
-    padding: '20px'
-  },
-  bookWrapper: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    cursor: 'pointer',
-    transition: 'transform 0.2s',
-  },
-  bookCover: {
-    width: '100px',
-    height: '140px',
-    backgroundColor: '#fff',
-    borderRadius: '4px 8px 8px 4px', // 本の背表紙側を少し丸める
-    boxShadow: '5px 5px 15px rgba(0,0,0,0.3)',
-    overflow: 'hidden',
-    borderLeft: '4px solid rgba(0,0,0,0.1)' // 本の厚み感
-  },
-  coverImage: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover'
-  },
-  bookTitle: {
-    marginTop: '10px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    color: '#3e2723',
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    padding: '2px 6px',
-    borderRadius: '4px'
-  },
+
+  // ★ 追加：パスワード画面用の不足スタイル
+  passwordContainer: { backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
+  tableTitle: { fontSize: '1.2rem', fontWeight: 'bold', margin: '25px 0 10px 0', paddingLeft: '10px', borderLeft: '5px solid #27ae60' },
+  tableWrapper: { overflowX: 'auto', marginBottom: '20px' },
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', minWidth: '600px' },
+  tableHeaderRow: { backgroundColor: '#f8f9fa' },
+  th: { border: '1px solid #dee2e6', padding: '12px', textAlign: 'left', color: '#495057', fontWeight: 'bold' },
+  td: { border: '1px solid #dee2e6', padding: '12px', color: '#333', verticalAlign: 'middle' },
+  tr: { borderBottom: '1px solid #eee' },
+  link: { color: '#1d72e8', textDecoration: 'none', fontWeight: 'bold', borderBottom: '1px solid #1d72e8' },
+  tableCode: { backgroundColor: '#f1f3f5', padding: '2px 6px', borderRadius: '4px', fontFamily: 'monospace', color: '#d63384' },
+
+  // ★ 本棚用のスタイル
+  bookshelfContainer: { backgroundColor: '#d2b48c', padding: '40px 20px', borderRadius: '16px', minHeight: '80vh', boxShadow: 'inset 0 0 50px rgba(0,0,0,0.2)' },
+  bookshelf: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '40px 20px', padding: '20px' },
+  bookWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', transition: 'transform 0.2s' },
+  bookCover: { width: '100px', height: '140px', backgroundColor: '#fff', borderRadius: '4px 8px 8px 4px', boxShadow: '5px 5px 15px rgba(0,0,0,0.3)', overflow: 'hidden', borderLeft: '4px solid rgba(0,0,0,0.1)' },
+  coverImage: { width: '100%', height: '100%', objectFit: 'cover' },
+  bookTitle: { marginTop: '10px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', color: '#3e2723', backgroundColor: 'rgba(255,255,255,0.7)', padding: '2px 6px', borderRadius: '4px' },
 };
