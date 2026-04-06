@@ -309,53 +309,52 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             <div style={styles.emptyState}>制作中...</div>
           )}
         </div>
-        
-          {/* --- PDFポップアップ（モーダル） --- */}
+
+          {/* --- PDFポップアップ（モーダル）スクロール対応版 --- */}
           {openPdf && (
             <div style={styles.modalOverlay} onClick={() => setOpenPdf(null)}>
               <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                {/* 閉じるボタン */}
                 <button style={styles.closeBtn} onClick={() => setOpenPdf(null)}>×</button>
                 
-                {/* 埋め込み（iframe/object）だとiPadでスクロールできないため、
-                   中央に「大きなボタン」を配置して、確実に全ページ読める別タブで開かせます。
+                {/* ★ iPad対策：iframeを直接置かず、スクロール専用のdivで包む
+                  これにより、1ページ目で止まらずに下までスクロール可能になります
                 */}
-                <div style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  height: '100%', 
-                  padding: '20px',
-                  textAlign: 'center'
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  overflowY: 'auto', // 縦スクロールを許可
+                  WebkitOverflowScrolling: 'touch', // iOSの慣性スクロールを有効化
                 }}>
-                  <div style={{ fontSize: '50px', marginBottom: '20px' }}>📄</div>
-                  <h3 style={{ marginBottom: '20px' }}>PDFを読み込みました</h3>
-                  <p style={{ marginBottom: '30px', color: '#666' }}>
-                    iPad/iPhoneで全ページを閲覧するには、<br />
-                    下のボタンから専用ビューワーで開いてください。
-                  </p>
-                  
-                  <button 
-                    onClick={() => {
-                      window.open(openPdf, '_blank');
-                      setOpenPdf(null); // モーダルを閉じる
-                    }}
-                    style={{
-                      padding: '15px 40px',
-                      backgroundColor: '#27ae60',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '30px',
-                      fontSize: '18px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 15px rgba(39, 174, 96, 0.3)'
-                    }}
-                  >
-                    模範解答を全画面で開く
-                  </button>
+                  <iframe 
+                    src={openPdf} 
+                    style={{ 
+                      width: '100%', 
+                      height: '100%', 
+                      minHeight: '1000px', // ここを大きく取るのがコツです
+                      border: 'none' 
+                    }} 
+                    title="PDF Viewer"
+                  />
                 </div>
 
+                {/* 念のための補助ボタン（画面右下に配置） */}
+                <button 
+                  onClick={() => window.open(openPdf, '_blank')}
+                  style={{
+                    position: 'absolute',
+                    bottom: '15px',
+                    right: '15px',
+                    padding: '8px 15px',
+                    backgroundColor: 'rgba(39, 174, 96, 0.8)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '5px',
+                    fontSize: '12px'
+                  }}
+                >
+                  全画面で開く ↗
+                </button>
               </div>
             </div>
           )}
@@ -428,7 +427,6 @@ const styles = {
   homeIcon: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
   version: { position: 'absolute', right: '10px', bottom: '5px', color: '#fff', fontSize: '10px' },
 
-  // ★ 追加：パスワード画面用の不足スタイル
   passwordContainer: { backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
   tableTitle: { fontSize: '1.2rem', fontWeight: 'bold', margin: '25px 0 10px 0', paddingLeft: '10px', borderLeft: '5px solid #27ae60' },
   tableWrapper: { overflowX: 'auto', marginBottom: '20px' },
@@ -440,21 +438,20 @@ const styles = {
   link: { color: '#1d72e8', textDecoration: 'none', fontWeight: 'bold', borderBottom: '1px solid #1d72e8' },
   tableCode: { backgroundColor: '#f1f3f5', padding: '2px 6px', borderRadius: '4px', fontFamily: 'monospace', color: '#d63384' },
 
-  // ★ 本棚用のスタイル
   bookshelfContainer: { backgroundColor: '#d2b48c', padding: '40px 20px', borderRadius: '16px', minHeight: '80vh', boxShadow: 'inset 0 0 50px rgba(0,0,0,0.2)' },
   bookshelf: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '40px 20px', padding: '20px' },
   bookWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', transition: 'transform 0.2s' },
   bookCover: { width: '100px', height: '140px', backgroundColor: '#fff', borderRadius: '4px 8px 8px 4px', boxShadow: '5px 5px 15px rgba(0,0,0,0.3)', overflow: 'hidden', borderLeft: '4px solid rgba(0,0,0,0.1)' },
   coverImage: { width: '100%', height: '100%', objectFit: 'cover' },
   bookTitle: { marginTop: '10px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', color: '#3e2723', backgroundColor: 'rgba(255,255,255,0.7)', padding: '2px 6px', borderRadius: '4px' },
-  // --- ポップアップ用のスタイル ---
+
   modalOverlay: {
     position: 'fixed',
     top: 0,
     left: 0,
     width: '100vw',
     height: '100vh',
-    backgroundColor: 'rgba(0,0,0,0.8)', // 背景を暗くする
+    backgroundColor: 'rgba(0,0,0,0.8)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -462,13 +459,16 @@ const styles = {
   },
   modalContent: {
     position: 'relative',
-    width: '90%',
+    width: '95%',
     height: '90%',
     backgroundColor: '#fff',
     borderRadius: '12px',
-    overflow: 'auto', 
-    WebkitOverflowScrolling: 'touch', // iOSでの指スクロールを滑らかにする
+    // ★ 修正箇所：中のスクロール用divに任せるため hidden に設定
+    overflow: 'hidden', 
+    WebkitOverflowScrolling: 'touch',
     boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+    display: 'flex',
+    flexDirection: 'column'
   },
   closeBtn: {
     position: 'absolute',
