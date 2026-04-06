@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react' // ★useRefを追加
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
-export default function TeacherView({ userName, role, handleLogout }) {
+// ★ 引数に unit を追加
+export default function TeacherView({ userName, role, unit, handleLogout }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeContent, setActiveContent] = useState('notices');
   const [notifications, setNotifications] = useState([]);
@@ -56,7 +57,9 @@ export default function TeacherView({ userName, role, handleLogout }) {
         const text = await response.text();
         const rows = text.split('\n').map(row => row.trim()).filter(row => row !== "");
         const schoolList = rows.slice(1);
-        setSchools(['すべて', ...schoolList]);
+        // 校舎名のみ（1列目）を取得するように調整
+        const schoolNames = schoolList.map(row => row.split(',')[0]);
+        setSchools(['すべて', ...schoolNames]);
       } catch (e) {
         console.error("校舎リストの読み込みに失敗しました");
       }
@@ -67,14 +70,24 @@ export default function TeacherView({ userName, role, handleLogout }) {
   // --- 通知取得ロジック ---
   const fetchNotifications = async () => {
     try {
-      const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications" }), { headers: { 'Content-Type': 'text/plain' } });
+      const response = await axios.post(GAS_URL, JSON.stringify({ 
+        action: "getNotifications",
+        unit: unit // ★ ユニット情報を追加
+      }), { headers: { 'Content-Type': 'text/plain' } });
+      
       if (response.data.result === "success") setNotifications(response.data.notifications);
     } catch (e) { console.error("更新失敗"); }
   };
 
   const handleComplete = async (userId, targetName) => {
     try {
-      await axios.post(GAS_URL, JSON.stringify({ action: "deleteNotification", userId, userName: targetName }), { headers: { 'Content-Type': 'text/plain' } });
+      await axios.post(GAS_URL, JSON.stringify({ 
+        action: "deleteNotification", 
+        userId, 
+        userName: targetName,
+        unit: unit // ★ ユニット情報を追加
+      }), { headers: { 'Content-Type': 'text/plain' } });
+      
       fetchNotifications();
     } catch (e) { alert("削除失敗"); }
   };
@@ -185,7 +198,6 @@ export default function TeacherView({ userName, role, handleLogout }) {
   );
 }
 
-// styles は変更なしのため省略（そのまま使用してください）
 const styles = {
   container: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'fixed', top: 0, left: 0 },
   header: { background: '#27ae60', color: '#fff', height: '50px', zIndex: 10, boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },

@@ -3,7 +3,8 @@ import axios from 'axios'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
-export default function StudentView({ userId, userName, grade, school, handleLogout }) {
+// ★ 引数に unit を追加
+export default function StudentView({ userId, userName, grade, school, unit, handleLogout }) {
   const [myQueueNumber, setMyQueueNumber] = useState(null);
   const [submittingStatus, setSubmittingStatus] = useState(''); 
   const [activeMenu, setActiveMenu] = useState('kodore');
@@ -20,7 +21,8 @@ export default function StudentView({ userId, userName, grade, school, handleLog
       const response = await axios.post(GAS_URL, JSON.stringify({
         action: "sendNotification", 
         userId: userId, userName: userName, grade: grade, school: school, 
-        status: statusText
+        status: statusText,
+        unit: unit // ★ ユニット情報を追加
       }), { headers: { 'Content-Type': 'text/plain' } });
 
       if (response.data.result === "success") {
@@ -38,14 +40,18 @@ export default function StudentView({ userId, userName, grade, school, handleLog
       const timer = setTimeout(() => {
         setShowCompleteMsg(false);
         setSubmittingStatus('');
-      }, 10000); // ご指定の10秒を維持
+      }, 10000); 
       return () => clearTimeout(timer);
     }
   }, [showCompleteMsg]);
 
   const checkMyStatus = async () => {
     try {
-      const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications" }), { headers: { 'Content-Type': 'text/plain' } });
+      const response = await axios.post(GAS_URL, JSON.stringify({ 
+        action: "getNotifications",
+        unit: unit // ★ ユニット情報を追加
+      }), { headers: { 'Content-Type': 'text/plain' } });
+
       if (response.data.result === "success") {
         const myData = response.data.notifications.find(n => n.userId === userId && n.name === userName);
         if (myData) { 
@@ -65,7 +71,6 @@ export default function StudentView({ userId, userName, grade, school, handleLog
     return () => clearInterval(timer);
   }, []);
   
-  // ★ 修正箇所：6時間で自動ログアウト（不足していた閉じカッコを追加）
   useEffect(() => {
     const SIX_HOURS = 6 * 60 * 60 * 1000; 
 
@@ -75,7 +80,7 @@ export default function StudentView({ userId, userName, grade, school, handleLog
     }, SIX_HOURS);
 
     return () => clearTimeout(logoutTimer);
-  }, []); // ← ここに欠落していた閉じカッコを補完しました
+  }, []);
 
   return (
     <div style={styles.container}>
@@ -111,6 +116,7 @@ export default function StudentView({ userId, userName, grade, school, handleLog
                 <div style={styles.completeWrapper}>
                   <h2 style={styles.requestStatusText}>{lastStatus}の依頼を出しました！</h2>
                   <div style={styles.completeMsgCard}>
+                    <div style={styles.checkIcon}>✅</div>
                     <div style={styles.queueNumberSmall}>受付番号：{myQueueNumber}番</div>
                     <p style={{fontSize:'1rem', color:'#666', margin: 0}}>そのまま少し待っていてね。</p>
                   </div>
@@ -177,7 +183,7 @@ const styles = {
   completeMsgCard: { backgroundColor: '#fff', padding: '30px 20px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 15px 30px rgba(0,0,0,0.1)', border: '6px solid #3498db', width: '100%', marginTop: 0 },
   checkIcon: { fontSize: '2.5rem', marginBottom: '10px' },
   queueNumberSmall: { fontSize: '2.8rem', fontWeight: 'bold', color: '#3498db', margin: '15px 0' }, 
-  waitingCard: { backgroundColor: '#fff', padding: '50px 40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #27ae60', width: '100%', maxWidth: '480px' },
+  waitingCard: { backgroundColor: '#fff', padding: '50px 40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #27ae60', width: '100%', maxWidth: '#480px' },
   waitingTitle: { fontSize: '1.6rem', fontWeight: 'bold', color: '#27ae60', marginBottom: '15px' },
   queueNumber: { fontSize: '7rem', fontWeight: 'bold', color: '#333', lineHeight: 1 },
   waitingText: { marginTop: '30px', color: '#666', lineHeight: '1.6', fontSize: '1.2rem' },
