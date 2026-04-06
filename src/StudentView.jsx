@@ -7,10 +7,14 @@ export default function StudentView({ userId, userName, grade, school, handleLog
   const [myQueueNumber, setMyQueueNumber] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeMenu, setActiveMenu] = useState('kodore');
+  const [showCompleteMsg, setShowCompleteMsg] = useState(false); // ★5秒メッセージ用
+  const [lastStatus, setLastStatus] = useState(''); // ★「丸付け」か「質問」か保持
 
   const sendNotification = async (status) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
+    setLastStatus(status); // どちらを押したか保存
+
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({
         action: "sendNotification", userId: userId, userName: userName, grade: grade, school: school, status: status
@@ -18,6 +22,12 @@ export default function StudentView({ userId, userName, grade, school, handleLog
 
       if (response.data.result === "success") {
         setMyQueueNumber(response.data.queueNumber);
+        
+        // ★ 完了メッセージを5秒間だけ表示する
+        setShowCompleteMsg(true);
+        setTimeout(() => {
+          setShowCompleteMsg(false);
+        }, 5000); 
       }
     } catch (e) {
       alert("送信に失敗しました。");
@@ -31,8 +41,12 @@ export default function StudentView({ userId, userName, grade, school, handleLog
       const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications" }), { headers: { 'Content-Type': 'text/plain' } });
       if (response.data.result === "success") {
         const myData = response.data.notifications.find(n => n.userId === userId && n.name === userName);
-        if (myData) { setMyQueueNumber(myData.queueNumber); } 
-        else { setMyQueueNumber(null); }
+        if (myData) { 
+          setMyQueueNumber(myData.queueNumber); 
+        } else { 
+          setMyQueueNumber(null); 
+          setShowCompleteMsg(false); // 対応完了したらメッセージも消す
+        }
       }
     } catch (e) { console.error("ステータス更新失敗"); }
   };
@@ -45,6 +59,7 @@ export default function StudentView({ userId, userName, grade, school, handleLog
 
   return (
     <div style={styles.container}>
+      {/* サイドバー（変更なし） */}
       <aside style={styles.sidebar}>
         <div style={styles.profileArea}>
           <div style={styles.studentName}>{userName} <span style={{fontSize:'0.9rem'}}>さん</span></div>
@@ -52,7 +67,6 @@ export default function StudentView({ userId, userName, grade, school, handleLog
             <span style={styles.infoBadge}>{school} {grade}</span>
           </div>
         </div>
-
         <nav style={styles.nav}>
           <button style={styles.navItem(activeMenu === 'kodore')} onClick={() => setActiveMenu('kodore')}>
             <span style={styles.navIcon}>🎯</span> 個トレ
@@ -64,7 +78,6 @@ export default function StudentView({ userId, userName, grade, school, handleLog
             <span style={styles.navIcon}>⚡</span> スキマくん
           </button>
         </nav>
-
         <button onClick={handleLogout} style={styles.logoutBtn}>ログアウト</button>
       </aside>
 
@@ -72,23 +85,36 @@ export default function StudentView({ userId, userName, grade, school, handleLog
         {activeMenu === 'kodore' && (
           <div style={styles.contentArea}>
             <h1 style={styles.mainTitle}>🎯 個トレ・サポート</h1>
-            <p style={styles.mainSubTitle}>先生に合図を送りたい方のボタンを押してね。</p>
-
-            {myQueueNumber ? (
+            
+            {/* ★ 状況に応じたメッセージ表示の切り替え */}
+            {showCompleteMsg ? (
+              // 1. ボタンを押した直後の5秒間だけ出るメッセージ
+              <div style={styles.completeMsgCard}>
+                <div style={styles.checkIcon}>✅</div>
+                <h2 style={{margin: '10px 0'}}>{lastStatus}の依頼を出しました！</h2>
+                <div style={styles.queueNumberSmall}>整理券：{myQueueNumber}番</div>
+                <p>そのまま少し待っていてね。</p>
+              </div>
+            ) : myQueueNumber ? (
+              // 2. 5秒経過後の通常の順番待ち画面
               <div style={styles.waitingCard}>
                 <div style={styles.waitingTitle}>順番待ち中</div>
                 <div style={styles.queueNumber}>{myQueueNumber}<span style={{fontSize:'1.5rem'}}>番目</span></div>
                 <p style={styles.waitingText}>先生が呼ぶまでワークを進めて待っていよう！</p>
               </div>
             ) : (
-              <div style={styles.buttonGrid}>
-                <button onClick={() => sendNotification("丸付け待ち")} style={styles.btnMaru}>
-                  📝<br/>丸付けお願いします！
-                </button>
-                <button onClick={() => sendNotification("質問待ち")} style={styles.btnQuestion}>
-                  ❓<br/>質問があります
-                </button>
-              </div>
+              // 3. 何もしていない時のボタン画面
+              <>
+                <p style={styles.mainSubTitle}>先生に合図を送りたい方のボタンを押してね。</p>
+                <div style={styles.buttonGrid}>
+                  <button onClick={() => sendNotification("丸付け待ち")} style={styles.btnMaru}>
+                    📝<br/>丸付けお願いします！
+                  </button>
+                  <button onClick={() => sendNotification("質問待ち")} style={styles.btnQuestion}>
+                    ❓<br/>質問があります
+                  </button>
+                </div>
+              </>
             )}
             
             <div style={styles.loginInfoBar}>
@@ -96,9 +122,6 @@ export default function StudentView({ userId, userName, grade, school, handleLog
             </div>
           </div>
         )}
-
-        {activeMenu === 'progress' && <div style={styles.emptyContent}>🏫 学校の進度確認画面（制作中）</div>}
-        {activeMenu === 'sukima' && <div style={styles.emptyContent}>⚡ スキマくん（制作中）</div>}
       </main>
     </div>
   );
@@ -122,10 +145,17 @@ const styles = {
   buttonGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', width: '100%', maxWidth: '800px' },
   btnMaru: { height: '220px', borderRadius: '30px', border: 'none', background: 'linear-gradient(135deg, #e67e22, #f39c12)', color: '#fff', fontSize: '1.6rem', fontWeight: 'bold', cursor: 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: '0 8px 15px rgba(230,126,34,0.3)', transition: 'transform 0.1s' },
   btnQuestion: { height: '220px', borderRadius: '30px', border: 'none', background: 'linear-gradient(135deg, #3498db, #5dade2)', color: '#fff', fontSize: '1.6rem', fontWeight: 'bold', cursor: 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: '0 8px 15px rgba(52,152,219,0.3)', transition: 'transform 0.1s' },
+  
+  // 5秒間だけ出る「受付完了」のカード
+  completeMsgCard: { backgroundColor: '#fff', padding: '40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #3498db', animation: 'fadeIn 0.3s' },
+  checkIcon: { fontSize: '3rem' },
+  queueNumberSmall: { fontSize: '2rem', fontWeight: 'bold', color: '#3498db', margin: '10px 0' },
+
+  // 順番待ちカード
   waitingCard: { backgroundColor: '#fff', padding: '60px 40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #27ae60' },
   waitingTitle: { fontSize: '1.6rem', fontWeight: 'bold', color: '#27ae60', marginBottom: '15px' },
   queueNumber: { fontSize: '7rem', fontWeight: 'bold', color: '#333', lineHeight: 1 },
   waitingText: { marginTop: '30px', color: '#666', lineHeight: '1.6', fontSize: '1.2rem' },
+  
   loginInfoBar: { width: '100%', textAlign: 'center', background: '#fff', padding: '12px 20px', borderRadius: '12px', color: '#666', fontSize: '1rem', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginTop: 'auto', marginBottom: '20px' },
-  emptyContent: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', fontSize: '1.5rem', color: '#999' }
 };
