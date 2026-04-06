@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
+const modelAnswerBooks = [
+  { id: 1, title: "中1 数学", cover: "/covers/math1.png", pdf: "/pdfs/math1.pdf" },
+  { id: 2, title: "中2 数学", cover: "/covers/math2.png", pdf: "/pdfs/math2.pdf" },
+  { id: 3, title: "中3 数学", cover: "/covers/math3.png", pdf: "/pdfs/math3.pdf" },
+  // ... 本のデータを追加
+];
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
@@ -230,8 +236,26 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             </div>
           )}
 
+          {/* 5. 個トレ2（模範解答）本棚 */}
+          {activeContent === 'model-answer' && (
+            <div style={styles.bookshelfContainer}>
+              <h2 style={styles.contentTitle}>📚 個トレ2 模範解答</h2>
+              
+              <div style={styles.bookshelf}>
+                {modelAnswerBooks.map((book) => (
+                  <div key={book.id} style={styles.bookWrapper} onClick={() => window.open(book.pdf, '_blank')}>
+                    <div style={styles.bookCover}>
+                      <img src={book.cover} alt={book.title} style={styles.coverImage} />
+                    </div>
+                    <div style={styles.bookTitle}>{book.title}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 4. 残りの「制作中」メニュー */}
-          {(activeContent === 'app-usage' || activeContent === 'school-progress' || activeContent === 'model-answer') && (
+          {(activeContent === 'app-usage' || activeContent === 'school-progress') && (
             <div style={styles.emptyState}>制作中...</div>
           )}
         </div>
@@ -304,5 +328,49 @@ const styles = {
   overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 999 },
   footer: { background: '#27ae60', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', color: '#fff' },
   homeIcon: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
-  version: { position: 'absolute', right: '10px', bottom: '5px', color: '#fff', fontSize: '10px' }
+  version: { position: 'absolute', right: '10px', bottom: '5px', color: '#fff', fontSize: '10px' },
+  bookshelfContainer: {
+    backgroundColor: '#d2b48c', // 木の色（タン）
+    padding: '40px 20px',
+    borderRadius: '16px',
+    minHeight: '80vh',
+    boxShadow: 'inset 0 0 50px rgba(0,0,0,0.2)'
+  },
+  bookshelf: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+    gap: '40px 20px',
+    padding: '20px'
+  },
+  bookWrapper: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    cursor: 'pointer',
+    transition: 'transform 0.2s',
+  },
+  bookCover: {
+    width: '100px',
+    height: '140px',
+    backgroundColor: '#fff',
+    borderRadius: '4px 8px 8px 4px', // 本の背表紙側を少し丸める
+    boxShadow: '5px 5px 15px rgba(0,0,0,0.3)',
+    overflow: 'hidden',
+    borderLeft: '4px solid rgba(0,0,0,0.1)' // 本の厚み感
+  },
+  coverImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover'
+  },
+  bookTitle: {
+    marginTop: '10px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: '#3e2723',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    padding: '2px 6px',
+    borderRadius: '4px'
+  },
 };
