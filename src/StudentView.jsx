@@ -10,39 +10,41 @@ export default function StudentView({ userId, userName, grade, school, handleLog
   const [showCompleteMsg, setShowCompleteMsg] = useState(false); 
   const [lastStatus, setLastStatus] = useState(''); 
 
+  // --- 送信処理 ---
   const sendNotification = async (status) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
-    setLastStatus(status === "丸付け待ち" ? "丸付け" : "質問"); // 表示用文言を統一
+    setLastStatus(status === "丸付け待ち" ? "丸付け" : "質問");
 
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({
         action: "sendNotification", 
-        userId: userId, 
-        userName: userName, 
-        grade: grade, 
-        school: school, 
-        status: status
+        userId: userId, userName: userName, grade: grade, school: school, status: status
       }), { headers: { 'Content-Type': 'text/plain' } });
 
       if (response.data.result === "success") {
         setMyQueueNumber(response.data.queueNumber);
-        
-        // ★ 他のどの状態よりも優先して5秒間メッセージを出す
+        // ここではフラグを立てるだけ。タイマーは下の useEffect で管理。
         setShowCompleteMsg(true);
-        
-        // 5秒後に自動で「通常の順番待ち画面」へ切り替え
-        setTimeout(() => {
-          setShowCompleteMsg(false);
-        }, 5000); 
       }
     } catch (e) {
       alert("送信に失敗しました。");
-    } finally {
       setIsSubmitting(false);
     }
   };
 
+  // ★ 追加：メッセージが表示された「後」に5秒数えるロジック
+  useEffect(() => {
+    if (showCompleteMsg) {
+      const timer = setTimeout(() => {
+        setShowCompleteMsg(false);
+        setIsSubmitting(false); // 5秒経過後に送信中状態を解除
+      }, 5000); // 5000ms = 5秒
+      return () => clearTimeout(timer);
+    }
+  }, [showCompleteMsg]);
+
+  // --- 定期更新（順番待ち用） ---
   const checkMyStatus = async () => {
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications" }), { headers: { 'Content-Type': 'text/plain' } });
@@ -52,11 +54,11 @@ export default function StudentView({ userId, userName, grade, school, handleLog
           setMyQueueNumber(myData.queueNumber); 
         } else { 
           setMyQueueNumber(null);
-          // 先生が完了した瞬間はメッセージも強制終了してボタン画面に戻す
           setShowCompleteMsg(false); 
+          setIsSubmitting(false);
         }
       }
-    } catch (e) { console.error("ステータス更新失敗"); }
+    } catch (e) { console.error("更新失敗"); }
   };
 
   useEffect(() => {
@@ -93,7 +95,6 @@ export default function StudentView({ userId, userName, grade, school, handleLog
           <div style={styles.contentArea}>
             <h1 style={styles.mainTitle}>🎯 個トレ・サポート</h1>
             
-            {/* ★ 判定の順番を入れ替え：showCompleteMsg を一番上に持ってくる */}
             {showCompleteMsg ? (
               <div style={styles.completeMsgCard}>
                 <div style={styles.checkIcon}>✅</div>
@@ -111,11 +112,19 @@ export default function StudentView({ userId, userName, grade, school, handleLog
               <>
                 <p style={styles.mainSubTitle}>先生に合図を送りたい方のボタンを押してね。</p>
                 <div style={styles.buttonGrid}>
-                  <button onClick={() => sendNotification("丸付け待ち")} style={styles.btnMaru}>
-                    📝<br/>丸付けお願いします！
+                  <button 
+                    onClick={() => sendNotification("丸付け待ち")} 
+                    style={styles.btnMaru(isSubmitting)}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "送信中..." : <>📝<br/>丸付けお願いします！</>}
                   </button>
-                  <button onClick={() => sendNotification("質問待ち")} style={styles.btnQuestion}>
-                    ❓<br/>質問があります
+                  <button 
+                    onClick={() => sendNotification("質問待ち")} 
+                    style={styles.btnQuestion(isSubmitting)}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "送信中..." : <>❓<br/>質問があります</>}
                   </button>
                 </div>
               </>
@@ -132,7 +141,7 @@ export default function StudentView({ userId, userName, grade, school, handleLog
 }
 
 const styles = {
-  // ... (スタイル部分は前回と同じなので省略しても大丈夫ですが、一応 completeMsgCard を強調)
+  // スタイルは前回と同じ
   container: { height: '100vh', width: '100vw', display: 'flex', backgroundColor: '#eef2f5', position: 'fixed', top: 0, left: 0, overflow: 'hidden', fontFamily: '"Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif' },
   sidebar: { width: '280px', backgroundColor: '#2c3e50', color: '#ecf0f1', display: 'flex', flexDirection: 'column', padding: '30px 20px', flexShrink: 0 },
   profileArea: { marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '20px' },
@@ -148,8 +157,20 @@ const styles = {
   mainTitle: { fontSize: '2.8rem', fontWeight: 'bold', marginBottom: '10px', color: '#333', textAlign: 'center' },
   mainSubTitle: { fontSize: '1.2rem', color: '#666', marginBottom: '50px', textAlign: 'center' },
   buttonGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', width: '100%', maxWidth: '800px' },
-  btnMaru: { height: '220px', borderRadius: '30px', border: 'none', background: 'linear-gradient(135deg, #e67e22, #f39c12)', color: '#fff', fontSize: '1.6rem', fontWeight: 'bold', cursor: 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: '0 8px 15px rgba(230,126,34,0.3)', transition: 'transform 0.1s' },
-  btnQuestion: { height: '220px', borderRadius: '30px', border: 'none', background: 'linear-gradient(135deg, #3498db, #5dade2)', color: '#fff', fontSize: '1.6rem', fontWeight: 'bold', cursor: 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: '0 8px 15px rgba(52,152,219,0.3)', transition: 'transform 0.1s' },
+  btnMaru: (isSubmitting) => ({ 
+    height: '220px', borderRadius: '30px', border: 'none', 
+    background: isSubmitting ? '#ccc' : 'linear-gradient(135deg, #e67e22, #f39c12)', 
+    color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', 
+    cursor: isSubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', 
+    boxShadow: isSubmitting ? 'none' : '0 8px 15px rgba(230,126,34,0.3)', transition: 'all 0.2s' 
+  }),
+  btnQuestion: (isSubmitting) => ({ 
+    height: '220px', borderRadius: '30px', border: 'none', 
+    background: isSubmitting ? '#ccc' : 'linear-gradient(135deg, #3498db, #5dade2)', 
+    color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', 
+    cursor: isSubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', 
+    boxShadow: isSubmitting ? 'none' : '0 8px 15px rgba(52,152,219,0.3)', transition: 'all 0.2s' 
+  }),
   completeMsgCard: { backgroundColor: '#fff', padding: '40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #3498db', width: '100%', maxWidth: '500px' },
   checkIcon: { fontSize: '3rem' },
   queueNumberSmall: { fontSize: '2.5rem', fontWeight: 'bold', color: '#3498db', margin: '15px 0' },
