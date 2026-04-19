@@ -12,7 +12,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
   // --- 進捗管理用ステート ---
   const [unitMaster, setUnitMaster] = useState([]); 
-  const [selectedUnits, setSelectedUnits] = useState({}); 
+  const [selectedUnits, setSelectedUnits] = useState({}); // { "科目-テキスト": ["章-単元-ページ", ...] }
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [currentSelecting, setCurrentSelecting] = useState(null);
 
@@ -177,7 +177,10 @@ export default function StudentView({ userId, userName, grade, school, unit, han
                           <td style={styles.td}>
                             <button style={styles.selectBtn} onClick={() => { setCurrentSelecting({ subject: sub.name, text: text }); setShowUnitModal(true); }}>選択</button>
                           </td>
-                          <td style={styles.tdUnitDisplay}>{selectedUnits[selKey]?.join(', ') || ""}</td>
+                          {/* メイン画面には単元名（IDの2番目の要素）だけを表示 */}
+                          <td style={styles.tdUnitDisplay}>
+                            {selectedUnits[selKey]?.map(id => id.split('-')[1]).join(', ') || ""}
+                          </td>
                         </tr>
                       )
                     })
@@ -215,7 +218,11 @@ export default function StudentView({ userId, userName, grade, school, unit, han
                   <div style={styles.chapterTitle}>{chapter}</div>
                   {units.map((u, i) => {
                     const selKey = `${currentSelecting.subject}-${currentSelecting.text}`;
-                    const isChecked = (selectedUnits[selKey] || []).includes(u.単元);
+                    
+                    // 重複回避用の固有ID生成（章-単元-ページ）
+                    const unitUniqueId = `${u.章}-${u.単元}-${u.ページ}`;
+                    const isChecked = (selectedUnits[selKey] || []).includes(unitUniqueId);
+                    
                     return (
                       <label key={i} style={styles.unitRow}>
                         <span style={styles.unitNamePart}>{u.単元}</span>
@@ -223,7 +230,9 @@ export default function StudentView({ userId, userName, grade, school, unit, han
                         <div style={styles.checkboxPart}>
                           <input type="checkbox" checked={isChecked} style={styles.checkbox} onChange={(e) => {
                             const currentArray = selectedUnits[selKey] || [];
-                            const newArray = e.target.checked ? [...currentArray, u.単元] : currentArray.filter(n => n !== u.単元);
+                            const newArray = e.target.checked 
+                              ? [...currentArray, unitUniqueId] 
+                              : currentArray.filter(id => id !== unitUniqueId);
                             setSelectedUnits({ ...selectedUnits, [selKey]: newArray });
                           }}/>
                         </div>
