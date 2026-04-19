@@ -264,7 +264,38 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
 // styles に追加が必要なもののみ記述（既存のものは維持）
 const styles = {
-  // ...既存のスタイルは省略せずそのまま使用...
+  // --- 共通・レイアウト ---
+  container: { height: '100vh', width: '100vw', display: 'flex', backgroundColor: '#eef2f5', position: 'fixed', top: 0, left: 0, overflow: 'hidden', fontFamily: '"Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif' },
+  sidebar: { width: '280px', backgroundColor: '#2c3e50', color: '#ecf0f1', display: 'flex', flexDirection: 'column', padding: '30px 20px', flexShrink: 0 },
+  profileArea: { marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '20px' },
+  studentName: { fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '8px', whiteSpace: 'nowrap' },
+  schoolInfo: { display: 'flex', alignItems: 'center' },
+  infoBadge: { background: 'rgba(255,255,255,0.15)', padding: '4px 10px', borderRadius: '4px', fontSize: '0.85rem', color: '#ecf0f1' },
+  nav: { flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' },
+  navItem: (isActive) => ({ background: isActive ? '#3498db' : 'none', color: '#fff', border: 'none', padding: '12px 15px', borderRadius: '8px', fontSize: '1.1rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', width: '100%' }),
+  navIcon: { marginRight: '15px', fontSize: '1.2rem' },
+  logoutBtn: { background: 'none', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '8px', borderRadius: '4px', cursor: 'pointer', marginTop: 'auto' },
+  main: { flex: 1, padding: '40px', overflowY: 'auto', backgroundColor: '#f4f7f9' },
+  contentArea: { maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100%' },
+  mainTitle: { fontSize: '2.8rem', fontWeight: 'bold', marginBottom: '10px', color: '#333' },
+  mainSubTitle: { fontSize: '1.2rem', color: '#666', marginBottom: '20px' },
+  
+  // --- 個トレサポート画面 ---
+  cardContainer: { width: '100%', display: 'flex', justifyContent: 'center', marginTop: '30px' },
+  buttonGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', width: '100%', maxWidth: '800px' },
+  btnMaru: (isSubmitting, isAnySubmitting) => ({ height: '220px', borderRadius: '30px', border: 'none', background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#ffcc99' : 'linear-gradient(135deg, #e67e22, #f39c12)'), color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(230,126,34,0.3)' }),
+  btnQuestion: (isSubmitting, isAnySubmitting) => ({ height: '220px', borderRadius: '30px', border: 'none', background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#b3e0ff' : 'linear-gradient(135deg, #3498db, #5dade2)'), color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(52,152,219,0.3)' }),
+  completeWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '400px' },
+  requestStatusText: { fontSize: '1.8rem', fontWeight: 'bold', color: '#333', marginBottom: '20px', textAlign: 'center', marginTop: 0 },
+  completeMsgCard: { backgroundColor: '#fff', padding: '30px 20px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 15px 30px rgba(0,0,0,0.1)', border: '6px solid #3498db', width: '100%', marginTop: 0 },
+  queueNumberSmall: { fontSize: '2.8rem', fontWeight: 'bold', color: '#3498db', margin: '15px 0' }, 
+  waitingCard: { backgroundColor: '#fff', padding: '50px 40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #27ae60', width: '100%', maxWidth: '480px' },
+  waitingTitle: { fontSize: '1.6rem', fontWeight: 'bold', color: '#27ae60', marginBottom: '15px' },
+  queueNumber: { fontSize: '7rem', fontWeight: 'bold', color: '#333', lineHeight: 1 },
+  waitingText: { marginTop: '30px', color: '#666', lineHeight: '1.6', fontSize: '1.2rem' },
+  loginInfoBar: { width: '100%', textAlign: 'center', background: '#fff', padding: '12px 20px', borderRadius: '12px', color: '#666', fontSize: '1rem', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginTop: 'auto', marginBottom: '20px' },
+
+  // --- 個トレ進捗画面 ---
   progressTableWrapper: { width: '100%', backgroundColor: '#fff', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' },
   progressTable: { width: '100%', borderCollapse: 'collapse', marginBottom: '20px' },
   tableHeader: { backgroundColor: '#f8f9fa' },
@@ -273,43 +304,23 @@ const styles = {
   tdSubject: { padding: '15px', fontWeight: 'bold', borderRight: '1px solid #eee', width: '80px' },
   tdText: { padding: '15px', color: '#444' },
   td: { padding: '10px' },
-  tdUnitDisplay: { padding: '15px', color: '#3498db', fontSize: '0.9rem', maxWidth: '300px' },
+  tdUnitDisplay: { padding: '15px', color: '#3498db', fontSize: '0.8rem', maxWidth: '300px', wordBreak: 'break-all' },
   selectBtn: { padding: '8px 15px', background: '#3498db', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' },
   submitProgressBtn: { width: '100%', padding: '15px', background: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '1.2rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  modalContent: { backgroundColor: '#fff', padding: '30px', borderRadius: '20px', width: '80%', maxWidth: '600px', zIndex: 1001 },
+  
+  // --- モーダル（ポップアップ） ---
   overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' },
-  // styles オブジェクトに追加
+  modalContent: { backgroundColor: '#fff', padding: '20px', borderRadius: '20px', width: '90%', maxWidth: '800px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', zIndex: 1001 },
   modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #3498db', paddingBottom: '10px' },
   modalTitle: { margin: 0, fontSize: '1.2rem', color: '#2c3e50' },
   modalCloseX: { background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#999' },
   unitListScroll: { maxHeight: '60vh', overflowY: 'auto', paddingRight: '10px' },
   chapterGroup: { marginBottom: '20px', backgroundColor: '#f9f9f9', borderRadius: '10px', padding: '10px' },
   chapterTitle: { fontWeight: 'bold', fontSize: '0.9rem', color: '#e67e22', marginBottom: '8px', borderLeft: '4px solid #e67e22', paddingLeft: '8px' },
-  unitLabel: { 
-    display: 'flex', 
-    alignItems: 'center', 
-    padding: '8px 5px', 
-    cursor: 'pointer', 
-    borderBottom: '1px solid #eee',
-    fontSize: '13px', 
-    fontFamily: 'monospace', // 等幅フォントで40文字を管理
-    whiteSpace: 'nowrap',    // 折り返さない
-  },
+  unitLabel: { display: 'flex', alignItems: 'center', padding: '8px 5px', cursor: 'pointer', borderBottom: '1px solid #eee', fontSize: '13px', fontFamily: 'monospace', whiteSpace: 'nowrap' },
   checkbox: { marginRight: '10px', width: '18px', height: '18px' },
-  unitNameText: { color: '#333', letterSpacing: '-0.5px' }, // 文字間を少し詰めて40文字対応
+  unitNameText: { color: '#333', letterSpacing: '-0.5px' },
   modalFooter: { marginTop: '20px', textAlign: 'center' },
   confirmBtn: { padding: '12px 40px', background: '#3498db', color: '#fff', border: 'none', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(52,152,219,0.3)' },
-
-  // modalContentの幅をiPad/PC向けに調整
-  modalContent: { 
-    backgroundColor: '#fff', 
-    padding: '20px', 
-    borderRadius: '20px', 
-    width: '90%',        // 幅を広く取る
-    maxWidth: '800px',   // 40文字入るサイズ
-    maxHeight: '85vh', 
-    display: 'flex', 
-    flexDirection: 'column', 
-    zIndex: 1001 
-  },
+  emptyContent: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', fontSize: '1.5rem', color: '#999' }
 };
