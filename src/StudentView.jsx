@@ -221,28 +221,25 @@ export default function StudentView({ userId, userName, grade, school, unit, han
       </main>
 
       {/* --- 単元選択ポップアップ（モーダル） --- */}
-      {showUnitModal && (
-          <div style={styles.overlay} onClick={() => setShowUnitModal(false)}>
-          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-          <div style={styles.modalHeader}>
-            <h3 style={styles.modalTitle}>
-              {currentSelecting?.subject}：{currentSelecting?.text}
-              </h3>
-              {/* モーダル内のデバッグ表示をこれに差し替え */}
-              <div style={{color:'red', fontSize:'12px', backgroundColor:'#fff', padding:'5px', border:'1px solid red', position:'absolute', top:'50px', zIndex: 1002}}>
-              　【デバッグ情報】<br/>
-                1. あなたの学年データ(grade): 「{grade}」<br/>
-                2. 読み込んだマスタ総数: {unitMaster.length}件<br/>
-                3. 今探している科目: {currentSelecting?.subject} / テキスト: {currentSelecting?.text}
-              </div>
-            <button style={styles.modalCloseX} onClick={() => setShowUnitModal(false)}>×</button>
+      {/* --- 単元選択ポップアップ（モーダル） --- */}
+{showUnitModal && (
+  <div style={styles.overlay} onClick={() => setShowUnitModal(false)}>
+    <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+      <div style={styles.modalHeader}>
+        <h3 style={styles.modalTitle}>
+          {currentSelecting?.subject}：{currentSelecting?.text}
+        </h3>
+        <button style={styles.modalCloseX} onClick={() => setShowUnitModal(false)}>×</button>
       </div>
 
       <div style={styles.unitListScroll}>
         {/* 章ごとにグループ化して表示 */}
         {Object.entries(
           unitMaster
-            .filter(d => d.科目.includes(currentSelecting?.subject) && d.テキスト名 === currentSelecting?.text)
+            .filter(d => 
+              d.科目.includes(currentSelecting?.subject) && 
+              d.テキスト名.includes(currentSelecting?.text)
+            )
             .reduce((acc, cur) => {
               if (!acc[cur.章]) acc[cur.章] = [];
               acc[cur.章].push(cur);
@@ -252,32 +249,32 @@ export default function StudentView({ userId, userName, grade, school, unit, han
           <div key={chapter} style={styles.chapterGroup}>
             <div style={styles.chapterTitle}>{chapter}</div>
             {units.map((u, i) => {
-              const key = `${u.科目}-${u.テキスト名}-${u.章}-${u.単元}`;
-              const isChecked = (selectedUnits[`${u.科目}-${u.テキスト名}`] || []).includes(u.単元);
+              const key = `${currentSelecting.subject}-${currentSelecting.text}`;
+              const isChecked = (selectedUnits[key] || []).includes(u.単元);
               
               return (
-                <label key={i} style={styles.unitLabel}>
-                  <input 
-                    type="checkbox" 
-                    checked={isChecked}
-                    style={styles.checkbox}
-                    onChange={(e) => {
-                      const currentArray = selectedUnits[`${u.科目}-${u.テキスト名}`] || [];
-                      let newArray;
-                      if (e.target.checked) {
-                        newArray = [...currentArray, u.単元];
-                      } else {
-                        newArray = currentArray.filter(name => name !== u.単元);
-                      }
-                      setSelectedUnits({
-                        ...selectedUnits,
-                        [`${u.科目}-${u.テキスト名}`]: newArray
-                      });
-                    }}
-                  />
-                  <span style={styles.unitNameText}>
-                    {u.単元} {u.ページ ? `(p.${u.ページ})` : ""}
-                  </span>
+                <label key={i} style={styles.unitRow}>
+                  {/* 単元名（幅を広く取る） */}
+                  <span style={styles.unitNamePart}>{u.単元}</span>
+                  
+                  {/* ページ（あれば表示） */}
+                  <span style={styles.unitPagePart}>{u.ページ ? `p.${u.ページ}` : ""}</span>
+                  
+                  {/* チェックボックス（一番右） */}
+                  <div style={styles.checkboxPart}>
+                    <input 
+                      type="checkbox" 
+                      checked={isChecked}
+                      style={styles.checkbox}
+                      onChange={(e) => {
+                        const currentArray = selectedUnits[key] || [];
+                        const newArray = e.target.checked 
+                          ? [...currentArray, u.単元] 
+                          : currentArray.filter(name => name !== u.単元);
+                        setSelectedUnits({ ...selectedUnits, [key]: newArray });
+                      }}
+                    />
+                  </div>
                 </label>
               );
             })}
