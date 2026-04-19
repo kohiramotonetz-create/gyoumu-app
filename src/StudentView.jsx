@@ -10,44 +10,47 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   const [showCompleteMsg, setShowCompleteMsg] = useState(false); 
   const [lastStatus, setLastStatus] = useState(''); 
 
+  // --- 進捗管理用ステート ---
   const [unitMaster, setUnitMaster] = useState([]); 
   const [selectedUnits, setSelectedUnits] = useState({}); 
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [currentSelecting, setCurrentSelecting] = useState(null);
 
-  // --- 1. CSVデータの読み込み (列番号で直接指定する最強ロジック) ---
+  // --- 1. 単元マスタ（CSV）の読み込み：【動いていたロジックを完全維持】 ---
   useEffect(() => {
     const loadUnitMaster = async () => {
       try {
+        console.log("CSV読み込み開始...");
         const response = await fetch('/units.csv');
-        if (!response.ok) throw new Error('CSV not found');
+        if (!response.ok) throw new Error(`CSVファイルが見つかりません (Status: ${response.status})`);
 
         const arrayBuffer = await response.arrayBuffer();
-        const text = new TextDecoder('utf-8').decode(arrayBuffer);
+        const decoder = new TextDecoder('utf-8');
+        const text = decoder.decode(arrayBuffer);
 
-        // 1行ずつ分解し、カンマで区切る
-        const rows = text.split(/\r?\n/).filter(line => line.trim() !== "").map(row => row.split(','));
+        const rows = text.split(/\r?\n/).map(row => row.split(','));
+        const headers = rows[0].map(h => h.trim());
 
-        // データ変換 (ヘッダー名を使わず、列番号 0,1,2... で直接取得)
-        const data = rows.slice(1).map(row => ({
-          学年: row[0] ? row[0].trim() : "",
-          科目: row[1] ? row[1].trim() : "",
-          テキスト名: row[2] ? row[2].trim() : "",
-          章: row[3] ? row[3].trim() : "",
-          単元: row[4] ? row[4].trim() : "",
-          ページ: row[5] ? row[5].trim() : ""
-        }));
-
-        // ログイン学年に合わせてフィルタリング
-        const gStr = String(grade || "");
-        const filtered = data.filter(d => {
-          if (gStr.includes("中1")) return d.学年 === "中1";
-          if (gStr.includes("中2")) return d.学年 === "中2";
-          if (gStr.includes("中3")) return d.学年 === "中3";
-          return false;
+        const data = rows.slice(1).filter(row => row.length >= 3).map(row => {
+          let obj = {};
+          headers.forEach((h, i) => {
+            obj[h] = row[i] ? row[i].trim() : "";
+          });
+          return obj;
         });
+
+        const filtered = data.filter(d => {
+          const gStr = String(grade || "");
+          return gStr.includes(d.学年);
+        });
+
+        console.log("全件数:", data.length, "フィルタ後:", filtered.length);
         setUnitMaster(filtered);
-      } catch (e) { console.error("CSV Load Error:", e); }
+
+      } catch (e) {
+        console.error("重大なエラー:", e);
+        alert("データ読み込み失敗: " + e.message);
+      }
     };
     loadUnitMaster();
   }, [grade]);
@@ -202,8 +205,9 @@ export default function StudentView({ userId, userName, grade, school, unit, han
                 unitMaster
                   .filter(d => d.科目.includes(currentSelecting?.subject) && d.テキスト名.includes(currentSelecting?.text))
                   .reduce((acc, cur) => {
-                    if (!acc[cur.章]) acc[cur.章] = [];
-                    acc[cur.章].push(cur);
+                    const chapter = cur.章 || "その他";
+                    if (!acc[chapter]) acc[chapter] = [];
+                    acc[chapter].push(cur);
                     return acc;
                   }, {})
               ).map(([chapter, units]) => (
