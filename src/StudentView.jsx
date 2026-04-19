@@ -21,37 +21,44 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   useEffect(() => {
     const loadUnitMaster = async () => {
       try {
+        console.log("CSV読み込み開始...");
         const response = await fetch('/units.csv');
-        const text = await response.text();
-        Papa.parse(text, {
-          header: true,
-          skipEmptyLines: true,
-          // loadUnitMaster 内の filter 部分を修正
-　　　　　complete: (results) => {
-            const cleanedData = results.data.map(row => {
-              const newRow = {};
-              for (let key in row) {
-                newRow[key.trim()] = row[key] ? String(row[key]).trim() : "";
-              }
-              return newRow;
-            });
+        
+        if (!response.ok) {
+          throw new Error(`CSVファイルが見つかりません (Status: ${response.status})`);
+        }
 
-            // 文字列に変換してから判定（エラー防止）
-            const gStr = String(grade || "");
+        const arrayBuffer = await response.arrayBuffer();
+        const decoder = new TextDecoder('utf-8'); // UTF-8を想定。もしダメなら 'shift-jis'
+        const text = decoder.decode(arrayBuffer);
 
-            const filtered = cleanedData.filter(d => {
-              // grade（木太南 中1）の中に「中1」などの文字が含まれているか
-              if (gStr.includes("中1")) return d.学年 === "中1";
-              if (gStr.includes("中2")) return d.学年 === "中2";
-              if (gStr.includes("中3")) return d.学年 === "中3";
-              return false;
-            });
+        // 自力で1行ずつ分解
+        const rows = text.split(/\r?\n/).map(row => row.split(','));
+        const headers = rows[0].map(h => h.trim()); // 1列目:学年, 2列目:科目, 3列目:テキスト名...
 
-            console.log("フィルタ完了:", filtered.length, "件");
-            setUnitMaster(filtered);
-          }
+        // データ変換
+        const data = rows.slice(1).filter(row => row.length >= 3).map(row => {
+          let obj = {};
+          headers.forEach((h, i) => {
+            obj[h] = row[i] ? row[i].trim() : "";
+          });
+          return obj;
         });
-      } catch (e) { console.error("マスタ読み込み失敗"); }
+
+        // 学年判定（gradeに「中1」が含まれていればOK）
+        const filtered = data.filter(d => {
+          const gStr = String(grade || "");
+          return gStr.includes(d.学年);
+        });
+
+        console.log("全件数:", data.length, "フィルタ後:", filtered.length);
+        setUnitMaster(filtered);
+
+      } catch (e) {
+        console.error("重大なエラー:", e);
+        // 画面にエラーを出して原因を特定する
+        alert("データ読み込み失敗: " + e.message);
+      }
     };
     loadUnitMaster();
   }, [grade]);
