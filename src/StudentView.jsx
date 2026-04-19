@@ -27,19 +27,24 @@ export default function StudentView({ userId, userName, grade, school, unit, han
           header: true,
           skipEmptyLines: true,
           complete: (results) => {
-            // 文字列の前後にある余計な空白を消して読み込む
             const cleanedData = results.data.map(row => {
               const newRow = {};
               for (let key in row) {
-                newRow[key.trim()] = row[key] ? row[key].trim() : "";
-              }
-              return newRow;
-            });
+      　　　　// ヘッダー名も値も、前後の空白を削除
+      　　　newRow[key.trim()] = row[key] ? String(row[key]).trim() : "";
+    }
+    return newRow;
+  });
 
-            // 自分の学年に一致するものだけをセット
-            const filtered = cleanedData.filter(d => d.学年 === grade);
-            setUnitMaster(filtered);
-          }
+  // 学年判定を「中1」が含まれているかどうか、などの部分一致にする
+  　　　const filtered = cleanedData.filter(d => {
+    　　if (!d.学年 || !grade) return false;
+    　　return d.学年.includes(grade) || grade.includes(d.学年);
+  });
+  
+  console.log("フィルタ後のデータ数:", filtered.length);
+  setUnitMaster(filtered);
+}
         });
       } catch (e) { console.error("マスタ読み込み失敗"); }
     };
@@ -211,6 +216,8 @@ export default function StudentView({ userId, userName, grade, school, unit, han
             <h3 style={styles.modalTitle}>
               {currentSelecting?.subject}：{currentSelecting?.text}
               </h3>
+              <p style={{color:'red'}}>マスタ総数: {unitMaster.length}件 / 検索条件: {currentSelecting?.subject} - {currentSelecting?.text}</p>
+
             <button style={styles.modalCloseX} onClick={() => setShowUnitModal(false)}>×</button>
       </div>
 
@@ -218,7 +225,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         {/* 章ごとにグループ化して表示 */}
         {Object.entries(
           unitMaster
-            .filter(d => d.科目 === currentSelecting?.subject && d.テキスト名 === currentSelecting?.text)
+            .filter(d => d.科目.includes(currentSelecting?.subject) && d.テキスト名 === currentSelecting?.text)
             .reduce((acc, cur) => {
               if (!acc[cur.章]) acc[cur.章] = [];
               acc[cur.章].push(cur);
