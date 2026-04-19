@@ -36,14 +36,18 @@ export default function StudentView({ userId, userName, grade, school, unit, han
               return newRow;
             });
 
-            // ★ 強引に判定するロジック
+            // 文字列に変換してから判定（エラー防止）
+            const gStr = String(grade || "");
+
             const filtered = cleanedData.filter(d => {
-              if (grade.includes("中1")) return d.学年 === "中1";
-              if (grade.includes("中2")) return d.学年 === "中2";
-              if (grade.includes("中3")) return d.学年 === "中3";
+              // grade（木太南 中1）の中に「中1」などの文字が含まれているか
+              if (gStr.includes("中1")) return d.学年 === "中1";
+              if (gStr.includes("中2")) return d.学年 === "中2";
+              if (gStr.includes("中3")) return d.学年 === "中3";
               return false;
             });
 
+            console.log("フィルタ完了:", filtered.length, "件");
             setUnitMaster(filtered);
           }
         });
