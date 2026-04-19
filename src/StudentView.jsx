@@ -10,13 +10,12 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   const [showCompleteMsg, setShowCompleteMsg] = useState(false); 
   const [lastStatus, setLastStatus] = useState(''); 
 
-  // --- 進捗管理用ステート ---
   const [unitMaster, setUnitMaster] = useState([]); 
-  const [selectedUnits, setSelectedUnits] = useState({}); // { "科目-テキスト": ["単元1", "単元2"] }
+  const [selectedUnits, setSelectedUnits] = useState({}); 
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [currentSelecting, setCurrentSelecting] = useState(null);
 
-  // --- 1. CSVデータの読み込み (自力解析・文字コード考慮版) ---
+  // --- 1. CSVデータの読み込み (列番号で直接指定する最強ロジック) ---
   useEffect(() => {
     const loadUnitMaster = async () => {
       try {
@@ -26,16 +25,20 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         const arrayBuffer = await response.arrayBuffer();
         const text = new TextDecoder('utf-8').decode(arrayBuffer);
 
+        // 1行ずつ分解し、カンマで区切る
         const rows = text.split(/\r?\n/).filter(line => line.trim() !== "").map(row => row.split(','));
-        const headers = rows[0].map(h => h.trim());
 
-        const data = rows.slice(1).map(row => {
-          let obj = {};
-          headers.forEach((h, i) => { obj[h] = row[i] ? row[i].trim() : ""; });
-          return obj;
-        });
+        // データ変換 (ヘッダー名を使わず、列番号 0,1,2... で直接取得)
+        const data = rows.slice(1).map(row => ({
+          学年: row[0] ? row[0].trim() : "",
+          科目: row[1] ? row[1].trim() : "",
+          テキスト名: row[2] ? row[2].trim() : "",
+          章: row[3] ? row[3].trim() : "",
+          単元: row[4] ? row[4].trim() : "",
+          ページ: row[5] ? row[5].trim() : ""
+        }));
 
-        // ログイン学年に合わせてフィルタリング（「木太南 中1」から「中1」を探す）
+        // ログイン学年に合わせてフィルタリング
         const gStr = String(grade || "");
         const filtered = data.filter(d => {
           if (gStr.includes("中1")) return d.学年 === "中1";
@@ -49,7 +52,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     loadUnitMaster();
   }, [grade]);
 
-  // --- 2. 順番待ち通知 (既存機能) ---
+  // --- 通知・状態チェック (既存機能) ---
   const sendNotification = async (statusType) => {
     if (submittingStatus) return;
     setSubmittingStatus(statusType);
@@ -83,7 +86,6 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     return () => clearInterval(timer);
   }, []);
 
-  // --- 科目・テキスト定義 ---
   const subjectList = [
     { name: '国語', texts: ['iワークドリル', 'iワークプラス'] },
     { name: '数学', texts: ['iワークドリル', 'iワークプラス'] },
@@ -94,7 +96,6 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
   return (
     <div style={styles.container}>
-      {/* サイドバー */}
       <aside style={styles.sidebar}>
         <div style={styles.profileArea}>
           <div style={styles.studentName}>{userName} <span style={{fontSize:'0.9rem'}}>さん</span></div>
@@ -114,7 +115,6 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         <button onClick={handleLogout} style={styles.logoutBtn}>ログアウト</button>
       </aside>
 
-      {/* メイン */}
       <main style={styles.main}>
         {activeMenu === 'kodore' && (
           <div style={styles.contentArea}>
@@ -172,9 +172,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
                           {idx === 0 && <td rowSpan={sub.texts.length} style={styles.tdSubject}>{sub.name}</td>}
                           <td style={styles.tdText}>{text}</td>
                           <td style={styles.td}>
-                            <button style={styles.selectBtn} onClick={() => { setCurrentSelecting({ subject: sub.name, text: text }); setShowUnitModal(true); }}>
-                              選択
-                            </button>
+                            <button style={styles.selectBtn} onClick={() => { setCurrentSelecting({ subject: sub.name, text: text }); setShowUnitModal(true); }}>選択</button>
                           </td>
                           <td style={styles.tdUnitDisplay}>{selectedUnits[selKey]?.join(', ') || ""}</td>
                         </tr>
@@ -183,21 +181,15 @@ export default function StudentView({ userId, userName, grade, school, unit, han
                   ))}
                 </tbody>
               </table>
-              <button style={styles.submitProgressBtn} onClick={() => alert("スプレッドシートへの送信機能は次回実装します！")}>
-                進捗を送信する
-              </button>
+              <button style={styles.submitProgressBtn} onClick={() => alert("スプレッドシートへの送信は次回実装します！")}>進捗を送信する</button>
             </div>
           </div>
         )}
 
         {activeMenu === 'sukima' && <div style={styles.emptyContent}>スキマくん起動中...</div>}
-
-        <div style={styles.loginInfoBar}>
-          現在のログイン：{userName} さん（{grade}）
-        </div>
+        <div style={styles.loginInfoBar}>現在のログイン：{userName} さん（{grade}）</div>
       </main>
 
-      {/* ポップアップ */}
       {showUnitModal && (
         <div style={styles.overlay} onClick={() => setShowUnitModal(false)}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
