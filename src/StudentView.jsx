@@ -26,20 +26,20 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         Papa.parse(text, {
           header: true,
           skipEmptyLines: true,
-          complete: (results) => {
-            const cleanedData = results.data.map(row => {
-              const newRow = {};
-              for (let key in row) {
-      　　　　// ヘッダー名も値も、前後の空白を削除
-      　　　newRow[key.trim()] = row[key] ? String(row[key]).trim() : "";
+          // loadUnitMaster 内の filter 部分を修正
+　　　　　complete: (results) => {
+  　　　　　const cleanedData = results.data.map(row => {
+    　　　　const newRow = {};
+    for (let key in row) {
+      newRow[key.trim()] = row[key] ? String(row[key]).trim() : "";
     }
     return newRow;
   });
 
-  // 学年判定を「中1」が含まれているかどうか、などの部分一致にする
-  　　　const filtered = cleanedData.filter(d => {
-    　　if (!d.学年 || !grade) return false;
-    　　return d.学年.includes(grade) || grade.includes(d.学年);
+  // ここを修正：grade（木太南 中1）の中に、d.学年（中1）が含まれているかチェック
+  const filtered = cleanedData.filter(d => {
+    if (!d.学年 || !grade) return false;
+    return grade.includes(d.学年); 
   });
   
   console.log("フィルタ後のデータ数:", filtered.length);
