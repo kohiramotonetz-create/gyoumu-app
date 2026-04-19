@@ -28,23 +28,24 @@ export default function StudentView({ userId, userName, grade, school, unit, han
           skipEmptyLines: true,
           // loadUnitMaster 内の filter 部分を修正
 　　　　　complete: (results) => {
-  　　　　　const cleanedData = results.data.map(row => {
-    　　　　const newRow = {};
-    for (let key in row) {
-      newRow[key.trim()] = row[key] ? String(row[key]).trim() : "";
-    }
-    return newRow;
-  });
+            const cleanedData = results.data.map(row => {
+              const newRow = {};
+              for (let key in row) {
+                newRow[key.trim()] = row[key] ? String(row[key]).trim() : "";
+              }
+              return newRow;
+            });
 
-  // ここを修正：grade（木太南 中1）の中に、d.学年（中1）が含まれているかチェック
-  const filtered = cleanedData.filter(d => {
-    if (!d.学年 || !grade) return false;
-    return grade.includes(d.学年); 
-  });
-  
-  console.log("フィルタ後のデータ数:", filtered.length);
-  setUnitMaster(filtered);
-}
+            // ★ 強引に判定するロジック
+            const filtered = cleanedData.filter(d => {
+              if (grade.includes("中1")) return d.学年 === "中1";
+              if (grade.includes("中2")) return d.学年 === "中2";
+              if (grade.includes("中3")) return d.学年 === "中3";
+              return false;
+            });
+
+            setUnitMaster(filtered);
+          }
         });
       } catch (e) { console.error("マスタ読み込み失敗"); }
     };
@@ -216,8 +217,13 @@ export default function StudentView({ userId, userName, grade, school, unit, han
             <h3 style={styles.modalTitle}>
               {currentSelecting?.subject}：{currentSelecting?.text}
               </h3>
-              <p style={{color:'red'}}>マスタ総数: {unitMaster.length}件 / 検索条件: {currentSelecting?.subject} - {currentSelecting?.text}</p>
-
+              {/* モーダル内のデバッグ表示をこれに差し替え */}
+              <div style={{color:'red', fontSize:'12px', backgroundColor:'#fff', padding:'5px', border:'1px solid red', position:'absolute', top:'50px', zIndex: 1002}}>
+              　【デバッグ情報】<br/>
+                1. あなたの学年データ(grade): 「{grade}」<br/>
+                2. 読み込んだマスタ総数: {unitMaster.length}件<br/>
+                3. 今探している科目: {currentSelecting?.subject} / テキスト: {currentSelecting?.text}
+              </div>
             <button style={styles.modalCloseX} onClick={() => setShowUnitModal(false)}>×</button>
       </div>
 
