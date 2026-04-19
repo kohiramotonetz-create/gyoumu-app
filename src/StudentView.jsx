@@ -27,8 +27,17 @@ export default function StudentView({ userId, userName, grade, school, unit, han
           header: true,
           skipEmptyLines: true,
           complete: (results) => {
+            // 文字列の前後にある余計な空白を消して読み込む
+            const cleanedData = results.data.map(row => {
+              const newRow = {};
+              for (let key in row) {
+                newRow[key.trim()] = row[key] ? row[key].trim() : "";
+              }
+              return newRow;
+            });
+
             // 自分の学年に一致するものだけをセット
-            const filtered = results.data.filter(d => d.学年 === grade);
+            const filtered = cleanedData.filter(d => d.学年 === grade);
             setUnitMaster(filtered);
           }
         });
@@ -76,8 +85,8 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   const subjectList = [
     { name: '国語', texts: ['iワークドリル', 'iワークプラス'] },
     { name: '数学', texts: ['iワークドリル', 'iワークプラス'] },
-    { name: '英語', texts: ['英語 iワークプラス'] },
-    { name: '理科', texts: ['理科 iワークノート', '理科 iワークプラス'] },
+    { name: '英語', texts: ['iワークプラス'] },
+    { name: '理科', texts: ['iワークノート', 'iワークプラス'] },
     { name: '社会', texts: ['地理ノート', '地理プラス', '歴史ノート', '歴史プラス'] },
   ];
 
