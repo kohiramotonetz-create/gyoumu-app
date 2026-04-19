@@ -1,69 +1,55 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import Papa from 'papaparse' // CSV解析用
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 export default function StudentView({ userId, userName, grade, school, unit, handleLogout }) {
   const [myQueueNumber, setMyQueueNumber] = useState(null);
   const [submittingStatus, setSubmittingStatus] = useState(''); 
-  const [activeMenu, setActiveMenu] = useState('kodore'); // 初期はサポート画面
+  const [activeMenu, setActiveMenu] = useState('kodore');
   const [showCompleteMsg, setShowCompleteMsg] = useState(false); 
   const [lastStatus, setLastStatus] = useState(''); 
 
-  // --- ★ 個トレ進捗用のステート追加 ---
-  const [unitMaster, setUnitMaster] = useState([]); // 単元マスタ
-  const [selectedUnits, setSelectedUnits] = useState({}); // { "科目-テキスト": "選択された単元名" }
+  // --- 進捗管理用ステート ---
+  const [unitMaster, setUnitMaster] = useState([]); 
+  const [selectedUnits, setSelectedUnits] = useState({}); // { "科目-テキスト": ["単元1", "単元2"] }
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [currentSelecting, setCurrentSelecting] = useState(null);
 
-  // --- ★ 単元マスタ（CSV）の読み込み ---
+  // --- 1. CSVデータの読み込み (自力解析・文字コード考慮版) ---
   useEffect(() => {
     const loadUnitMaster = async () => {
       try {
-        console.log("CSV読み込み開始...");
         const response = await fetch('/units.csv');
-        
-        if (!response.ok) {
-          throw new Error(`CSVファイルが見つかりません (Status: ${response.status})`);
-        }
+        if (!response.ok) throw new Error('CSV not found');
 
         const arrayBuffer = await response.arrayBuffer();
-        const decoder = new TextDecoder('utf-8'); // UTF-8を想定。もしダメなら 'shift-jis'
-        const text = decoder.decode(arrayBuffer);
+        const text = new TextDecoder('utf-8').decode(arrayBuffer);
 
-        // 自力で1行ずつ分解
-        const rows = text.split(/\r?\n/).map(row => row.split(','));
-        const headers = rows[0].map(h => h.trim()); // 1列目:学年, 2列目:科目, 3列目:テキスト名...
+        const rows = text.split(/\r?\n/).filter(line => line.trim() !== "").map(row => row.split(','));
+        const headers = rows[0].map(h => h.trim());
 
-        // データ変換
-        const data = rows.slice(1).filter(row => row.length >= 3).map(row => {
+        const data = rows.slice(1).map(row => {
           let obj = {};
-          headers.forEach((h, i) => {
-            obj[h] = row[i] ? row[i].trim() : "";
-          });
+          headers.forEach((h, i) => { obj[h] = row[i] ? row[i].trim() : ""; });
           return obj;
         });
 
-        // 学年判定（gradeに「中1」が含まれていればOK）
+        // ログイン学年に合わせてフィルタリング（「木太南 中1」から「中1」を探す）
+        const gStr = String(grade || "");
         const filtered = data.filter(d => {
-          const gStr = String(grade || "");
-          return gStr.includes(d.学年);
+          if (gStr.includes("中1")) return d.学年 === "中1";
+          if (gStr.includes("中2")) return d.学年 === "中2";
+          if (gStr.includes("中3")) return d.学年 === "中3";
+          return false;
         });
-
-        console.log("全件数:", data.length, "フィルタ後:", filtered.length);
         setUnitMaster(filtered);
-
-      } catch (e) {
-        console.error("重大なエラー:", e);
-        // 画面にエラーを出して原因を特定する
-        alert("データ読み込み失敗: " + e.message);
-      }
+      } catch (e) { console.error("CSV Load Error:", e); }
     };
     loadUnitMaster();
   }, [grade]);
 
-  // --- 通知送信ロジック（既存） ---
+  // --- 2. 順番待ち通知 (既存機能) ---
   const sendNotification = async (statusType) => {
     if (submittingStatus) return;
     setSubmittingStatus(statusType);
@@ -80,7 +66,6 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     } catch (e) { alert("送信失敗"); setSubmittingStatus(''); }
   };
 
-  // --- 状態チェック（既存） ---
   const checkMyStatus = async () => {
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications", unit }), { headers: { 'Content-Type': 'text/plain' } });
@@ -89,7 +74,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         if (myData) { setMyQueueNumber(myData.queueNumber); } 
         else { setMyQueueNumber(null); setShowCompleteMsg(false); setSubmittingStatus(''); }
       }
-    } catch (e) { console.error("更新失敗"); }
+    } catch (e) { console.error("Update Error"); }
   };
 
   useEffect(() => {
@@ -98,7 +83,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     return () => clearInterval(timer);
   }, []);
 
-  // --- 表示する科目とテキストの定義 ---
+  // --- 科目・テキスト定義 ---
   const subjectList = [
     { name: '国語', texts: ['iワークドリル', 'iワークプラス'] },
     { name: '数学', texts: ['iワークドリル', 'iワークプラス'] },
@@ -109,19 +94,16 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
   return (
     <div style={styles.container}>
+      {/* サイドバー */}
       <aside style={styles.sidebar}>
         <div style={styles.profileArea}>
           <div style={styles.studentName}>{userName} <span style={{fontSize:'0.9rem'}}>さん</span></div>
-          <div style={styles.schoolInfo}>
-            <span style={styles.infoBadge}>{school} {grade}</span>
-          </div>
+          <div style={styles.schoolInfo}><span style={styles.infoBadge}>{school} {grade}</span></div>
         </div>
         <nav style={styles.nav}>
-          {/* ★ 名称を「個トレサポート」に変更 */}
           <button style={styles.navItem(activeMenu === 'kodore')} onClick={() => setActiveMenu('kodore')}>
             <span style={styles.navIcon}>🎯</span> 個トレサポート
           </button>
-          {/* ★ 「学校の進度」を「個トレ進捗」に変更 */}
           <button style={styles.navItem(activeMenu === 'progress')} onClick={() => setActiveMenu('progress')}>
             <span style={styles.navIcon}>📈</span> 個トレ進捗
           </button>
@@ -132,8 +114,8 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         <button onClick={handleLogout} style={styles.logoutBtn}>ログアウト</button>
       </aside>
 
+      {/* メイン */}
       <main style={styles.main}>
-        {/* --- 🎯 個トレサポート（旧個トレ） --- */}
         {activeMenu === 'kodore' && (
           <div style={styles.contentArea}>
             <h1 style={styles.mainTitle}>🎯 個トレ・サポート</h1>
@@ -167,12 +149,10 @@ export default function StudentView({ userId, userName, grade, school, unit, han
           </div>
         )}
 
-        {/* --- 📈 個トレ進捗登録（新規追加） --- */}
         {activeMenu === 'progress' && (
           <div style={styles.contentArea}>
             <h1 style={styles.mainTitle}>📈 個トレ進捗登録</h1>
             <p style={styles.mainSubTitle}>今日やった単元を教えてね。</p>
-            
             <div style={styles.progressTableWrapper}>
               <table style={styles.progressTable}>
                 <thead>
@@ -185,28 +165,25 @@ export default function StudentView({ userId, userName, grade, school, unit, han
                 </thead>
                 <tbody>
                   {subjectList.map((sub) => (
-                    sub.texts.map((text, idx) => (
-                      <tr key={`${sub.name}-${text}`} style={styles.tr}>
-                        {idx === 0 && <td rowSpan={sub.texts.length} style={styles.tdSubject}>{sub.name}</td>}
-                        <td style={styles.tdText}>{text}</td>
-                        <td style={styles.td}>
-                          <button 
-                            style={styles.selectBtn}
-                            onClick={() => {
-                              setCurrentSelecting({ subject: sub.name, text: text });
-                              setShowUnitModal(true);
-                            }}
-                          >選択</button>
-                        </td>
-                        <td style={styles.tdUnitDisplay}>
-                          {selectedUnits[`${sub.name}-${text}`] || ""}
-                        </td>
-                      </tr>
-                    ))
+                    sub.texts.map((text, idx) => {
+                      const selKey = `${sub.name}-${text}`;
+                      return (
+                        <tr key={selKey} style={styles.tr}>
+                          {idx === 0 && <td rowSpan={sub.texts.length} style={styles.tdSubject}>{sub.name}</td>}
+                          <td style={styles.tdText}>{text}</td>
+                          <td style={styles.td}>
+                            <button style={styles.selectBtn} onClick={() => { setCurrentSelecting({ subject: sub.name, text: text }); setShowUnitModal(true); }}>
+                              選択
+                            </button>
+                          </td>
+                          <td style={styles.tdUnitDisplay}>{selectedUnits[selKey]?.join(', ') || ""}</td>
+                        </tr>
+                      )
+                    })
                   ))}
                 </tbody>
               </table>
-              <button style={styles.submitProgressBtn} onClick={() => alert("スプレッドシートへの送信は次で実装します！")}>
+              <button style={styles.submitProgressBtn} onClick={() => alert("スプレッドシートへの送信機能は次回実装します！")}>
                 進捗を送信する
               </button>
             </div>
@@ -220,87 +197,63 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         </div>
       </main>
 
-      {/* --- 単元選択ポップアップ（モーダル） --- */}
-      {/* --- 単元選択ポップアップ（モーダル） --- */}
-{showUnitModal && (
-  <div style={styles.overlay} onClick={() => setShowUnitModal(false)}>
-    <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-      <div style={styles.modalHeader}>
-        <h3 style={styles.modalTitle}>
-          {currentSelecting?.subject}：{currentSelecting?.text}
-        </h3>
-        <button style={styles.modalCloseX} onClick={() => setShowUnitModal(false)}>×</button>
-      </div>
-
-      <div style={styles.unitListScroll}>
-        {/* 章ごとにグループ化して表示 */}
-        {Object.entries(
-          unitMaster
-            .filter(d => 
-              d.科目.includes(currentSelecting?.subject) && 
-              d.テキスト名.includes(currentSelecting?.text)
-            )
-            .reduce((acc, cur) => {
-              if (!acc[cur.章]) acc[cur.章] = [];
-              acc[cur.章].push(cur);
-              return acc;
-            }, {})
-        ).map(([chapter, units]) => (
-          <div key={chapter} style={styles.chapterGroup}>
-            <div style={styles.chapterTitle}>{chapter}</div>
-            {units.map((u, i) => {
-              const key = `${currentSelecting.subject}-${currentSelecting.text}`;
-              const isChecked = (selectedUnits[key] || []).includes(u.単元);
-              
-              return (
-                <label key={i} style={styles.unitRow}>
-                  {/* 単元名（幅を広く取る） */}
-                  <span style={styles.unitNamePart}>{u.単元}</span>
-                  
-                  {/* ページ（あれば表示） */}
-                  <span style={styles.unitPagePart}>{u.ページ ? `p.${u.ページ}` : ""}</span>
-                  
-                  {/* チェックボックス（一番右） */}
-                  <div style={styles.checkboxPart}>
-                    <input 
-                      type="checkbox" 
-                      checked={isChecked}
-                      style={styles.checkbox}
-                      onChange={(e) => {
-                        const currentArray = selectedUnits[key] || [];
-                        const newArray = e.target.checked 
-                          ? [...currentArray, u.単元] 
-                          : currentArray.filter(name => name !== u.単元);
-                        setSelectedUnits({ ...selectedUnits, [key]: newArray });
-                      }}
-                    />
-                  </div>
-                </label>
-              );
-            })}
+      {/* ポップアップ */}
+      {showUnitModal && (
+        <div style={styles.overlay} onClick={() => setShowUnitModal(false)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>{currentSelecting?.subject}：{currentSelecting?.text}</h3>
+              <button style={styles.modalCloseX} onClick={() => setShowUnitModal(false)}>×</button>
+            </div>
+            <div style={styles.unitListScroll}>
+              {Object.entries(
+                unitMaster
+                  .filter(d => d.科目.includes(currentSelecting?.subject) && d.テキスト名.includes(currentSelecting?.text))
+                  .reduce((acc, cur) => {
+                    if (!acc[cur.章]) acc[cur.章] = [];
+                    acc[cur.章].push(cur);
+                    return acc;
+                  }, {})
+              ).map(([chapter, units]) => (
+                <div key={chapter} style={styles.chapterGroup}>
+                  <div style={styles.chapterTitle}>{chapter}</div>
+                  {units.map((u, i) => {
+                    const selKey = `${currentSelecting.subject}-${currentSelecting.text}`;
+                    const isChecked = (selectedUnits[selKey] || []).includes(u.単元);
+                    return (
+                      <label key={i} style={styles.unitRow}>
+                        <span style={styles.unitNamePart}>{u.単元}</span>
+                        <span style={styles.unitPagePart}>{u.ページ ? `p.${u.ページ}` : ""}</span>
+                        <div style={styles.checkboxPart}>
+                          <input type="checkbox" checked={isChecked} style={styles.checkbox} onChange={(e) => {
+                            const currentArray = selectedUnits[selKey] || [];
+                            const newArray = e.target.checked ? [...currentArray, u.単元] : currentArray.filter(n => n !== u.単元);
+                            setSelectedUnits({ ...selectedUnits, [selKey]: newArray });
+                          }}/>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <div style={styles.modalFooter}>
+              <button style={styles.confirmBtn} onClick={() => setShowUnitModal(false)}>選択を確定する</button>
+            </div>
           </div>
-        ))}
-      </div>
-
-      <div style={styles.modalFooter}>
-        <button style={styles.confirmBtn} onClick={() => setShowUnitModal(false)}>選択を確定する</button>
-      </div>
-    </div>
-  </div>
-)}
+        </div>
+      )}
     </div>
   );
 }
 
-// styles に追加が必要なもののみ記述（既存のものは維持）
 const styles = {
-  // --- 共通・レイアウト ---
-  container: { height: '100vh', width: '100vw', display: 'flex', backgroundColor: '#eef2f5', position: 'fixed', top: 0, left: 0, overflow: 'hidden', fontFamily: '"Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif' },
+  container: { height: '100vh', width: '100vw', display: 'flex', backgroundColor: '#eef2f5', position: 'fixed', top: 0, left: 0, overflow: 'hidden', fontFamily: '"Helvetica Neue", Arial, sans-serif' },
   sidebar: { width: '280px', backgroundColor: '#2c3e50', color: '#ecf0f1', display: 'flex', flexDirection: 'column', padding: '30px 20px', flexShrink: 0 },
   profileArea: { marginBottom: '40px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '20px' },
-  studentName: { fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '8px', whiteSpace: 'nowrap' },
+  studentName: { fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '8px' },
   schoolInfo: { display: 'flex', alignItems: 'center' },
-  infoBadge: { background: 'rgba(255,255,255,0.15)', padding: '4px 10px', borderRadius: '4px', fontSize: '0.85rem', color: '#ecf0f1' },
+  infoBadge: { background: 'rgba(255,255,255,0.15)', padding: '4px 10px', borderRadius: '4px', fontSize: '0.85rem' },
   nav: { flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' },
   navItem: (isActive) => ({ background: isActive ? '#3498db' : 'none', color: '#fff', border: 'none', padding: '12px 15px', borderRadius: '8px', fontSize: '1.1rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', width: '100%' }),
   navIcon: { marginRight: '15px', fontSize: '1.2rem' },
@@ -309,23 +262,19 @@ const styles = {
   contentArea: { maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100%' },
   mainTitle: { fontSize: '2.8rem', fontWeight: 'bold', marginBottom: '10px', color: '#333' },
   mainSubTitle: { fontSize: '1.2rem', color: '#666', marginBottom: '20px' },
-  
-  // --- 個トレサポート画面 ---
   cardContainer: { width: '100%', display: 'flex', justifyContent: 'center', marginTop: '30px' },
   buttonGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', width: '100%', maxWidth: '800px' },
-  btnMaru: (isSubmitting, isAnySubmitting) => ({ height: '220px', borderRadius: '30px', border: 'none', background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#ffcc99' : 'linear-gradient(135deg, #e67e22, #f39c12)'), color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(230,126,34,0.3)' }),
-  btnQuestion: (isSubmitting, isAnySubmitting) => ({ height: '220px', borderRadius: '30px', border: 'none', background: isSubmitting ? '#ccc' : (isAnySubmitting ? '#b3e0ff' : 'linear-gradient(135deg, #3498db, #5dade2)'), color: '#fff', fontSize: isSubmitting ? '1.2rem' : '1.6rem', fontWeight: 'bold', cursor: isAnySubmitting ? 'not-allowed' : 'pointer', padding: '20px', lineHeight: '1.4', boxShadow: (isSubmitting || isAnySubmitting) ? 'none' : '0 8px 15px rgba(52,152,219,0.3)' }),
+  btnMaru: (isS, isA) => ({ height: '220px', borderRadius: '30px', border: 'none', background: isS ? '#ccc' : (isA ? '#ffcc99' : 'linear-gradient(135deg, #e67e22, #f39c12)'), color: '#fff', fontSize: isS ? '1.2rem' : '1.6rem', fontWeight: 'bold', cursor: isA ? 'not-allowed' : 'pointer', padding: '20px', boxShadow: (isS || isA) ? 'none' : '0 8px 15px rgba(230,126,34,0.3)' }),
+  btnQuestion: (isS, isA) => ({ height: '220px', borderRadius: '30px', border: 'none', background: isS ? '#ccc' : (isA ? '#b3e0ff' : 'linear-gradient(135deg, #3498db, #5dade2)'), color: '#fff', fontSize: isS ? '1.2rem' : '1.6rem', fontWeight: 'bold', cursor: isA ? 'not-allowed' : 'pointer', padding: '20px', boxShadow: (isS || isA) ? 'none' : '0 8px 15px rgba(52,152,219,0.3)' }),
   completeWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '400px' },
-  requestStatusText: { fontSize: '1.8rem', fontWeight: 'bold', color: '#333', marginBottom: '20px', textAlign: 'center', marginTop: 0 },
-  completeMsgCard: { backgroundColor: '#fff', padding: '30px 20px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 15px 30px rgba(0,0,0,0.1)', border: '6px solid #3498db', width: '100%', marginTop: 0 },
+  requestStatusText: { fontSize: '1.8rem', fontWeight: 'bold', color: '#333', marginBottom: '20px' },
+  completeMsgCard: { backgroundColor: '#fff', padding: '30px 20px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 15px 30px rgba(0,0,0,0.1)', border: '6px solid #3498db', width: '100%' },
   queueNumberSmall: { fontSize: '2.8rem', fontWeight: 'bold', color: '#3498db', margin: '15px 0' }, 
   waitingCard: { backgroundColor: '#fff', padding: '50px 40px', borderRadius: '30px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '6px solid #27ae60', width: '100%', maxWidth: '480px' },
   waitingTitle: { fontSize: '1.6rem', fontWeight: 'bold', color: '#27ae60', marginBottom: '15px' },
   queueNumber: { fontSize: '7rem', fontWeight: 'bold', color: '#333', lineHeight: 1 },
-  waitingText: { marginTop: '30px', color: '#666', lineHeight: '1.6', fontSize: '1.2rem' },
+  waitingText: { marginTop: '30px', color: '#666', fontSize: '1.2rem' },
   loginInfoBar: { width: '100%', textAlign: 'center', background: '#fff', padding: '12px 20px', borderRadius: '12px', color: '#666', fontSize: '1rem', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginTop: 'auto', marginBottom: '20px' },
-
-  // --- 個トレ進捗画面 ---
   progressTableWrapper: { width: '100%', backgroundColor: '#fff', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' },
   progressTable: { width: '100%', borderCollapse: 'collapse', marginBottom: '20px' },
   tableHeader: { backgroundColor: '#f8f9fa' },
@@ -337,20 +286,20 @@ const styles = {
   tdUnitDisplay: { padding: '15px', color: '#3498db', fontSize: '0.8rem', maxWidth: '300px', wordBreak: 'break-all' },
   selectBtn: { padding: '8px 15px', background: '#3498db', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' },
   submitProgressBtn: { width: '100%', padding: '15px', background: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '1.2rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
-  
-  // --- モーダル（ポップアップ） ---
   overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#fff', padding: '20px', borderRadius: '20px', width: '90%', maxWidth: '800px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', zIndex: 1001 },
+  modalContent: { backgroundColor: '#fff', padding: '20px', borderRadius: '20px', width: '90%', maxWidth: '850px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', zIndex: 1001 },
   modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #3498db', paddingBottom: '10px' },
-  modalTitle: { margin: 0, fontSize: '1.2rem', color: '#2c3e50' },
-  modalCloseX: { background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#999' },
-  unitListScroll: { maxHeight: '60vh', overflowY: 'auto', paddingRight: '10px' },
-  chapterGroup: { marginBottom: '20px', backgroundColor: '#f9f9f9', borderRadius: '10px', padding: '10px' },
-  chapterTitle: { fontWeight: 'bold', fontSize: '0.9rem', color: '#e67e22', marginBottom: '8px', borderLeft: '4px solid #e67e22', paddingLeft: '8px' },
-  unitLabel: { display: 'flex', alignItems: 'center', padding: '8px 5px', cursor: 'pointer', borderBottom: '1px solid #eee', fontSize: '13px', fontFamily: 'monospace', whiteSpace: 'nowrap' },
-  checkbox: { marginRight: '10px', width: '18px', height: '18px' },
-  unitNameText: { color: '#333', letterSpacing: '-0.5px' },
-  modalFooter: { marginTop: '20px', textAlign: 'center' },
-  confirmBtn: { padding: '12px 40px', background: '#3498db', color: '#fff', border: 'none', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(52,152,219,0.3)' },
+  modalTitle: { margin: 0, fontSize: '1.3rem', color: '#2c3e50', fontWeight: 'bold' },
+  modalCloseX: { background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#bdc3c7', padding: '0 10px' },
+  unitListScroll: { maxHeight: '65vh', overflowY: 'auto', paddingRight: '10px' },
+  chapterGroup: { marginBottom: '25px', border: '1px solid #eee', borderRadius: '12px', overflow: 'hidden' },
+  chapterTitle: { fontWeight: 'bold', fontSize: '1rem', color: '#fff', backgroundColor: '#34495e', padding: '10px 15px', margin: 0 },
+  unitRow: { display: 'flex', alignItems: 'center', padding: '12px 15px', cursor: 'pointer', borderBottom: '1px solid #eee', backgroundColor: '#fff' },
+  unitNamePart: { flex: 1, fontSize: '14px', color: '#333', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  unitPagePart: { width: '100px', textAlign: 'right', color: '#7f8c8d', fontSize: '13px', marginRight: '30px' },
+  checkboxPart: { width: '30px', display: 'flex', justifyContent: 'center' },
+  checkbox: { width: '24px', height: '24px', cursor: 'pointer', accentColor: '#3498db' },
+  modalFooter: { marginTop: '20px', textAlign: 'center', paddingBottom: '10px' },
+  confirmBtn: { padding: '14px 60px', background: 'linear-gradient(135deg, #3498db, #2980b9)', color: '#fff', border: 'none', borderRadius: '30px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 15px rgba(52,152,219,0.4)' },
   emptyContent: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', fontSize: '1.5rem', color: '#999' }
 };
