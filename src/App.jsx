@@ -7,6 +7,7 @@ import './App.css'
 
 // 環境変数からGASのURLを取得
 const GAS_URL = import.meta.env.VITE_GAS_URL;
+const API_KEY = import.meta.env.VITE_API_KEY; // ← これを追加
 
 function App() {
   // --- 状態管理 ---
@@ -51,7 +52,16 @@ function App() {
   const handleLogin = async () => {
     if (!userId || !password) return alert("IDとパスワードを入力してください");
     setLoading(true);
+    
     try {
+      // 1. apiKeyを含めたpayloadを作成
+      const payload = { 
+        apiKey: API_KEY, 
+        action: "login", 
+        userId, 
+        password 
+      };
+
       const response = await axios.post(GAS_URL, JSON.stringify({ 
         action: "login", 
         userId, 
@@ -94,6 +104,15 @@ function App() {
 
     setLoading(true);
     try {
+
+      // 1. apiKeyを含めたpayloadを作成
+      const payload = { 
+        apiKey: API_KEY, 
+        action: "changePassword", 
+        userId, 
+        newPassword 
+      };
+      
       const response = await axios.post(GAS_URL, JSON.stringify({ 
         action: "changePassword", 
         userId, 
