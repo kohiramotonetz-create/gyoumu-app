@@ -63,7 +63,9 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     setLastStatus(statusType === 'maru' ? "丸付け" : "質問");
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({
-        action: "sendNotification", userId, userName, grade, school, status: statusText, unit
+        action: "sendNotification", 
+        apiKey: import.meta.env.VITE_API_KEY, // ← これ、入っていますか？
+        userId, userName, grade, school, status: statusText, unit
       }), { headers: { 'Content-Type': 'text/plain' } });
       if (response.data.result === "success") {
         setMyQueueNumber(response.data.queueNumber);
