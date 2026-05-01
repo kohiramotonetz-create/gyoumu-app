@@ -15,9 +15,34 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   const [selectedUnits, setSelectedUnits] = useState({}); 
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [currentSelecting, setCurrentSelecting] = useState(null);
-
-  // サイドバー開閉（講師用と同じく、デフォルトは開いた状態）
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // ポップアップ管理
+  const [showScoreModal, setShowScoreModal] = useState(false);
+  const [showTestReviewModal, setShowTestReviewModal] = useState(false);
+
+  const FORMS_URL = "https://forms.cloud.microsoft/r/iChtRk7Hsh";
+  
+  // ★ Googleフォームの項目別自動入力URL生成
+  const getTestReviewUrl = () => {
+    // 【重要】ここをご自身のフォームのURLに差し替えてください
+    const baseUrl = "https://docs.google.com/forms/d/e/1FAIpQLSepwM3x5Plgv9RmTi4G2gt3JTjc3Ind4vYRULTYZQClkR2B4g/viewform";
+    
+    // ご指定いただいたエントリーID
+    const entryIds = {
+      school: "entry.1139171339", // 校舎名
+      id: "entry.198493856",     // 生徒ID
+      name: "entry.219162238"    // 名前
+    };
+    
+    const params = new URLSearchParams();
+    params.append(entryIds.school, school);   // 校舎名をセット
+    params.append(entryIds.id, userId);       // 生徒IDをセット
+    params.append(entryIds.name, userName);   // 名前をセット
+    params.append("embedded", "true");
+    
+    return `${baseUrl}?${params.toString()}`;
+  };
 
   const toFullWidth = (str) => {
     if (!str) return "";
@@ -26,13 +51,13 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
   const [displayGrade, setDisplayGrade] = useState(toFullWidth(grade));
 
+  // --- CSV読み込みロジック ---
   useEffect(() => {
     const loadCSVs = async () => {
       try {
         const resJuku = await fetch('/units.csv');
         const textJuku = new TextDecoder('utf-8').decode(await resJuku.arrayBuffer());
         setUnitMaster(parseCSV(textJuku));
-
         const resSchool = await fetch('/school_units.csv');
         if (resSchool.ok) {
           const textSchool = new TextDecoder('utf-8').decode(await resSchool.arrayBuffer());
@@ -53,6 +78,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     });
   };
 
+  // --- GAS送信ロジック ---
   const sendToGAS = async (action, successMsg) => {
     const progressData = Object.keys(selectedUnits).map(key => {
       const [subject, text] = key.split('-');
@@ -70,6 +96,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     } catch (e) { alert("送信エラー"); }
   };
 
+  // --- 個トレサポート通知ロジック ---
   const sendNotification = async (statusType) => {
     if (submittingStatus) return;
     setSubmittingStatus(statusType);
@@ -110,15 +137,13 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
   return (
     <div style={styles.container}>
-      {/* --- ヘッダー（講師用と同様の構成） --- */}
       <header style={styles.header}>
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} style={styles.hamburgerBtn}>☰</button>
-        <div style={styles.headerTitle}>個別ミッショントレーニング</div>
+        <div style={styles.headerTitle}>ネッツ生徒用システム</div>
         <div style={styles.headerUserInfo}>{userName} さん（{toFullWidth(grade)}）</div>
       </header>
 
       <div style={styles.body}>
-        {/* --- サイドバー --- */}
         <aside style={styles.sidebar(isSidebarOpen)}>
           <div style={styles.profileArea}>
             <div style={styles.studentName}>{userName} <span style={{fontSize:'0.8rem'}}>さん</span></div>
@@ -128,16 +153,16 @@ export default function StudentView({ userId, userName, grade, school, unit, han
             <button style={styles.navItem(activeMenu === 'kodore')} onClick={() => setActiveMenu('kodore')}>🎯 個トレサポート</button>
             <button style={styles.navItem(activeMenu === 'progress')} onClick={() => {setActiveMenu('progress'); setSelectedUnits({}); setDisplayGrade(toFullWidth(grade));}}>📈 個トレ進捗</button>
             <button style={styles.navItem(activeMenu === 'schoolProgress')} onClick={() => {setActiveMenu('schoolProgress'); setSelectedUnits({}); setDisplayGrade(toFullWidth(grade));}}>🏫 学校進捗</button>
+            <button style={styles.navItem(false)} onClick={() => setShowScoreModal(true)}>📝 点数回収</button>
+            <button style={styles.navItem(false)} onClick={() => setShowTestReviewModal(true)}>📝 テスト振り返り</button>
           </nav>
           <button onClick={handleLogout} style={styles.logoutBtn}>ログアウト</button>
         </aside>
 
-        {/* --- メインコンテンツ --- */}
         <main style={styles.main}>
           {activeMenu === 'kodore' && (
             <div style={styles.contentArea}>
               <h1 style={styles.mainTitle}>🎯 個トレ・サポート</h1>
-              {/* サポート内容 ... */}
               <div style={styles.cardContainer}>
                 {showCompleteMsg ? (
                   <div style={styles.completeWrapper}>
@@ -213,7 +238,41 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         </main>
       </div>
 
-      {/* --- モーダル --- */}
+      {/* 点数回収ポップアップ */}
+      {showScoreModal && (
+        <div style={styles.overlay} onClick={() => setShowScoreModal(false)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>📝 点数回収アンケート</h3>
+              <button style={styles.modalCloseX} onClick={() => setShowScoreModal(false)}>×</button>
+            </div>
+            <div style={styles.unitListScroll}>
+              <iframe src={FORMS_URL} style={{ width: '100%', height: '70vh', border: 'none' }} title="Score Form"/>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* テスト振り返りポップアップ (Google Forms) */}
+      {showTestReviewModal && (
+        <div style={styles.overlay} onClick={() => setShowTestReviewModal(false)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>📝 テスト振り返りアンケート</h3>
+              <button style={styles.modalCloseX} onClick={() => setShowTestReviewModal(false)}>×</button>
+            </div>
+            <div style={styles.unitListScroll}>
+              <iframe 
+                src={getTestReviewUrl()} 
+                style={{ width: '100%', height: '75vh', border: 'none' }} 
+                title="Test Review Form"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 単元選択モーダル */}
       {showUnitModal && (
         <div style={styles.overlay} onClick={() => setShowUnitModal(false)}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
@@ -222,6 +281,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
               <button style={styles.modalCloseX} onClick={() => setShowUnitModal(false)}>×</button>
             </div>
             <div style={styles.unitListScroll}>
+              {/* --- 中身は既存の通り --- */}
               <table style={styles.unitTable}>
                 <thead>
                   <tr style={styles.modalThRow}>
@@ -278,7 +338,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 }
 
 const styles = {
-  container: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: '#f4f7f9', position: 'fixed', top: 0, left: 0, overflow: 'hidden', fontFamily: '"Helvetica Neue", Arial, sans-serif' },
+  container: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: '#f4f7f9', position: 'fixed', top: 0, left: 0, overflow: 'hidden' },
   header: { height: '60px', backgroundColor: '#2c3e50', color: '#fff', display: 'flex', alignItems: 'center', padding: '0 20px', zIndex: 1000, boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
   hamburgerBtn: { background: 'none', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer', marginRight: '20px' },
   headerTitle: { fontSize: '1.2rem', fontWeight: 'bold', flex: 1 },
@@ -290,7 +350,7 @@ const styles = {
   schoolInfo: { display: 'flex', alignItems: 'center' },
   infoBadge: { background: 'rgba(255,255,255,0.15)', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem' },
   nav: { flex: 1, display: 'flex', flexDirection: 'column', gap: '5px', padding: '10px', minWidth: '260px' },
-  navItem: (isActive) => ({ background: isActive ? '#3498db' : 'none', color: '#fff', border: 'none', padding: '12px 15px', borderRadius: '6px', fontSize: '1rem', textAlign: 'left', cursor: 'pointer', width: '100%' }),
+  navItem: (isActive) => ({ background: isActive ? '#3498db' : 'none', color: '#fff', border: 'none', padding: '12px 15px', borderRadius: '6px', fontSize: '1rem', textAlign: 'left', cursor: 'pointer', width: '100%', marginBottom: '5px' }),
   logoutBtn: { background: 'rgba(231, 76, 60, 0.2)', border: 'none', color: '#e74c3c', padding: '10px', cursor: 'pointer', margin: '10px', borderRadius: '6px' },
   main: { flex: 1, padding: '30px', overflowY: 'auto', position: 'relative' },
   contentArea: { maxWidth: '1000px', margin: '0 auto' },
@@ -298,8 +358,8 @@ const styles = {
   mainSubTitle: { fontSize: '1.1rem', color: '#7f8c8d', marginBottom: '20px', textAlign: 'center' },
   cardContainer: { display: 'flex', justifyContent: 'center', marginTop: '20px' },
   buttonGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', width: '100%', maxWidth: '700px' },
-  btnMaru: (isS, isA) => ({ height: '180px', borderRadius: '20px', border: 'none', background: isS ? '#ccc' : (isA ? '#ffcc99' : 'linear-gradient(135deg, #e67e22, #f39c12)'), color: '#fff', fontSize: '1.4rem', fontWeight: 'bold', cursor: isA ? 'not-allowed' : 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }),
-  btnQuestion: (isS, isA) => ({ height: '180px', borderRadius: '20px', border: 'none', background: isS ? '#ccc' : (isA ? '#b3e0ff' : 'linear-gradient(135deg, #3498db, #5dade2)'), color: '#fff', fontSize: '1.4rem', fontWeight: 'bold', cursor: isA ? 'not-allowed' : 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }),
+  btnMaru: (isS, isA) => ({ height: '180px', borderRadius: '20px', border: 'none', background: isS ? '#ccc' : (isA ? '#ffcc99' : 'linear-gradient(135deg, #e67e22, #f39c12)'), color: '#fff', fontSize: '1.4rem', fontWeight: 'bold', cursor: isA ? 'not-allowed' : 'pointer' }),
+  btnQuestion: (isS, isA) => ({ height: '180px', borderRadius: '20px', border: 'none', background: isS ? '#ccc' : (isA ? '#b3e0ff' : 'linear-gradient(135deg, #3498db, #5dade2)'), color: '#fff', fontSize: '1.4rem', fontWeight: 'bold', cursor: isA ? 'not-allowed' : 'pointer' }),
   completeWrapper: { textAlign: 'center' },
   requestStatusText: { fontSize: '1.5rem', color: '#2c3e50', marginBottom: '15px' },
   completeMsgCard: { backgroundColor: '#fff', padding: '20px', borderRadius: '15px', border: '4px solid #3498db' },
