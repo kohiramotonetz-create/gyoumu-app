@@ -76,7 +76,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
   const checkMyStatus = async () => {
     try {
-      const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications", unit }), { headers: { 'Content-Type': 'text/plain' } });
+      const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications",apiKey: import.meta.env.VITE_API_KEY, unit }), { headers: { 'Content-Type': 'text/plain' } });
       if (response.data.result === "success") {
         const myData = response.data.notifications.find(n => n.userId === userId && n.name === userName);
         if (myData) { setMyQueueNumber(myData.queueNumber); } 
