@@ -1,9 +1,21 @@
-import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { styles } from './styles/studentViewStyles.js';
+import SupportManager from './components/SupportManager.jsx';
+import JukuProgressManager from './components/JukuProgressManager.jsx';
+import SchoolProgressManager from './components/SchoolProgressManager.jsx';
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
+const API_KEY = import.meta.env.VITE_API_KEY;
 
 export default function StudentView({ userId, userName, grade, school, unit, handleLogout }) {
+  // --- 1. ヘルパー関数 ---
+  const toFullWidth = (str) => {
+    if (!str) return "";
+    return str.replace(/[0-9]/g, (s) => String.fromCharCode(s.charCodeAt(0) + 0xFEE0));
+  };
+
+  // --- 2. ステート定義 ---
   const [myQueueNumber, setMyQueueNumber] = useState(null);
   const [submittingStatus, setSubmittingStatus] = useState(''); 
   const [activeMenu, setActiveMenu] = useState('kodore');
@@ -17,41 +29,31 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   const [currentSelecting, setCurrentSelecting] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // ポップアップ管理
+  // 学校進捗用の学年フィルタ
+  const [selectedGradeFilter, setSelectedGradeFilter] = useState(toFullWidth(grade));
+
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [showTestReviewModal, setShowTestReviewModal] = useState(false);
-
   const FORMS_URL = "https://forms.cloud.microsoft/r/iChtRk7Hsh";
-  
-  // ★ Googleフォームの項目別自動入力URL生成
-  const getTestReviewUrl = () => {
-    // 【重要】ここをご自身のフォームのURLに差し替えてください
-    const baseUrl = "https://docs.google.com/forms/d/e/1FAIpQLSepwM3x5Plgv9RmTi4G2gt3JTjc3Ind4vYRULTYZQClkR2B4g/viewform";
-    
-    // ご指定いただいたエントリーID
-    const entryIds = {
-      school: "entry.1139171339", // 校舎名
-      id: "entry.198493856",     // 生徒ID
-      name: "entry.219162238"    // 名前
-    };
-    
-    const params = new URLSearchParams();
-    params.append(entryIds.school, school);   // 校舎名をセット
-    params.append(entryIds.id, userId);       // 生徒IDをセット
-    params.append(entryIds.name, userName);   // 名前をセット
-    params.append("embedded", "true");
-    
-    return `${baseUrl}?${params.toString()}`;
-  };
 
-  const toFullWidth = (str) => {
-    if (!str) return "";
-    return str.replace(/[0-9]/g, (s) => String.fromCharCode(s.charCodeAt(0) + 0xFEE0));
-  };
+  const [myReviews, setMyReviews] = useState([]);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
   const [displayGrade, setDisplayGrade] = useState(toFullWidth(grade));
 
-  // --- CSV読み込みロジック ---
+  // --- 3. データ取得ロジック ---
+  const getTestReviewUrl = () => {
+    const baseUrl = "https://docs.google.com/forms/d/e/1FAIpQLSepwM3x5Plgv9RmTi4G2gt3JTjc3Ind4vYRULTYZQClkR2B4g/viewform";
+    const entryIds = { school: "entry.1139171339", id: "entry.198493856", name: "entry.219162238" };
+    const params = new URLSearchParams();
+    params.append(entryIds.school, school);
+    params.append(entryIds.id, userId);
+    params.append(entryIds.name, userName);
+    params.append("embedded", "true");
+    return `${baseUrl}?${params.toString()}`;
+  };
+
   useEffect(() => {
     const loadCSVs = async () => {
       try {
@@ -78,32 +80,50 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     });
   };
 
-  // --- GAS送信ロジック ---
+  const fetchMyReviews = async () => {
+    setReviewLoading(true);
+    try {
+      const response = await axios.post(GAS_URL, JSON.stringify({
+        action: "getMyReviews", apiKey: API_KEY, userId: userId
+      }), { headers: { 'Content-Type': 'text/plain' } });
+      if (response.data.result === "success") setMyReviews(response.data.reviews);
+    } catch (e) { console.error("振り返り取得失敗", e); }
+    finally { setReviewLoading(false); }
+  };
+
+  useEffect(() => { if (showReviewModal) fetchMyReviews(); }, [showReviewModal]);
+
+  // --- 4. アクションハンドラ ---
   const sendToGAS = async (action, successMsg) => {
     const progressData = Object.keys(selectedUnits).map(key => {
       const [subject, text] = key.split('-');
-      const unitNames = selectedUnits[key].map(id => id.split('-')[1]).join(', ');
-      return { subject, text, units: unitNames };
+
+      // スプレッドシートへ送る「単元」情報を「テキスト名＆ページ」の連結にする
+    const unitDetails = selectedUnits[key].map(id => {
+      const [chapter, section, page] = id.split('-');
+      // 例: "学校ワーク p.12" のような形式
+      return `${text} ${page}`; }).join(', ');
+      return { subject, text, units: unitDetails };
     }).filter(item => item.units !== "");
+
     if (progressData.length === 0) return alert("単元が選択されていません。");
     if (!window.confirm("送信してもよろしいですか？")) return;
+
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({
-        action, apiKey: import.meta.env.VITE_API_KEY,
-        userId, userName, grade, school, progressData
+        action, apiKey: API_KEY, userId, userName, grade, school, progressData
       }), { headers: { 'Content-Type': 'text/plain' } });
       if (response.data.result === "success") { alert(successMsg); setSelectedUnits({}); }
     } catch (e) { alert("送信エラー"); }
   };
 
-  // --- 個トレサポート通知ロジック ---
   const sendNotification = async (statusType) => {
     if (submittingStatus) return;
     setSubmittingStatus(statusType);
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({
-        action: "sendNotification", apiKey: import.meta.env.VITE_API_KEY,
-        userId, userName, grade, school, status: statusType === 'maru' ? "丸付け待ち" : "質問待ち", unit
+        action: "sendNotification", apiKey: API_KEY, userId, userName, grade, school, 
+        status: statusType === 'maru' ? "丸付け待ち" : "質問待ち", unit
       }), { headers: { 'Content-Type': 'text/plain' } });
       if (response.data.result === "success") {
         setMyQueueNumber(response.data.queueNumber);
@@ -116,7 +136,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   useEffect(() => {
     const check = async () => {
       try {
-        const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications", apiKey: import.meta.env.VITE_API_KEY, unit }), { headers: { 'Content-Type': 'text/plain' } });
+        const response = await axios.post(GAS_URL, JSON.stringify({ action: "getNotifications", apiKey: API_KEY, unit }), { headers: { 'Content-Type': 'text/plain' } });
         if (response.data.result === "success") {
           const myData = response.data.notifications.find(n => n.userId === userId);
           if (myData) setMyQueueNumber(myData.queueNumber);
@@ -129,11 +149,19 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     return () => clearInterval(timer);
   }, [userId, unit]);
 
+  const openUnitModal = (subject, text) => {
+    setCurrentSelecting({ subject, text });
+    setShowUnitModal(true);
+  };
+// 1. 教科リストの定義（これが不足しているためエラーになっています）
   const jukuSubjectList = ['国語', '数学', '英語', '理科', '社会'];
   const schoolSubjectList = ['国語', '数学', '英語', '理科', '社会'];
+
+  // 2. モード判定の定義
   const isSchoolMode = activeMenu === 'schoolProgress';
   const currentMaster = isSchoolMode ? schoolUnitMaster : unitMaster;
-  const currentSubjects = isSchoolMode ? schoolSubjectList : jukuSubjectList;
+  
+  
 
   return (
     <div style={styles.container}>
@@ -152,93 +180,206 @@ export default function StudentView({ userId, userName, grade, school, unit, han
           <nav style={styles.nav}>
             <button style={styles.navItem(activeMenu === 'kodore')} onClick={() => setActiveMenu('kodore')}>🎯 個トレサポート</button>
             <button style={styles.navItem(activeMenu === 'progress')} onClick={() => {setActiveMenu('progress'); setSelectedUnits({}); setDisplayGrade(toFullWidth(grade));}}>📈 個トレ進捗</button>
-            <button style={styles.navItem(activeMenu === 'schoolProgress')} onClick={() => {setActiveMenu('schoolProgress'); setSelectedUnits({}); setDisplayGrade(toFullWidth(grade));}}>🏫 学校進捗</button>
+            <button style={styles.navItem(activeMenu === 'schoolProgress')} onClick={() => {setActiveMenu('schoolProgress'); setSelectedUnits({}); setSelectedGradeFilter(toFullWidth(grade)); setDisplayGrade(toFullWidth(grade));}}>🏫 学校進捗</button>
             <button style={styles.navItem(false)} onClick={() => setShowScoreModal(true)}>📝 点数回収</button>
             <button style={styles.navItem(false)} onClick={() => setShowTestReviewModal(true)}>📝 テスト振り返り</button>
+            <button style={styles.navItem(false)} onClick={() => setShowReviewModal(true)}>📖 過去の振り返りを確認</button>
           </nav>
           <button onClick={handleLogout} style={styles.logoutBtn}>ログアウト</button>
         </aside>
 
         <main style={styles.main}>
-          {activeMenu === 'kodore' && (
-            <div style={styles.contentArea}>
-              <h1 style={styles.mainTitle}>🎯 個トレ・サポート</h1>
-              <div style={styles.cardContainer}>
-                {showCompleteMsg ? (
-                  <div style={styles.completeWrapper}>
-                    <h2 style={styles.requestStatusText}>{lastStatus}の依頼を出しました！</h2>
-                    <div style={styles.completeMsgCard}>
-                      <div style={styles.queueNumberSmall}>受付番号：{myQueueNumber}番</div>
-                      <p style={{fontSize:'1rem', color:'#666', margin: 0}}>そのまま少し待っていてね。</p>
+          {/* 1. 個トレサポート (kodore) */}
+           {activeMenu === 'kodore' && (
+            <SupportManager 
+            unit={unit}
+            userName={userName}
+            userId={userId}
+            grade={grade}
+            school={school}
+            myQueueNumber={myQueueNumber}
+            submittingStatus={submittingStatus}
+            showCompleteMsg={showCompleteMsg}
+            lastStatus={lastStatus}
+            sendNotification={sendNotification}
+            styles={styles}
+           />
+        )}
+
+         {/* 2. 個トレ進捗 (progress) */}
+         {activeMenu === 'progress' && (
+          <JukuProgressManager 
+          　currentSubjects={jukuSubjectList}
+            selectedUnits={selectedUnits}
+            openUnitModal={openUnitModal}
+            sendToGAS={sendToGAS}
+            unitMaster={unitMaster}
+            grade={grade}
+            styles={styles}
+           />
+       )}
+       
+         {/* 3. 学校進捗 (schoolProgress) */}
+         {activeMenu === 'schoolProgress' && (
+          <SchoolProgressManager 
+          　currentSubjects={schoolSubjectList}
+            selectedUnits={selectedUnits}
+            openUnitModal={openUnitModal}
+            sendToGAS={sendToGAS}
+            schoolUnitMaster={schoolUnitMaster}
+            selectedGradeFilter={selectedGradeFilter}
+            setSelectedGradeFilter={setSelectedGradeFilter}
+            styles={styles}
+          />
+        )}
+      </main> 
+     </div>
+
+     {/* --- モーダル・ポップアップ類 --- */}
+
+      {/* 1. 単元選択モーダル (個トレ・学校進捗 共通) */}
+      {showUnitModal && (
+        <div style={styles.overlay} onClick={() => setShowUnitModal(false)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>
+                {currentSelecting?.subject} 単元選択（表示中：{selectedGradeFilter}）
+              </h3>
+              <button style={styles.modalCloseX} onClick={() => setShowUnitModal(false)}>×</button>
+            </div>
+
+            {/* 学校進捗モードの時だけ学年切り替えタブを表示 */}
+            {isSchoolMode && (
+              <div style={styles.filterBar}>
+                {['中１', '中２', '中３'].map(g => (
+                  <button 
+                    key={g} 
+                    style={styles.gradeTab(selectedGradeFilter === g)}
+                    onClick={() => setSelectedGradeFilter(g)}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div style={styles.unitListScroll}>
+              <table style={styles.unitTable}>
+                <thead>
+                  <tr style={styles.modalThRow}>
+                    <th style={styles.modalTh}>教科</th>
+                    <th style={styles.modalTh}>テキスト名</th>
+                    <th style={styles.modalTh}>章・節</th>
+                    <th style={styles.modalTh}>単元名</th>
+                    <th style={styles.modalTh}>ページ</th>
+                    <th style={styles.modalTh}>選択</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const filteredUnits = currentMaster.filter(d => {
+                      // 教科の基本一致
+                      const isSubMatch = d.科目?.trim() === currentSelecting?.subject;
+                      // 選択中の学年フィルタに一致するか
+                      const isGrdMatch = d.学年?.includes(selectedGradeFilter);
+                      
+                      let isTxtMatch = true;
+                      // 学校進捗の場合
+                      if (isSchoolMode) {
+                        if (currentSelecting?.subject === '社会') {
+                          // 社会は歴史・地理・公民すべて出すためテキスト名チェックをスキップ
+                          isTxtMatch = true;
+                        } else {
+                          // 社会以外も学校進捗は「学年内の全テキスト」を出す（テキスト名不問）
+                          isTxtMatch = true;
+                        }
+                      } else {
+                        // 個トレモードの場合は厳密にテキスト名をチェック
+                        if (currentSelecting?.text) {
+                          isTxtMatch = d.テキスト名?.trim() === currentSelecting?.text;
+                        }
+                      }
+
+                      const hasContent = (d.単元 && d.単元.trim() !== "") || (d.節 && d.節.trim() !== "");
+                      return isSubMatch && isGrdMatch && isTxtMatch && hasContent;
+                    });
+
+                    return filteredUnits.map((u, i) => {
+                      // 選択状態を保持するためのキー。学校進捗でもテキストごとに保存されるように設定
+                      const selKey = `${u.科目}-${u.テキスト名}`;
+                      const unitId = `${u.章}-${u.単元}-${u.ページ}`;
+                      const isChecked = (selectedUnits[selKey] || []).includes(unitId);
+
+                      return (
+                        <tr key={i} style={styles.modalTr}>
+                          <td style={styles.modalTdUnit}>{u.科目}</td>
+                          <td style={styles.modalTdUnit}>{u.テキスト名}</td>
+                          <td style={styles.modalTdMerge}>{u.章}{u.節 ? ` / ${u.節}` : ""}</td>
+                          <td style={styles.modalTdUnit}>{u.単元}</td>
+                          <td style={styles.modalTdPage}>{u.ページ ? `${u.ページ}` : ""}</td>
+                          <td style={styles.modalTdCheck}>
+                            <input 
+                              type="checkbox" 
+                              checked={isChecked} 
+                              onChange={(e) => {
+                                const curArr = selectedUnits[selKey] || [];
+                                const newArr = e.target.checked ? [...curArr, unitId] : curArr.filter(id => id !== unitId);
+                                setSelectedUnits({ ...selectedUnits, [selKey]: newArr });
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+            <div style={styles.modalFooter}>
+              <button style={styles.confirmBtn} onClick={() => setShowUnitModal(false)}>選択を確定する</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. 過去の振り返り確認モーダル */}
+      {showReviewModal && (
+        <div style={styles.overlay} onClick={() => setShowReviewModal(false)}>
+          <div style={{...styles.modalContent, maxWidth: '600px'}} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>📖 過去の振り返り</h3>
+              <button style={styles.modalCloseX} onClick={() => setShowReviewModal(false)}>×</button>
+            </div>
+            <div style={{...styles.unitListScroll, padding: '15px'}}>
+              {reviewLoading ? (
+                <p style={{textAlign: 'center', padding: '20px'}}>読み込み中...</p>
+              ) : myReviews.length === 0 ? (
+                <p style={{textAlign: 'center', padding: '20px', color: '#999'}}>まだデータがありません。</p>
+              ) : (
+                myReviews.map((r, i) => (
+                  <div key={i} style={styles.reviewCard}>
+                    <div style={styles.reviewDate}>📅 {r["タイムスタンプ"]}</div>
+                    <div style={styles.reviewSection}>
+                      <strong style={{color: '#27ae60'}}>✅ よかったこと</strong>
+                      <div style={styles.reviewText}>{r["よかったこと"]}</div>
+                    </div>
+                    <div style={styles.reviewSection}>
+                      <strong style={{color: '#e67e22'}}>⚠️ 改善点</strong>
+                      <div style={styles.reviewText}>{r["改善点"]}</div>
+                    </div>
+                    <div style={styles.reviewSection}>
+                      <strong style={{color: '#2980b9'}}>🎯 次回に向けて</strong>
+                      <div style={styles.reviewText}>{r["次回に向けて"]}</div>
                     </div>
                   </div>
-                ) : myQueueNumber ? (
-                  <div style={styles.waitingCard}>
-                    <div style={styles.waitingTitle}>順番待ち中</div>
-                    <div style={styles.queueNumber}>{myQueueNumber}<span style={{fontSize:'1.5rem'}}>番目</span></div>
-                    <p style={styles.waitingText}>先生が呼ぶまでワークを進めて待っていよう！</p>
-                  </div>
-                ) : (
-                  <div style={styles.buttonGrid}>
-                    <button onClick={() => sendNotification('maru')} style={styles.btnMaru(submittingStatus === 'maru', !!submittingStatus)} disabled={!!submittingStatus}>📝<br/>丸付けお願いします！</button>
-                    <button onClick={() => sendNotification('question')} style={styles.btnQuestion(submittingStatus === 'question', !!submittingStatus)} disabled={!!submittingStatus}>❓<br/>質問があります</button>
-                  </div>
-                )}
-              </div>
+                ))
+              )}
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {(activeMenu === 'progress' || activeMenu === 'schoolProgress') && (
-            <div style={styles.contentArea}>
-              <h1 style={styles.mainTitle}>{isSchoolMode ? "🏫 学校進捗登録" : "📈 個トレ進捗登録"}</h1>
-              {isSchoolMode ? (
-                <div style={styles.filterBar}>
-                  <span style={{marginRight:'10px', fontWeight:'bold'}}>表示する学年:</span>
-                  {['中１', '中２', '中３'].map(g => (
-                    <button key={g} onClick={() => { setDisplayGrade(g); setSelectedUnits({}); }} style={styles.gradeTab(displayGrade === g)}>{g}</button>
-                  ))}
-                </div>
-              ) : <p style={styles.mainSubTitle}>{toFullWidth(grade)} の教材を表示しています。</p>}
-
-              <div style={styles.progressTableWrapper}>
-                <table style={styles.progressTable}>
-                  <thead>
-                    <tr style={styles.tableHeader}>
-                      <th style={styles.th}>科目</th><th style={styles.th}>テキスト</th><th style={styles.th}>選択</th><th style={styles.th}>実施単元</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentSubjects.map((subName) => {
-                      const availableTexts = [...new Set(
-                        currentMaster.filter(d => {
-                          const isSubMatch = d.科目 === subName;
-                          const targetGrd = isSchoolMode ? displayGrade : toFullWidth(grade);
-                          const isGrdMatch = d.学年.includes(targetGrd);
-                          return isSubMatch && isGrdMatch;
-                        }).map(d => d.テキスト名)
-                      )].filter(t => t !== "");
-                      return availableTexts.map((textName, idx) => {
-                        const selKey = `${subName}-${textName}`;
-                        return (
-                          <tr key={selKey} style={styles.tr}>
-                            {idx === 0 && <td rowSpan={availableTexts.length} style={styles.tdSubject}>{subName}</td>}
-                            <td style={styles.tdText}>{textName}</td>
-                            <td style={styles.td}><button style={styles.selectBtn} onClick={() => { setCurrentSelecting({ subject: subName, text: textName }); setShowUnitModal(true); }}>選択</button></td>
-                            <td style={styles.tdUnitDisplay}>{selectedUnits[selKey]?.map(id => id.split('-')[1]).join(', ') || ""}</td>
-                          </tr>
-                        )
-                      })
-                    })}
-                  </tbody>
-                </table>
-                <button style={styles.submitProgressBtn} onClick={() => sendToGAS(isSchoolMode ? "saveSchoolProgress" : "saveProgress", "保存しました！")}>進捗を送信する</button>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-
-      {/* 点数回収ポップアップ */}
+      {/* 3. 点数回収ポップアップ */}
       {showScoreModal && (
         <div style={styles.overlay} onClick={() => setShowScoreModal(false)}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
@@ -253,7 +394,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         </div>
       )}
 
-      {/* テスト振り返りポップアップ (Google Forms) */}
+      {/* 4. テスト振り返りポップアップ (Google Forms) */}
       {showTestReviewModal && (
         <div style={styles.overlay} onClick={() => setShowTestReviewModal(false)}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
@@ -265,134 +406,13 @@ export default function StudentView({ userId, userName, grade, school, unit, han
               <iframe 
                 src={getTestReviewUrl()} 
                 style={{ width: '100%', height: '75vh', border: 'none' }} 
-                title="Test Review Form"
+                title="Test Review Form" 
               />
             </div>
           </div>
         </div>
       )}
 
-      {/* 単元選択モーダル */}
-      {showUnitModal && (
-        <div style={styles.overlay} onClick={() => setShowUnitModal(false)}>
-          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>{currentSelecting?.subject}：{currentSelecting?.text} ({isSchoolMode ? displayGrade : toFullWidth(grade)})</h3>
-              <button style={styles.modalCloseX} onClick={() => setShowUnitModal(false)}>×</button>
-            </div>
-            <div style={styles.unitListScroll}>
-              {/* --- 中身は既存の通り --- */}
-              <table style={styles.unitTable}>
-                <thead>
-                  <tr style={styles.modalThRow}>
-                    <th style={styles.modalTh}>章</th><th style={styles.modalTh}>節</th><th style={styles.modalTh}>単元</th><th style={styles.modalTh}>ページ</th><th style={styles.modalTh}>□</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const filteredUnits = currentMaster.filter(d => {
-                      const isSubMatch = d.科目?.trim() === currentSelecting?.subject;
-                      const isTxtMatch = d.テキスト名?.trim() === currentSelecting?.text;
-                      const hasContent = (d.単元 && d.単元.trim() !== "") || (d.節 && d.節.trim() !== "");
-                      const targetGrd = isSchoolMode ? displayGrade : toFullWidth(grade);
-                      const isGrdMatch = d.学年.includes(targetGrd);
-                      return isSubMatch && isTxtMatch && isGrdMatch && hasContent;
-                    });
-                    const rows = [];
-                    for (let i = 0; i < filteredUnits.length; i++) {
-                      const u = filteredUnits[i];
-                      const selKey = `${currentSelecting.subject}-${currentSelecting.text}`;
-                      const unitId = `${u.章}-${u.単元}-${u.ページ}`;
-                      const isChecked = (selectedUnits[selKey] || []).includes(unitId);
-                      let chSpan = (i === 0 || filteredUnits[i - 1].章 !== u.章) ? 1 : 0;
-                      if (chSpan === 1) { for (let j = i + 1; j < filteredUnits.length && filteredUnits[j].章 === u.章; j++) chSpan++; }
-                      let seSpan = (i === 0 || filteredUnits[i - 1].節 !== u.節 || filteredUnits[i - 1].章 !== u.章) ? 1 : 0;
-                      if (seSpan === 1) { for (let j = i + 1; j < filteredUnits.length && filteredUnits[j].節 === u.節 && filteredUnits[j].章 === u.章; j++) seSpan++; }
-                      rows.push(
-                        <tr key={i} style={styles.modalTr}>
-                          {chSpan > 0 && <td rowSpan={chSpan} style={styles.modalTdMerge}>{u.章}</td>}
-                          {seSpan > 0 && <td rowSpan={seSpan} style={styles.modalTdMerge}>{u.節}</td>}
-                          <td style={styles.modalTdUnit}>{u.単元}</td>
-                          <td style={styles.modalTdPage}>{u.ページ ? `(p.${u.ページ})` : ""}</td>
-                          <td style={styles.modalTdCheck}>
-                            <input type="checkbox" checked={isChecked} style={styles.checkbox} onChange={(e) => {
-                              const curArr = selectedUnits[selKey] || [];
-                              const newArr = e.target.checked ? [...curArr, unitId] : curArr.filter(id => id !== unitId);
-                              setSelectedUnits({ ...selectedUnits, [selKey]: newArr });
-                            }}/>
-                          </td>
-                        </tr>
-                      );
-                    }
-                    return rows;
-                  })()}
-                </tbody>
-              </table>
-            </div>
-            <div style={styles.modalFooter}><button style={styles.confirmBtn} onClick={() => setShowUnitModal(false)}>選択を確定する</button></div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-
-const styles = {
-  container: { height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: '#f4f7f9', position: 'fixed', top: 0, left: 0, overflow: 'hidden' },
-  header: { height: '60px', backgroundColor: '#2c3e50', color: '#fff', display: 'flex', alignItems: 'center', padding: '0 20px', zIndex: 1000, boxShadow: '0 2px 5px rgba(0,0,0,0.2)' },
-  hamburgerBtn: { background: 'none', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer', marginRight: '20px' },
-  headerTitle: { fontSize: '1.2rem', fontWeight: 'bold', flex: 1 },
-  headerUserInfo: { fontSize: '0.9rem', color: '#bdc3c7' },
-  body: { flex: 1, display: 'flex', overflow: 'hidden' },
-  sidebar: (isOpen) => ({ width: isOpen ? '260px' : '0px', backgroundColor: '#34495e', color: '#ecf0f1', display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'width 0.3s ease', flexShrink: 0 }),
-  profileArea: { padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)', minWidth: '260px' },
-  studentName: { fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '5px' },
-  schoolInfo: { display: 'flex', alignItems: 'center' },
-  infoBadge: { background: 'rgba(255,255,255,0.15)', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem' },
-  nav: { flex: 1, display: 'flex', flexDirection: 'column', gap: '5px', padding: '10px', minWidth: '260px' },
-  navItem: (isActive) => ({ background: isActive ? '#3498db' : 'none', color: '#fff', border: 'none', padding: '12px 15px', borderRadius: '6px', fontSize: '1rem', textAlign: 'left', cursor: 'pointer', width: '100%', marginBottom: '5px' }),
-  logoutBtn: { background: 'rgba(231, 76, 60, 0.2)', border: 'none', color: '#e74c3c', padding: '10px', cursor: 'pointer', margin: '10px', borderRadius: '6px' },
-  main: { flex: 1, padding: '30px', overflowY: 'auto', position: 'relative' },
-  contentArea: { maxWidth: '1000px', margin: '0 auto' },
-  mainTitle: { fontSize: '2rem', fontWeight: 'bold', marginBottom: '20px', color: '#2c3e50', textAlign: 'center' },
-  mainSubTitle: { fontSize: '1.1rem', color: '#7f8c8d', marginBottom: '20px', textAlign: 'center' },
-  cardContainer: { display: 'flex', justifyContent: 'center', marginTop: '20px' },
-  buttonGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', width: '100%', maxWidth: '700px' },
-  btnMaru: (isS, isA) => ({ height: '180px', borderRadius: '20px', border: 'none', background: isS ? '#ccc' : (isA ? '#ffcc99' : 'linear-gradient(135deg, #e67e22, #f39c12)'), color: '#fff', fontSize: '1.4rem', fontWeight: 'bold', cursor: isA ? 'not-allowed' : 'pointer' }),
-  btnQuestion: (isS, isA) => ({ height: '180px', borderRadius: '20px', border: 'none', background: isS ? '#ccc' : (isA ? '#b3e0ff' : 'linear-gradient(135deg, #3498db, #5dade2)'), color: '#fff', fontSize: '1.4rem', fontWeight: 'bold', cursor: isA ? 'not-allowed' : 'pointer' }),
-  completeWrapper: { textAlign: 'center' },
-  requestStatusText: { fontSize: '1.5rem', color: '#2c3e50', marginBottom: '15px' },
-  completeMsgCard: { backgroundColor: '#fff', padding: '20px', borderRadius: '15px', border: '4px solid #3498db' },
-  queueNumberSmall: { fontSize: '2rem', color: '#3498db', fontWeight: 'bold' },
-  waitingCard: { backgroundColor: '#fff', padding: '40px', borderRadius: '20px', textAlign: 'center', border: '5px solid #27ae60' },
-  waitingTitle: { color: '#27ae60', fontSize: '1.4rem', marginBottom: '10px' },
-  queueNumber: { fontSize: '5rem', fontWeight: 'bold' },
-  waitingText: { marginTop: '20px', color: '#666' },
-  progressTableWrapper: { backgroundColor: '#fff', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' },
-  progressTable: { width: '100%', borderCollapse: 'collapse' },
-  tableHeader: { backgroundColor: '#f8f9fa', borderBottom: '2px solid #dee2e6' },
-  th: { padding: '12px', textAlign: 'left', color: '#495057' },
-  tr: { borderBottom: '1px solid #eee' },
-  tdSubject: { padding: '15px', fontWeight: 'bold', borderRight: '1px solid #eee' },
-  tdText: { padding: '15px' },
-  td: { padding: '10px' },
-  tdUnitDisplay: { padding: '15px', color: '#3498db', fontSize: '0.85rem' },
-  selectBtn: { padding: '6px 12px', background: '#3498db', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' },
-  submitProgressBtn: { width: '100%', padding: '15px', background: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px' },
-  filterBar: { marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  gradeTab: (active) => ({ padding: '8px 18px', margin: '0 5px', borderRadius: '20px', border: 'none', backgroundColor: active ? '#3498db' : '#dfe6e9', color: active ? '#fff' : '#636e72', cursor: 'pointer', fontWeight: 'bold' }),
-  overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#fff', padding: '20px', borderRadius: '20px', width: '95%', maxWidth: '900px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #3498db', paddingBottom: '10px', marginBottom: '15px' },
-  modalTitle: { margin: 0, color: '#2c3e50' },
-  modalCloseX: { background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#ccc' },
-  unitListScroll: { flex: 1, overflowY: 'auto' },
-  unitTable: { width: '100%', borderCollapse: 'collapse' },
-  modalTh: { border: '1px solid #333', padding: '8px', backgroundColor: '#f8f9fa' },
-  modalTdMerge: { border: '1px solid #333', padding: '10px', textAlign: 'center', fontWeight: 'bold' },
-  modalTdUnit: { border: '1px solid #333', padding: '10px' },
-  modalTdPage: { border: '1px solid #333', padding: '10px', textAlign: 'center', color: '#7f8c8d' },
-  modalTdCheck: { border: '1px solid #333', padding: '10px', textAlign: 'center' },
-  modalFooter: { marginTop: '15px', textAlign: 'center' },
-  confirmBtn: { padding: '12px 40px', background: '#3498db', color: '#fff', border: 'none', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer' },
-};
