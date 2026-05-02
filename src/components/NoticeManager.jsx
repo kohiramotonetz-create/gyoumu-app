@@ -1,3 +1,5 @@
+// これは講師側のお知らせ管理コンポーネントです。講師が全体へのお知らせを確認するための画面で使用します。
+
 import React from 'react';
 
 const NoticeManager = ({ notices = [], styles }) => {

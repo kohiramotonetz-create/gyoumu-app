@@ -1,3 +1,5 @@
+// これは講師側の個トレ進捗管理コンポーネントです。講師が生徒の選択した単元を確認し、進捗を報告するための画面で使用します。
+
 import React from 'react';
 
 const JukuProgressManager = ({ 

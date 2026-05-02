@@ -1,4 +1,5 @@
-// src/components/TestReviewManager.jsx
+// これはテスト振り返りの管理コンポーネントです。講師が生徒の提出したテスト振り返りを確認するための画面で使用します。
+
 import React from 'react';
 
 const TestReviewManager = ({ 

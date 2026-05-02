@@ -100,9 +100,13 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
       // スプレッドシートへ送る「単元」情報を「テキスト名＆ページ」の連結にする
     const unitDetails = selectedUnits[key].map(id => {
-      const [chapter, section, page] = id.split('-');
-      // 例: "学校ワーク p.12" のような形式
-      return `${text} ${page}`; }).join(', ');
+      // 分割を2回までに制限することで、3つ目の要素（ページ）にハイフンが残るようにします
+      const parts = id.split('-');
+      const chapter = parts[0];
+      const section = parts[1];
+      // 3つ目以降の要素をすべて結合してページ番号を復元
+      const page = parts.slice(2).join('-');
+      return `${text} ${page}`;}).join(', ');
       return { subject, text, units: unitDetails };
     }).filter(item => item.units !== "");
 
@@ -121,17 +125,66 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     if (submittingStatus) return;
     setSubmittingStatus(statusType);
     try {
+      // 送信データのステータス名を判定
+      let statusText = "";
+      if (statusType === 'maru') statusText = "丸付け待ち";
+      else if (statusType === 'shitsumon') statusText = "質問待ち";
+      else if (statusType === 'giveup') statusText = "SOS(ギブアップ)"; // ←追加
+
       const response = await axios.post(GAS_URL, JSON.stringify({
-        action: "sendNotification", apiKey: API_KEY, userId, userName, grade, school, 
-        status: statusType === 'maru' ? "丸付け待ち" : "質問待ち", unit
+        action: "sendNotification", 
+        apiKey: API_KEY, 
+        userId, 
+        userName, 
+        grade, 
+        school, 
+        status: statusText, // 判定したテキストを入れる
+        unit
       }), { headers: { 'Content-Type': 'text/plain' } });
+
       if (response.data.result === "success") {
         setMyQueueNumber(response.data.queueNumber);
         setShowCompleteMsg(true);
-        setLastStatus(statusType === 'maru' ? "丸付け" : "質問");
+        
+        // 完了メッセージ用の表示名を判定
+        let lastStatusText = "";
+        if (statusType === 'maru') lastStatusText = "丸付け";
+        else if (statusType === 'shitsumon') lastStatusText = "質問";
+        else if (statusType === 'giveup') lastStatusText = "ギブアップ"; // ←追加
+        
+        setLastStatus(lastStatusText);
       }
-    } catch (e) { alert("送信失敗"); setSubmittingStatus(''); }
+    } catch (e) { 
+      alert("送信失敗"); 
+      setSubmittingStatus(''); 
+    }
   };
+  
+  // --- 140行目付近：sendNotification の後あたり ---
+
+const openSukimaKun = async () => {
+  try {
+    // 1. GASにトークン発行をリクエスト
+    const response = await axios.post(GAS_URL, JSON.stringify({
+      action: "issueToken",
+      apiKey: API_KEY,
+      userId: userId
+    }), { headers: { 'Content-Type': 'text/plain' } });
+
+    if (response.data.result === "success") {
+      const token = response.data.token;
+      // ★ここに「スキマ君」の実際のURLを入力してください
+      const SUKIMA_URL = "https://student-app-nu-lyart.vercel.app/";      
+      const targetUrl = `${SUKIMA_URL}?uid=${userId}&tk=${token}`;
+      window.open(targetUrl, '_blank');
+    } else {
+      alert("連携に失敗しました: " + response.data.message);
+    }
+  } catch (e) {
+    console.error("スキマ君連携エラー:", e);
+    alert("エラーが発生しました。");
+  }
+};
 
   useEffect(() => {
     const check = async () => {
@@ -181,6 +234,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
             <button style={styles.navItem(activeMenu === 'kodore')} onClick={() => setActiveMenu('kodore')}>🎯 個トレサポート</button>
             <button style={styles.navItem(activeMenu === 'progress')} onClick={() => {setActiveMenu('progress'); setSelectedUnits({}); setDisplayGrade(toFullWidth(grade));}}>📈 個トレ進捗</button>
             <button style={styles.navItem(activeMenu === 'schoolProgress')} onClick={() => {setActiveMenu('schoolProgress'); setSelectedUnits({}); setSelectedGradeFilter(toFullWidth(grade)); setDisplayGrade(toFullWidth(grade));}}>🏫 学校進捗</button>
+            <button style={styles.navItem(false)} onClick={openSukimaKun}> ✨ スキマ君を起動</button>
             <button style={styles.navItem(false)} onClick={() => setShowScoreModal(true)}>📝 点数回収</button>
             <button style={styles.navItem(false)} onClick={() => setShowTestReviewModal(true)}>📝 テスト振り返り</button>
             <button style={styles.navItem(false)} onClick={() => setShowReviewModal(true)}>📖 過去の振り返りを確認</button>
@@ -264,75 +318,128 @@ export default function StudentView({ userId, userName, grade, school, unit, han
             )}
 
             <div style={styles.unitListScroll}>
-              <table style={styles.unitTable}>
+              <table style={{ 
+                 ...styles.unitTable, 
+                 borderCollapse: 'collapse', // 隣り合う枠線を合体させる
+                 borderSpacing: 0,           // 隙間をゼロにする
+                 width: '100%',
+                 border: '1px solid #ddd'    // 外枠
+                }}>
                 <thead>
                   <tr style={styles.modalThRow}>
-                    <th style={styles.modalTh}>教科</th>
-                    <th style={styles.modalTh}>テキスト名</th>
-                    <th style={styles.modalTh}>章・節</th>
+                    <th style={styles.modalTh}>章</th>
+                    <th style={styles.modalTh}>節</th>
                     <th style={styles.modalTh}>単元名</th>
                     <th style={styles.modalTh}>ページ</th>
                     <th style={styles.modalTh}>選択</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(() => {
-                    const filteredUnits = currentMaster.filter(d => {
-                      // 教科の基本一致
-                      const isSubMatch = d.科目?.trim() === currentSelecting?.subject;
-                      // 選択中の学年フィルタに一致するか
-                      const isGrdMatch = d.学年?.includes(selectedGradeFilter);
-                      
-                      let isTxtMatch = true;
-                      // 学校進捗の場合
-                      if (isSchoolMode) {
-                        if (currentSelecting?.subject === '社会') {
-                          // 社会は歴史・地理・公民すべて出すためテキスト名チェックをスキップ
-                          isTxtMatch = true;
-                        } else {
-                          // 社会以外も学校進捗は「学年内の全テキスト」を出す（テキスト名不問）
-                          isTxtMatch = true;
-                        }
-                      } else {
-                        // 個トレモードの場合は厳密にテキスト名をチェック
-                        if (currentSelecting?.text) {
-                          isTxtMatch = d.テキスト名?.trim() === currentSelecting?.text;
-                        }
-                      }
+  {(() => {
+    // 1. フィルタリング処理
+    const filteredUnits = currentMaster.filter(d => {
+      const isSubMatch = d.科目?.trim() === currentSelecting?.subject;
+      const isGrdMatch = d.学年?.includes(selectedGradeFilter);
+      let isTxtMatch = true;
+      if (isSchoolMode) {
+        isTxtMatch = true;
+      } else {
+        if (currentSelecting?.text) {
+          isTxtMatch = d.テキスト名?.trim() === currentSelecting?.text;
+        }
+      }
+      const hasContent = (d.単元 && d.単元.trim() !== "") || (d.節 && d.節.trim() !== "");
+      return isSubMatch && isGrdMatch && isTxtMatch && hasContent;
+    });
 
-                      const hasContent = (d.単元 && d.単元.trim() !== "") || (d.節 && d.節.trim() !== "");
-                      return isSubMatch && isGrdMatch && isTxtMatch && hasContent;
-                    });
+    // 2. セル結合(rowSpan)のための計算
+    const calculateSpans = (data) => {
+      const chapterSpans = new Array(data.length).fill(0);
+      const sectionSpans = new Array(data.length).fill(0);
+      
+      let i = 0;
+      while (i < data.length) {
+        // 章の結合数をカウント
+        let j = i;
+        while (j < data.length && data[j].章 === data[i].章) {
+          j++;
+        }
+        chapterSpans[i] = j - i;
+        
+        // その章の範囲内で、節の結合数をカウント
+        let k = i;
+        while (k < j) {
+          let l = k;
+          while (l < j && data[l].節 === data[k].節) {
+            l++;
+          }
+          sectionSpans[k] = l - k;
+          k = l;
+        }
+        i = j;
+      }
+      return { chapterSpans, sectionSpans };
+    };
 
-                    return filteredUnits.map((u, i) => {
-                      // 選択状態を保持するためのキー。学校進捗でもテキストごとに保存されるように設定
-                      const selKey = `${u.科目}-${u.テキスト名}`;
-                      const unitId = `${u.章}-${u.単元}-${u.ページ}`;
-                      const isChecked = (selectedUnits[selKey] || []).includes(unitId);
+    const { chapterSpans, sectionSpans } = calculateSpans(filteredUnits);
+    
+   // 3. レンダリング
+return filteredUnits.map((u, i) => {
+  const selKey = `${u.科目}-${u.テキスト名}`;
+  const unitId = `${u.章}-${u.単元}-${u.ページ}`;
+  const isChecked = (selectedUnits[selKey] || []).includes(unitId);
 
-                      return (
-                        <tr key={i} style={styles.modalTr}>
-                          <td style={styles.modalTdUnit}>{u.科目}</td>
-                          <td style={styles.modalTdUnit}>{u.テキスト名}</td>
-                          <td style={styles.modalTdMerge}>{u.章}{u.節 ? ` / ${u.節}` : ""}</td>
-                          <td style={styles.modalTdUnit}>{u.単元}</td>
-                          <td style={styles.modalTdPage}>{u.ページ ? `${u.ページ}` : ""}</td>
-                          <td style={styles.modalTdCheck}>
-                            <input 
-                              type="checkbox" 
-                              checked={isChecked} 
-                              onChange={(e) => {
-                                const curArr = selectedUnits[selKey] || [];
-                                const newArr = e.target.checked ? [...curArr, unitId] : curArr.filter(id => id !== unitId);
-                                setSelectedUnits({ ...selectedUnits, [selKey]: newArr });
-                              }}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
+  // 枠線を「全方向」に「強制」するスタイル
+  const tdStyle = { 
+    border: '1.5px solid #0a0a0a', // これが縦線・横線の正体です
+    padding: '10px 8px', 
+    backgroundColor: '#fff',
+    verticalAlign: 'middle',
+    fontSize: '13px',
+    boxSizing: 'border-box' // 枠線を含めてサイズ計算する
+  };
+
+  return (
+    <tr key={i} style={styles.modalTr}>
+      {/* 章 */}
+      {chapterSpans[i] > 0 && (
+        <td 
+          rowSpan={chapterSpans[i]} 
+          style={{ ...styles.modalTdMerge, ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}
+        >
+          {u.章}
+        </td>
+      )}
+      {/* 節 */}
+      {sectionSpans[i] > 0 && (
+        <td 
+          rowSpan={sectionSpans[i]} 
+          style={{ ...styles.modalTdMerge, ...tdStyle, textAlign: 'center' }}
+        >
+          {u.節}
+        </td>
+      )}
+      {/* 単元名 */}
+      <td style={{ ...styles.modalTdUnit, ...tdStyle }}>{u.単元}</td>
+      {/* ページ */}
+      <td style={{ ...styles.modalTdPage, ...tdStyle, textAlign: 'center' }}>{u.ページ || ""}</td>
+      {/* 選択 */}
+      <td style={{ ...styles.modalTdCheck, ...tdStyle, textAlign: 'center' }}>
+        <input 
+          type="checkbox" 
+          checked={isChecked} 
+          onChange={(e) => {
+            const curArr = selectedUnits[selKey] || [];
+            const newArr = e.target.checked ? [...curArr, unitId] : curArr.filter(id => id !== unitId);
+            setSelectedUnits({ ...selectedUnits, [selKey]: newArr });
+          }}
+        />
+      </td>
+    </tr>
+  );
+});
+  })()}
+</tbody>
               </table>
             </div>
             <div style={styles.modalFooter}>

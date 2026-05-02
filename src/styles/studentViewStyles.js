@@ -49,7 +49,7 @@ export const styles = {
   modalTitle: { margin: 0, color: '#2c3e50' },
   modalCloseX: { background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#ccc' },
   unitListScroll: { flex: 1, overflowY: 'auto' },
-  unitTable: { width: '100%', borderCollapse: 'collapse' },
+  unitTable: { width: '100%', borderCollapse: 'collapse',border: '1px solid #ddd', },
   modalTh: { border: '1px solid #333', padding: '8px', backgroundColor: '#f8f9fa' },
   modalTdMerge: { border: '1px solid #333', padding: '10px', textAlign: 'center', fontWeight: 'bold' },
   modalTdUnit: { border: '1px solid #333', padding: '10px' },

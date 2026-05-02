@@ -1,4 +1,6 @@
-// src/components/ModelAnswerShelf.jsx
+//個トレ２の模範解答棚コンポーネントです。講師が生徒に模範解答を見せるときに使用します。学年ごとに切り替えられるようになっています。
+
+
 import React, { useState } from 'react';
 import { modelAnswerBooks } from '../constants/data';
 

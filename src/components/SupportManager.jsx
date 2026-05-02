@@ -1,3 +1,5 @@
+// これは生徒側のサポート依頼管理コンポーネントです。生徒が丸付けや質問、ギブアップの依頼を出すときに使用します。
+
 import React from 'react';
 
 const SupportManager = ({ 
@@ -43,6 +45,18 @@ const SupportManager = ({
             disabled={!!submittingStatus}
           >
             ❓<br/>質問があります
+          </button>
+
+          {/* --- ここから追加 --- */}
+          <button 
+            onClick={() => sendNotification('giveup')} 
+            style={styles.btnGiveUp ? styles.btnGiveUp(submittingStatus === 'giveup', !!submittingStatus) : {
+              ...styles.btnQuestion(submittingStatus === 'giveup', !!submittingStatus),
+              backgroundColor: submittingStatus === 'giveup' ? '#c0392b' : '#e74c3c' // 赤系の色
+            }} 
+            disabled={!!submittingStatus}
+          >
+            🏳<br/>ギブアップ…。
           </button>
         </div>
       )}

@@ -1,3 +1,5 @@
+// これは学校ごとの進捗状況を管理するコンポーネントです。講師が各教科・教科書ごとに選択した単元を確認し、進捗を報告するための画面で使用します。
+
 import React from 'react';
 
 const SchoolProgressManager = ({ 
