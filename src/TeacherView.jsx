@@ -13,6 +13,7 @@ import KoToreProgressTracker from './components/KoToreProgressTracker.jsx' // �
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY; // ← これが必要
+const APP_VERSION = "3.1.0"; // コンポーネントの外部、または親コンポーネントで定義
 
 export default function TeacherView({ userName, role, unit, handleLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -21,11 +22,6 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
   const [schools, setSchools] = useState([]);
   const [selectedSchool, setSelectedSchool] = useState('すべて');
   const [openPdf, setOpenPdf] = useState(null);
-  const [testReviews, setTestReviews] = useState([]);
-  const [reviewLoading, setReviewLoading] = useState(false);
-
-  const REVIEW_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR1UirqKscX46PAd069V9bXq8Dt1q4R5SF0wCAo4E-FEWdNp4iv1-FZ9Zw3yXoCgFv2gLNAZrA5dvCq/pub?gid=1791584663&single=true&output=csv";
-
   const timeoutRef = useRef(null);
   const resetTimer = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -108,27 +104,6 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    if (activeContent === 'test-review-check' && role === 'admin') {
-      const fetchReviews = async () => {
-        setReviewLoading(true);
-        try {
-          const response = await fetch(REVIEW_CSV_URL);
-          const text = await response.text();
-          const rows = text.split(/\r?\n/).map(row => row.split(','));
-          const headers = rows[0].map(h => h.trim());
-          const data = rows.slice(1).filter(row => row.length > 1).map(row => {
-            let obj = {};
-            headers.forEach((h, i) => { obj[h] = row[i] ? row[i].trim() : ""; });
-            return obj;
-          });
-          setTestReviews(data);
-        } catch (e) { console.error("振り返りデータの取得に失敗しました"); }
-        finally { setReviewLoading(false); }
-      };
-      fetchReviews();
-    }
-  }, [activeContent, role]);
 
   const baseMenuItems = [
     { id: 'notices', label: 'お知らせ', icon: '📢' },
@@ -215,14 +190,12 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
             {/* 3. テスト振り返り確認 (admin限定) */}
             {activeContent === 'test-review-check' && role === 'admin' && (
               <TestReviewManager 
-              testReviews={testReviews}
-              reviewLoading={reviewLoading}
+              GAS_URL={GAS_URL}
+              API_KEY={API_KEY}
               schools={schools}
-              selectedSchool={selectedSchool}
-              setSelectedSchool={setSelectedSchool}
               styles={styles}
             />
-          )}
+            )}
 
             {activeContent === 'passwords' && (
                 <PasswordManager styles={styles} />
@@ -270,9 +243,13 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
       )}
 
       <footer style={styles.footer}>
-        <div style={styles.homeIcon}>🏠<br/><span style={{fontSize:'10px'}}>HOME</span></div>
-        <div style={styles.version}>Ver.2.1.4</div>
-      </footer>
+        <div style={styles.homeIcon}>
+          🏠<br/>
+          <span style={{fontSize:'10px'}}>HOME</span>
+          </div>
+          {/* 変数から読み込むように変更 */}
+          <div style={styles.version}>Ver.{APP_VERSION}</div>
+        </footer>
     </div>
   );
 }
