@@ -7,13 +7,13 @@ import NotificationManager from './components/NotificationManager.jsx'
 import TestReviewManager from './components/TestReviewManager.jsx';
 import NoticeManager from './components/NotificationManager.jsx'; // 名前が紛らわしい場合は修正してください
 import AccountGenerator from './components/AccountGenerator.jsx'
-import SchoolProgressTracker from './components/SchoolProgressTracker.jsx'
+import SchoolProgressTracker from './components/SchoolProgressManager.jsx'
 import KoToreProgressTracker from './components/KoToreProgressTracker.jsx' // ← これを追加！
 
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY; // ← これが必要
-const APP_VERSION = "3.1.0"; // コンポーネントの外部、または親コンポーネントで定義
+const APP_VERSION = "3.1.1"; // コンポーネントの外部、または親コンポーネントで定義
 
 export default function TeacherView({ userName, role, unit, handleLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);

@@ -1,140 +1,156 @@
-// これは学校ごとの進捗状況を管理するコンポーネントです。講師が各教科・教科書ごとに選択した単元を確認し、進捗を報告するための画面で使用します。
+import React, { useState, useMemo } from 'react';
+import axios from 'axios';
+import FilterButtonGroup from './FilterButtonGroup'; // 共通部品を必ずインポート
 
-import React from 'react';
-
-const SchoolProgressManager = ({ 
-  currentSubjects, 
-  selectedUnits, 
-  openUnitModal, 
-  sendToGAS, 
-  schoolUnitMaster, 
-  selectedGradeFilter, 
-  setSelectedGradeFilter, 
-  styles 
-}) => {
+const SchoolProgressManager = ({ styles, GAS_URL, API_KEY, schools = [] }) => {
+  // 状態管理を個別にしてFilterButtonGroupに対応させる
+  const [selectedSchool, setSelectedSchool] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   
-  const getBooksBySubject = (subject) => {
-    const books = schoolUnitMaster
-      .filter(d => d.科目?.trim() === subject && d.学年?.includes(selectedGradeFilter))
-      .map(d => d.テキスト名?.trim())
-      .filter((v, i, a) => v && a.indexOf(v) === i);
-    return books.length > 0 ? books : ["教科書未設定"];
+  const [tableData, setTableData] = useState({ headers: [], matrix: [] });
+  const [loading, setLoading] = useState(false);
+
+  const grades = ["小４", "小５", "小６", "中１", "中２", "中３", "高１", "高２", "高３"];
+  const subjects = ["国語", "数学", "英語", "理科", "社会"];
+
+  const parsedHeaders = useMemo(() => {
+    return tableData.headers.map(h => {
+      const [chapter, section, unit, page] = h.split('|');
+      return { chapter, section, unit, page, full: h };
+    });
+  }, [tableData.headers]);
+
+  const getSpans = (key) => {
+    const spans = [];
+    let count = 0;
+    for (let i = 0; i < parsedHeaders.length; i++) {
+      count++;
+      if (i === parsedHeaders.length - 1 || parsedHeaders[i][key] !== parsedHeaders[i + 1][key]) {
+        spans.push({ label: parsedHeaders[i][key], span: count });
+        count = 0;
+      }
+    }
+    return spans;
   };
 
-  // --- 修正箇所: 表示名を「テキスト名＆章＆節＆単元＆ページ」の連結にする ---
-  const getSelectedUnitNames = (subject, book) => {
-    const selKey = `${subject}-${book}`;
-    const unitIds = selectedUnits[selKey] || [];
-    if (unitIds.length === 0) return <span style={{ color: '#999', fontSize: '0.85rem' }}>未選択</span>;
+  const fetchMatrix = async () => {
+    if (!selectedSchool || !selectedGrade || !selectedSubject) return alert("条件をすべて選択してください");
+    setLoading(true);
+    try {
+      const csvRes = await fetch('/school_units.csv');
+      const csvText = await csvRes.text();
+      const rows = csvText.split(/\r?\n/).map(r => r.split(',').map(cell => cell.trim()));
+      
+      const masterUnits = rows.slice(1)
+        .filter(r => r.length > 5 && r[0].includes(selectedGrade) && r[1] === selectedSubject)
+        .map(r => {
+          const chapter = r[3] || " ";
+          const section = r[4] || " ";
+          const unit    = r[5] || " ";
+          const page    = r[6] || " ";
+          return `${chapter}|${section}|${unit}|${page}`;
+        });
 
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
-        {unitIds.map((id, i) => {
-          // unitId は StudentView 側で `${u.章}-${u.単元}-${u.ページ}-${u.節 || ""}` 
-          // のように連結されている前提で分割します
-          const parts = id.split('-');
-          const chapter = parts[0] || "";
-          const unitName = parts[1] || "";
-          const page = parts[2] || "";
-          const section = parts[3] || "";
-
-          // 表示用文字列の組み立て
-          // テキスト名(book) ＋ 章 ＋ 節(あれば) ＋ 単元 ＋ ページ
-          const fullDisplayName = `${book} ${chapter}${section ? ` ${section}` : ""} ${unitName} ${page}`;
-
-          return (
-            <div key={i} style={{ 
-              fontSize: '0.75rem', 
-              backgroundColor: '#eef9f1', 
-              padding: '4px 6px', 
-              borderRadius: '4px', 
-              border: '1px solid #c2e7cc',
-              lineHeight: '1.3',
-              wordBreak: 'break-all'
-            }}>
-              • {fullDisplayName}
-            </div>
-          );
-        })}
-      </div>
-    );
+      const response = await axios.post(GAS_URL, JSON.stringify({
+        action: "getSchoolProgressMatrix",
+        apiKey: API_KEY,
+        school: selectedSchool,
+        grade: selectedGrade,
+        subject: selectedSubject,
+        masterUnits: masterUnits 
+      }), { headers: { 'Content-Type': 'text/plain' } });
+      
+      if (response.data.result === "success") {
+        setTableData(response.data);
+      }
+    } catch (e) {
+      alert("通信エラー");
+    }
+    setLoading(false);
   };
+
+  const thBase = { backgroundColor: '#f8f9fa', color: '#333', border: '1px solid #ddd', padding: '8px', fontSize: '11px', textAlign: 'center', whiteSpace: 'nowrap' };
+  const stickyHead = { ...thBase, position: 'sticky', top: 0, zIndex: 10 };
+  const stickyCol = { position: 'sticky', backgroundColor: '#fff', border: '1px solid #ddd', padding: '8px', zIndex: 5, fontSize: '12px' };
 
   return (
-    <div style={styles.contentArea}>
-      <h1 style={styles.mainTitle}>🏫 学校進捗</h1>
+    <div style={{ padding: '10px' }}>
+      <h2 style={styles.contentTitle}>🏫 学校進捗チェック</h2>
       
-      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
-        {['中１', '中２', '中３'].map(g => (
-          <button 
-            key={g} 
-            style={styles.gradeTab(selectedGradeFilter === g)}
-            onClick={() => setSelectedGradeFilter(g)}
-          >
-            {g}
-          </button>
-        ))}
-      </div>
-
-      <div style={styles.progressTableWrapper}>
-        <table style={{ ...styles.progressTable, borderCollapse: 'collapse', tableLayout: 'fixed', width: '100%' }}>
-          <thead>
-            <tr style={styles.tableHeader}>
-              <th style={{ ...styles.th, width: '15%' }}>教科</th>
-              <th style={{ ...styles.th, width: '25%' }}>教科書</th>
-              <th style={{ ...styles.th, width: '45%' }}>選択した単元</th> 
-              <th style={{ ...styles.th, width: '15%' }}>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {currentSubjects.map((sub, idx) => {
-              const books = getBooksBySubject(sub);
-              
-              return (
-                <React.Fragment key={idx}>
-                  {books.map((book, bIdx) => {
-                    return (
-                      <tr key={`${idx}-${bIdx}`} style={styles.tr}>
-                        {bIdx === 0 && (
-                          <td 
-                            rowSpan={books.length} 
-                            style={{ ...styles.tdSubject, border: '1px solid #ccc', backgroundColor: '#f9f9f9', verticalAlign: 'middle' }}
-                          >
-                            {sub}
-                          </td>
-                        )}
-                        <td style={{ ...styles.td, border: '1px solid #ccc', textAlign: 'left', padding: '10px' }}>
-                          {book}
-                        </td>
-                        <td style={{ ...styles.td, border: '1px solid #ccc', padding: '8px', verticalAlign: 'top' }}>
-                          {getSelectedUnitNames(sub, book)}
-                        </td>
-                        <td style={{ ...styles.td, border: '1px solid #ccc', textAlign: 'center' }}>
-                          <button 
-                            style={{ ...styles.selectBtn, padding: '6px 12px' }} 
-                            onClick={() => openUnitModal(sub, book)}
-                          >
-                            選択
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* 他の画面と共通のカードデザイン */}
+      <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         
+        {/* 校舎：セレクトボックス */}
+        <div style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <span style={{ width: '60px', fontSize: '13px', fontWeight: 'bold' }}>校舎:</span>
+          <select style={styles.select} value={selectedSchool} onChange={e => setSelectedSchool(e.target.value)}>
+            <option value="">校舎選択</option>
+            {schools.filter(s => s !== 'すべて').map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+
+        {/* 学年：共通ボタン部品 */}
+        <FilterButtonGroup 
+          label="学年"
+          options={grades}
+          selected={selectedGrade}
+          onSelect={setSelectedGrade}
+          isMultiple={false}
+        />
+
+        {/* 科目：共通ボタン部品 */}
+        <FilterButtonGroup 
+          label="科目"
+          options={subjects}
+          selected={selectedSubject}
+          onSelect={setSelectedSubject}
+          isMultiple={false}
+        />
+
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
           <button 
-            onClick={() => sendToGAS("saveSchoolProgress", "学校の進捗を送信しました！")} 
-            style={{ ...styles.submitProgressBtn, backgroundColor: '#27ae60', width: '250px' }}
+            onClick={fetchMatrix} 
+            style={{ ...styles.doneBtn, width: '100%', backgroundColor: '#166534', color: '#fff' }} 
+            disabled={loading}
           >
-            学校進捗を報告する
+            {loading ? '読込中...' : '表示更新'}
           </button>
         </div>
       </div>
+
+      {/* テーブル表示エリア */}
+      {tableData.headers.length > 0 && (
+        <div style={{ overflow: 'auto', maxHeight: '70vh', border: '1px solid #ddd' }}>
+          <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', backgroundColor: '#fff' }}>
+            <thead>
+              <tr>
+                <th rowSpan="4" style={{ ...stickyHead, left: 0, zIndex: 11, minWidth: '80px' }}>校舎</th>
+                <th rowSpan="4" style={{ ...stickyHead, left: '80px', zIndex: 11, minWidth: '120px' }}>名前</th>
+                {getSpans('chapter').map((s, i) => (
+                  <th key={i} colSpan={s.span} style={thBase}>{s.label}</th>
+                ))}
+              </tr>
+              <tr>{getSpans('section').map((s, i) => (<th key={i} colSpan={s.span} style={thBase}>{s.label}</th>))}</tr>
+              <tr>{parsedHeaders.map((h, i) => (<th key={i} style={{ ...thBase, minWidth: '100px', maxWidth: '150px', whiteSpace: 'normal' }}>{h.unit}</th>))}</tr>
+              <tr>{parsedHeaders.map((h, i) => (<th key={i} style={thBase}>{h.page}</th>))}</tr>
+            </thead>
+            <tbody>
+              {tableData.matrix.map((row, i) => (
+                <tr key={i}>
+                  <td style={{ ...stickyCol, left: 0 }}>{selectedSchool}</td>
+                  <td style={{ ...stickyCol, left: '80px' }}>{row.name}</td>
+                  {row.completions.map((done, j) => (
+                    <td key={j} style={{ border: '1px solid #ddd', textAlign: 'center', padding: '8px', minWidth: '45px' }}>
+                      {done ? <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '16px' }}>☑</span> : <span style={{ color: '#ccc' }}>□</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

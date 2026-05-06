@@ -3,7 +3,8 @@ import axios from 'axios';
 import { styles } from './styles/studentViewStyles.js';
 import SupportManager from './components/SupportManager.jsx';
 import JukuProgressManager from './components/JukuProgressManager.jsx';
-import SchoolProgressManager from './components/SchoolProgressManager.jsx';
+// 生徒用なので Tracker を読み込むように変更します
+import SchoolProgressManager from './components/SchoolProgressTracker.jsx';
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
