@@ -19,7 +19,8 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   // --- 2. ステート定義 ---
   const [myQueueNumber, setMyQueueNumber] = useState(null);
   const [submittingStatus, setSubmittingStatus] = useState(''); 
-  const [activeMenu, setActiveMenu] = useState('kodore');
+  // 初期値を 'schoolProgress' に変更することで、ログイン直後に学校進捗が開きます
+  const [activeMenu, setActiveMenu] = useState('schoolProgress');
   const [showCompleteMsg, setShowCompleteMsg] = useState(false); 
   const [lastStatus, setLastStatus] = useState(''); 
 

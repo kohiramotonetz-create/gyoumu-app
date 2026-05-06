@@ -9,6 +9,7 @@ import NoticeManager from './components/NotificationManager.jsx'; // 名前が�
 import AccountGenerator from './components/AccountGenerator.jsx'
 import SchoolProgressTracker from './components/SchoolProgressManager.jsx'
 import KoToreProgressTracker from './components/KoToreProgressTracker.jsx' // ← これを追加！
+import AppUsageTracker from './components/AppUsageTracker.jsx' // 追加
 
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
@@ -225,7 +226,14 @@ export default function TeacherView({ userName, role, unit, handleLogout }) {
            />
          )}
 
-            {activeContent === 'app-usage' && <div style={styles.emptyState}>制作中...</div>}
+            {activeContent === 'app-usage' && (
+              <AppUsageTracker 
+              styles={styles} 
+              GAS_URL={GAS_URL}
+              API_KEY={API_KEY} 
+              schools={schools} 
+            />
+          　)}
           </div>
         </main>
       </div>
