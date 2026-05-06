@@ -129,7 +129,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
       // 送信データのステータス名を判定
       let statusText = "";
       if (statusType === 'maru') statusText = "丸付け待ち";
-      else if (statusType === 'shitsumon') statusText = "質問待ち";
+      else if (statusType === 'question' || statusType === 'shitsumon') statusText = "質問待ち";
       else if (statusType === 'giveup') statusText = "SOS(ギブアップ)"; // ←追加
 
       const response = await axios.post(GAS_URL, JSON.stringify({
@@ -150,7 +150,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         // 完了メッセージ用の表示名を判定
         let lastStatusText = "";
         if (statusType === 'maru') lastStatusText = "丸付け";
-        else if (statusType === 'shitsumon') lastStatusText = "質問";
+        else if (statusType === 'question' || statusType === 'shitsumon') lastStatusText = "質問";
         else if (statusType === 'giveup') lastStatusText = "ギブアップ"; // ←追加
         
         setLastStatus(lastStatusText);
