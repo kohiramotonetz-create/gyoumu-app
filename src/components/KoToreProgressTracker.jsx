@@ -1,3 +1,5 @@
+// 講師：個トレ進捗チェック
+
 import React, { useState, useMemo, useEffect } from 'react';
 import axios from 'axios';
 import FilterButtonGroup from './FilterButtonGroup'; // 1. 共通部品をインポート

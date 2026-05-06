@@ -1,3 +1,5 @@
+// 講師：新規アカウント発行
+
 import React, { useState } from 'react';
 import axios from 'axios';
 

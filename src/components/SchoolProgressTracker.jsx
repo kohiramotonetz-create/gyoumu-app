@@ -1,4 +1,5 @@
-// これは生徒が自分の学校進捗を選択し、講師へ報告するためのコンポーネントです。
+// 生徒：学校進捗
+
 import React, { useState } from 'react';
 import FilterButtonGroup from './FilterButtonGroup'; // 共通ボタン部品
 

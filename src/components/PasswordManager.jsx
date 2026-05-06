@@ -1,4 +1,4 @@
-//各種パスワードを管理するコンポーネントです。社員・講師・教室用のパスワードと、生徒用の作成ルールを表示します。
+//講師：パスワード管理
 
 import React from 'react';
 import { externalServiceAccounts, studentAccountRules } from '../constants/data';

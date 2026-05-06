@@ -1,3 +1,5 @@
+//講師：学校進捗管理
+
 import React, { useState, useMemo } from 'react';
 import axios from 'axios';
 import FilterButtonGroup from './FilterButtonGroup'; // 共通部品を必ずインポート
