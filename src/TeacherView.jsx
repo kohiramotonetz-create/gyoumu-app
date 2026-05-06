@@ -14,7 +14,7 @@ import AppUsageTracker from './components/AppUsageTracker.jsx' // 追加
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY; // ← これが必要
-const APP_VERSION = "3.1.2"; // コンポーネントの外部、または親コンポーネントで定義
+const APP_VERSION = "3.2.3"; // コンポーネントの外部、または親コンポーネントで定義
 
 export default function TeacherView({ userName, role, unit, handleLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
