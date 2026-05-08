@@ -30,6 +30,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [currentSelecting, setCurrentSelecting] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSukimaLoading, setIsSukimaLoading] = useState(false); // ★これを追加
 
   // 学校進捗用の学年フィルタ
   const [selectedGradeFilter, setSelectedGradeFilter] = useState(toFullWidth(grade));
@@ -165,6 +166,9 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   // --- 140行目付近：sendNotification の後あたり ---
 
 const openSukimaKun = async () => {
+  if (isSukimaLoading) return; // 二重クリック防止
+  setIsSukimaLoading(true);    // 読み込み開始！
+
   try {
     // 1. GASにトークン発行をリクエスト
     const response = await axios.post(GAS_URL, JSON.stringify({
@@ -175,7 +179,6 @@ const openSukimaKun = async () => {
 
     if (response.data.result === "success") {
       const token = response.data.token;
-      // ★ここに「スキマ君」の実際のURLを入力してください
       const SUKIMA_URL = "https://student-app-nu-lyart.vercel.app/";      
       const targetUrl = `${SUKIMA_URL}?uid=${userId}&tk=${token}`;
       window.open(targetUrl, '_blank');
@@ -185,6 +188,8 @@ const openSukimaKun = async () => {
   } catch (e) {
     console.error("スキマ君連携エラー:", e);
     alert("エラーが発生しました。");
+  } finally {
+    setIsSukimaLoading(false); // 成功しても失敗しても読み込み解除！
   }
 };
 
@@ -236,7 +241,7 @@ const openSukimaKun = async () => {
             <button style={styles.navItem(activeMenu === 'kodore')} onClick={() => setActiveMenu('kodore')}>🎯 個トレサポート</button>
             <button style={styles.navItem(activeMenu === 'progress')} onClick={() => {setActiveMenu('progress'); setSelectedUnits({}); setDisplayGrade(toFullWidth(grade));}}>📈 個トレ進捗</button>
             <button style={styles.navItem(activeMenu === 'schoolProgress')} onClick={() => {setActiveMenu('schoolProgress'); setSelectedUnits({}); setSelectedGradeFilter(toFullWidth(grade)); setDisplayGrade(toFullWidth(grade));}}>🏫 学校進捗</button>
-            <button style={styles.navItem(false)} onClick={openSukimaKun}> ✨ スキマ君を起動</button>
+            <button style={{...styles.navItem(false),opacity: isSukimaLoading ? 0.6 : 1,cursor: isSukimaLoading ? 'wait' : 'pointer' }} onClick={openSukimaKun}disabled={isSukimaLoading}>{isSukimaLoading ? "⏳ 読み込み中..." : "✨ スキマ君を起動"}</button>
             <button style={styles.navItem(false)} onClick={() => setShowScoreModal(true)}>📝 点数回収</button>
             <button style={styles.navItem(false)} onClick={() => setShowTestReviewModal(true)}>📝 テスト振り返り</button>
             <button style={styles.navItem(false)} onClick={() => setShowReviewModal(true)}>📖 過去の振り返りを確認</button>
