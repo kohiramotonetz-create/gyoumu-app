@@ -116,7 +116,7 @@ const AppUsageTracker = ({ styles, GAS_URL, API_KEY, schools = [] }) => {
                       {tableData.apps.map((appName, j) => {
                         // usageData[appName] が配列になったので、その 0番目（または最新）を表示するようにします
                         const logs = st.usageData && st.usageData[appName];
-                        const usage = (logs && logs.length > 0) ? logs[0] : { date: '-', score: '-', total: '-' };
+                        const usage = (logs && logs.length > 0) ? logs[logs.length - 1] : { date: '-', score: '-', total: '-' };
                         return (
                           <td key={j} style={tdBase}>
                             <div style={{ 
