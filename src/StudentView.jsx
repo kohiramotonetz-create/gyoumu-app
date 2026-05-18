@@ -37,7 +37,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [showTestReviewModal, setShowTestReviewModal] = useState(false);
-  const FORMS_URL = "https://forms.cloud.microsoft/r/iChtRk7Hsh";
+  const FORMS_URL = "https://forms.office.com/Pages/ResponsePage.aspx?id=tUqCmPV9f0WIdtp-hcoEEFd4aKrZ3TpOss8BjKXR7gZURDA3Sk5RWUFQSVlZVzZPUkRGQjk1S0NKSi4u";
 
   const [myReviews, setMyReviews] = useState([]);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -55,6 +55,28 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     params.append(entryIds.name, userName);
     params.append("embedded", "true");
     return `${baseUrl}?${params.toString()}`;
+  };
+
+  // ✅【確定版】送ってもらった正しいIDをセットした自動入力ロジック
+  const getScoreFormUrl = () => {
+    const baseUrl = "https://forms.office.com/Pages/ResponsePage.aspx?id=tUqCmPV9f0WIdtp-hcoEEFd4aKrZ3TpOss8BjKXR7gZURDA3Sk5RWUFQSVlZVzZPUkRGQjk1S0NKSi4u";
+    const params = new URLSearchParams();
+
+    // 解析していただいたForms固有の正しいIDをここに直接指定します
+    const formIds = {
+      school: "r2a6664ae6c9c4d128691b1f012cb9fd1", // 校舎名の入力欄ID
+      name: "r0cc2105a35e64631a6382d01ec26b41a"     // 氏名の入力欄ID
+    };
+
+    if (school) {
+      params.append(formIds.school, school.trim());
+    }
+    if (userName) {
+      params.append(formIds.name, userName.trim());
+    }
+    
+    // すでにURL内に ?id= があるため、後ろは「&」で繋ぎます
+    return `${baseUrl}&${params.toString()}`;
   };
 
   useEffect(() => {
@@ -502,7 +524,12 @@ return filteredUnits.map((u, i) => {
               <button style={styles.modalCloseX} onClick={() => setShowScoreModal(false)}>×</button>
             </div>
             <div style={styles.unitListScroll}>
-              <iframe src={FORMS_URL} style={{ width: '100%', height: '70vh', border: 'none' }} title="Score Form"/>
+              {/* ✅ srcを新設した関数を呼び出す形に変更 */}
+              <iframe 
+                src={getScoreFormUrl()} 
+                style={{ width: '100%', height: '70vh', border: 'none' }} 
+                title="Score Form"
+              />
             </div>
           </div>
         </div>
