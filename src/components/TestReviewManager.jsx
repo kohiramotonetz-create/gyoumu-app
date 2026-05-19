@@ -236,20 +236,20 @@ const TestReviewManager = ({ styles, GAS_URL, API_KEY, schools = [] }) => {
                   <tr key={i}>
                     <td style={{ ...stickyCellBase, left: 0 }}>{row.school}</td>
                     
-                    {/* 💡 18項目すべて埋まっている場合のみ、名前を青文字リンク化してポップアップ可能にする */}
-                    <td 
-                      style={{ 
-                        ...stickyCellBase, 
-                        left: SCHOOL_COL_WIDTH,
-                        color: isFullySubmitted ? '#1d4ed8' : '#333', 
-                        textDecoration: isFullySubmitted ? 'underline' : 'none', 
-                        cursor: isFullySubmitted ? 'pointer' : 'default',
-                        fontWeight: isFullySubmitted ? 'bold' : 'normal'
-                      }}
-                      onClick={() => isFullySubmitted && setSelectedStudent(row)}
-                    >
-                      {row.name}
-                    </td>
+                    {/* 修正後：提出の有無に関わらず、一律で常時ハイパーリンク化 */}
+                    <td
+                     style={{ 
+                      ...stickyCellBase, 
+                      left: SCHOOL_COL_WIDTH,
+                      color: '#1d4ed8', 
+                      textDecoration: 'underline', 
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                    onClick={() => setSelectedStudent(row)}
+                >
+                  {row.name}
+                </td>
                     
                     <td style={{ ...stickyCellBase, left: SCHOOL_COL_WIDTH + NAME_COL_WIDTH, textAlign: 'center' }}>{row.grade}</td>
                     
