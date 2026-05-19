@@ -167,12 +167,14 @@ function App() {
               handleLogout={handleLogout} 
             />
           )}
-          {(role === 'teacher' || role === 'admin') && (
+          {/* 【修正箇所】新権限 head-teacher の場合も TeacherView を表示する */}
+          {(role === 'teacher' || role === 'admin' || role === 'head-teacher') && (
             <div className="view-container">
               <TeacherView 
                 userName={userName} 
                 role={role} 
                 unit={unit} 
+                school={school} //
                 handleLogout={handleLogout} 
               />
             </div>
