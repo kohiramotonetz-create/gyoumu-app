@@ -4,7 +4,7 @@ import axios from 'axios';
 // 別ファイルに切り出した詳細モーダルをインポート
 import TestReviewDetailModal from './TestReviewDetailModal.jsx'; 
 
-const TestReviewManager = ({ styles, GAS_URL, API_KEY, schools = [] }) => {
+const TestReviewManager = ({ styles, GAS_URL, API_KEY, schools = [] , unitOptions = []}) => {
   const [selectedSchool, setSelectedSchool] = useState('');
   const [selectedGrades, setSelectedGrades] = useState([]); // 複数選択用
   const [selectedTest, setSelectedTest] = useState('2学期中間／前期期末');
@@ -128,8 +128,17 @@ const TestReviewManager = ({ styles, GAS_URL, API_KEY, schools = [] }) => {
         <div style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px' }}>
           <span style={{ width: '60px', fontWeight: 'bold' }}>教室：</span>
           <select style={styles.select} value={selectedSchool} onChange={e => setSelectedSchool(e.target.value)}>
-            <option value="">校舎選択</option>
+           <option value="">選択してください</option>
+
+          　{/* 💡 ユニット一括表示の選択肢を追加 */}
+          <optgroup label="ーー ユニット一括表示 ーー">
+            {unitOptions.map(u => <option key={u} value={u}>{u}（全校舎一括）</option>)}
+          </optgroup>
+          
+          　{/* 💡 個別校舎の絞り込みエリア（既存のコードを内包） */}
+          <optgroup label="ーー 個別校舎絞り込み ーー">
             {schools.filter(s => s !== 'すべて').map(s => <option key={s} value={s}>{s}</option>)}
+          </optgroup>
           </select>
         </div>
 

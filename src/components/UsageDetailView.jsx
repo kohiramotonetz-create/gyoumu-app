@@ -1,3 +1,5 @@
+//生徒の学習履歴を詳細に表示するコンポーネント
+
 import React, { useState, useMemo } from 'react';
 
 const UsageDetailView = ({ student, onBack, styles }) => {
@@ -72,6 +74,8 @@ const UsageDetailView = ({ student, onBack, styles }) => {
                 <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>学習日時</th>
                 <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>アプリ名</th>
                 <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>出題範囲</th>
+                {/* 💡 変更箇所：ヘッダーに回答モードを追加 */}
+                <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>回答モード</th>
                 <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>正答数</th>
                 <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>総数</th>
                 <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>正答率</th>
@@ -89,6 +93,8 @@ const UsageDetailView = ({ student, onBack, styles }) => {
                       </span>
                     </td>
                     <td style={{ padding: '12px', fontSize: '14px', color: '#555' }}>{log.range}</td>
+                    {/* 💡 変更箇所：セルに回答モード（log.mode）を表示 */}
+                    <td style={{ padding: '12px', fontSize: '14px', color: '#555' }}>{log.mode || '-'}</td>
                     <td style={{ padding: '12px', textAlign: 'center', fontWeight: 'bold' }}>{log.score}</td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>{log.total}</td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>

@@ -21,6 +21,7 @@ export default function TeacherView({ userName, role, unit, school, handleLogout
   const [activeContent, setActiveContent] = useState('notices');
   const [notifications, setNotifications] = useState([]);
   const [schools, setSchools] = useState([]);
+  const [unitOptions, setUnitOptions] = useState([]); // ← これを追加！
   const [selectedSchool, setSelectedSchool] = useState('すべて');
   const [openPdf, setOpenPdf] = useState(null);
   const timeoutRef = useRef(null);
@@ -46,17 +47,30 @@ export default function TeacherView({ userName, role, unit, school, handleLogout
   }, []);
 
   useEffect(() => {
-    const loadSchools = async () => {
-      try {
-        const response = await fetch('/schools.csv');
-        const text = await response.text();
-        const rows = text.split('\n').map(row => row.trim()).filter(row => row !== "");
-        const schoolNames = rows.slice(1).map(row => row.split(',')[0]);
-        setSchools(['すべて', ...schoolNames]);
-      } catch (e) { console.error("校舎リスト読み込み失敗"); }
-    };
-    loadSchools();
-  }, []);
+  const loadSchools = async () => {
+    try {
+      const response = await fetch('/schools.csv');
+      const text = await response.text();
+      const rows = text.split('\n').map(row => row.trim()).filter(row => row !== "");
+      
+      const schoolNames = [];
+      const units = new Set(); // 重複排除のためのセット
+
+      rows.slice(1).forEach(row => {
+        const cols = row.split(',');
+        const schoolName = cols[0]?.trim(); // 1列目: 校舎名
+        const unitName = cols[1]?.trim();   // 2列目: ユニット名（高松、福岡東など）
+
+        if (schoolName) schoolNames.push(schoolName);
+        if (unitName) units.add(`${unitName}U`); // 末尾に「U」を付与して保存
+      });
+
+      setSchools(schoolNames);
+      setUnitOptions([...units]); // ['高松U', '福岡東U'] のような配列がセットされる
+    } catch (e) { console.error("校舎・ユニットリスト読み込み失敗"); }
+  };
+  loadSchools();
+}, []);
 
   const fetchNotifications = async () => {
     try {
@@ -201,6 +215,7 @@ export default function TeacherView({ userName, role, unit, school, handleLogout
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}
                 schools={schools}
+                unitOptions={unitOptions} // 💡 ここにこれを追記して手渡した
                 styles={styles}
               />
             )}
@@ -218,7 +233,8 @@ export default function TeacherView({ userName, role, unit, school, handleLogout
                 styles={styles} 
                 GAS_URL={GAS_URL} 
                 API_KEY={API_KEY} 
-                schools={schools} 
+                schools={schools}
+                unitOptions={unitOptions} // 💡 ここにこれを追記して手渡した
               />
             )}
 
@@ -228,6 +244,7 @@ export default function TeacherView({ userName, role, unit, school, handleLogout
                 GAS_URL={GAS_URL} 
                 API_KEY={API_KEY} 
                 schools={schools} 
+                unitOptions={unitOptions} // 💡 ここを追加して親のデータを引き渡す！
               />
             )}
 
@@ -237,6 +254,7 @@ export default function TeacherView({ userName, role, unit, school, handleLogout
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY} 
                 schools={schools} 
+                unitOptions={unitOptions} // 💡 ここを追加して親のデータを引き渡す！
               />
             )}
           </div>
