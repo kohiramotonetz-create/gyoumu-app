@@ -13,7 +13,7 @@ import AppUsageTracker from './components/AppUsageTracker.jsx'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
-const APP_VERSION = "3.5.1";
+const APP_VERSION = "3.5.2";
 
 // 【修正箇所】引数に「school」を正しく追加して受け取れるようにする
 export default function TeacherView({ userName, role, unit, school, handleLogout }) {
