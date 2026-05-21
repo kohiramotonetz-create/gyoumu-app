@@ -42,7 +42,7 @@ const TestReviewDetailModal = ({ student, testName, year, onClose }) => {
         {/* モーダルヘッダー */}
         <div style={{ borderBottom: '2px solid #166534', paddingBottom: '10px', marginBottom: '20px' }}>
           <h3 style={{ margin: 0, fontSize: '18px', color: '#166534' }}>
-            【{student.school}】{student.name} 先生 （{student.grade}）
+            【{student.school}】{student.name} さん （{student.grade}）
           </h3>
           <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#666' }}>
             対象テスト: {testName} ({year})
