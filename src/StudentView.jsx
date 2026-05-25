@@ -3,8 +3,9 @@ import axios from 'axios';
 import { styles } from './styles/studentViewStyles.js';
 import SupportManager from './components/SupportManager.jsx';
 import JukuProgressManager from './components/JukuProgressManager.jsx';
-// 生徒用なので Tracker を読み込むように変更します
 import SchoolProgressManager from './components/SchoolProgressTracker.jsx';
+// 新設した子コンポーネントをインポート
+import UnitSelectionModal from './components/UnitSelectionModal.jsx';
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
@@ -19,7 +20,6 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   // --- 2. ステート定義 ---
   const [myQueueNumber, setMyQueueNumber] = useState(null);
   const [submittingStatus, setSubmittingStatus] = useState(''); 
-  // 初期値を 'schoolProgress' に変更することで、ログイン直後に学校進捗が開きます
   const [activeMenu, setActiveMenu] = useState('schoolProgress');
   const [showCompleteMsg, setShowCompleteMsg] = useState(false); 
   const [lastStatus, setLastStatus] = useState(''); 
@@ -30,7 +30,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [currentSelecting, setCurrentSelecting] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isSukimaLoading, setIsSukimaLoading] = useState(false); // ★これを追加
+  const [isSukimaLoading, setIsSukimaLoading] = useState(false);
 
   // 学校進捗用の学年フィルタ
   const [selectedGradeFilter, setSelectedGradeFilter] = useState(toFullWidth(grade));
@@ -44,8 +44,37 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   const [showReviewModal, setShowReviewModal] = useState(false);
 
   const [displayGrade, setDisplayGrade] = useState(toFullWidth(grade));
+  const [completedPages, setCompletedPages] = useState([]);
 
   // --- 3. データ取得ロジック ---
+  const fetchCompletedUnits = async () => {
+    try {
+      // 表示中のメニュー（schoolProgress か progress か）によって呼び出すGASアクションを分岐
+      const currentAction = activeMenu === 'schoolProgress' 
+        ? "getStudentSchoolProgress" 
+        : "getStudentKoToreProgress";
+
+      const response = await axios.post(GAS_URL, JSON.stringify({
+        action: currentAction, // 動的に切り替え
+        apiKey: API_KEY,
+        userId: userId
+      }), { headers: { 'Content-Type': 'text/plain' } });
+      
+      if (response.data.result === "success") {
+        setCompletedPages(response.data.completedPages || []);
+      }
+    } catch (e) {
+      console.error("過去の進捗データ取得失敗", e);
+    }
+  };
+
+  // メニューが「学校進捗」または「個トレ進捗」に切り替わったタイミングでそれぞれ実行
+  useEffect(() => {
+    if (activeMenu === 'schoolProgress' || activeMenu === 'progress') {
+      fetchCompletedUnits();
+    }
+  }, [activeMenu]);
+
   const getTestReviewUrl = () => {
     const baseUrl = "https://docs.google.com/forms/d/e/1FAIpQLSepwM3x5Plgv9RmTi4G2gt3JTjc3Ind4vYRULTYZQClkR2B4g/viewform";
     const entryIds = { school: "entry.1139171339", id: "entry.198493856", name: "entry.219162238" };
@@ -57,25 +86,17 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     return `${baseUrl}?${params.toString()}`;
   };
 
-  // ✅【確定版】送ってもらった正しいIDをセットした自動入力ロジック
   const getScoreFormUrl = () => {
     const baseUrl = "https://forms.office.com/Pages/ResponsePage.aspx?id=tUqCmPV9f0WIdtp-hcoEEFd4aKrZ3TpOss8BjKXR7gZURDA3Sk5RWUFQSVlZVzZPUkRGQjk1S0NKSi4u";
     const params = new URLSearchParams();
-
-    // 解析していただいたForms固有の正しいIDをここに直接指定します
     const formIds = {
-      school: "r2a6664ae6c9c4d128691b1f012cb9fd1", // 校舎名の入力欄ID
-      name: "r0cc2105a35e64631a6382d01ec26b41a"     // 氏名の入力欄ID
+      school: "r2a6664ae6c9c4d128691b1f012cb9fd1", 
+      name: "r0cc2105a35e64631a6382d01ec26b41a"     
     };
 
-    if (school) {
-      params.append(formIds.school, school.trim());
-    }
-    if (userName) {
-      params.append(formIds.name, userName.trim());
-    }
+    if (school) params.append(formIds.school, school.trim());
+    if (userName) params.append(formIds.name, userName.trim());
     
-    // すでにURL内に ?id= があるため、後ろは「&」で繋ぎます
     return `${baseUrl}&${params.toString()}`;
   };
 
@@ -122,16 +143,11 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   const sendToGAS = async (action, successMsg) => {
     const progressData = Object.keys(selectedUnits).map(key => {
       const [subject, text] = key.split('-');
-
-      // スプレッドシートへ送る「単元」情報を「テキスト名＆ページ」の連結にする
-    const unitDetails = selectedUnits[key].map(id => {
-      // 分割を2回までに制限することで、3つ目の要素（ページ）にハイフンが残るようにします
-      const parts = id.split('-');
-      const chapter = parts[0];
-      const section = parts[1];
-      // 3つ目以降の要素をすべて結合してページ番号を復元
-      const page = parts.slice(2).join('-');
-      return `${text} ${page}`;}).join(', ');
+      const unitDetails = selectedUnits[key].map(id => {
+        const parts = id.split('-');
+        const page = parts.slice(2).join('-');
+        return `${text} ${page}`;
+      }).join(', ');
       return { subject, text, units: unitDetails };
     }).filter(item => item.units !== "");
 
@@ -142,7 +158,11 @@ export default function StudentView({ userId, userName, grade, school, unit, han
       const response = await axios.post(GAS_URL, JSON.stringify({
         action, apiKey: API_KEY, userId, userName, grade, school, progressData
       }), { headers: { 'Content-Type': 'text/plain' } });
-      if (response.data.result === "success") { alert(successMsg); setSelectedUnits({}); }
+      if (response.data.result === "success") { 
+        alert(successMsg); 
+        setSelectedUnits({}); 
+        fetchCompletedUnits(); 
+      }
     } catch (e) { alert("送信エラー"); }
   };
 
@@ -150,32 +170,23 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     if (submittingStatus) return;
     setSubmittingStatus(statusType);
     try {
-      // 送信データのステータス名を判定
       let statusText = "";
       if (statusType === 'maru') statusText = "丸付け待ち";
       else if (statusType === 'question' || statusType === 'shitsumon') statusText = "質問待ち";
-      else if (statusType === 'giveup') statusText = "SOS(ギブアップ)"; // ←追加
+      else if (statusType === 'giveup') statusText = "SOS(ギブアップ)";
 
       const response = await axios.post(GAS_URL, JSON.stringify({
-        action: "sendNotification", 
-        apiKey: API_KEY, 
-        userId, 
-        userName, 
-        grade, 
-        school, 
-        status: statusText, // 判定したテキストを入れる
-        unit
+        action: "sendNotification", apiKey: API_KEY, userId, userName, grade, school, status: statusText, unit
       }), { headers: { 'Content-Type': 'text/plain' } });
 
       if (response.data.result === "success") {
         setMyQueueNumber(response.data.queueNumber);
         setShowCompleteMsg(true);
         
-        // 完了メッセージ用の表示名を判定
         let lastStatusText = "";
         if (statusType === 'maru') lastStatusText = "丸付け";
         else if (statusType === 'question' || statusType === 'shitsumon') lastStatusText = "質問";
-        else if (statusType === 'giveup') lastStatusText = "ギブアップ"; // ←追加
+        else if (statusType === 'giveup') lastStatusText = "ギブアップ"; 
         
         setLastStatus(lastStatusText);
       }
@@ -185,35 +196,30 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     }
   };
   
-  // --- 140行目付近：sendNotification の後あたり ---
+  const openSukimaKun = async () => {
+    if (isSukimaLoading) return;
+    setIsSukimaLoading(true); 
 
-const openSukimaKun = async () => {
-  if (isSukimaLoading) return; // 二重クリック防止
-  setIsSukimaLoading(true);    // 読み込み開始！
+    try {
+      const response = await axios.post(GAS_URL, JSON.stringify({
+        action: "issueToken", apiKey: API_KEY, userId: userId
+      }), { headers: { 'Content-Type': 'text/plain' } });
 
-  try {
-    // 1. GASにトークン発行をリクエスト
-    const response = await axios.post(GAS_URL, JSON.stringify({
-      action: "issueToken",
-      apiKey: API_KEY,
-      userId: userId
-    }), { headers: { 'Content-Type': 'text/plain' } });
-
-    if (response.data.result === "success") {
-      const token = response.data.token;
-      const SUKIMA_URL = "https://student-app-nu-lyart.vercel.app/";      
-      const targetUrl = `${SUKIMA_URL}?uid=${userId}&tk=${token}`;
-      window.open(targetUrl, '_blank');
-    } else {
-      alert("連携に失敗しました: " + response.data.message);
+      if (response.data.result === "success") {
+        const token = response.data.token;
+        const SUKIMA_URL = "https://student-app-nu-lyart.vercel.app/";      
+        const targetUrl = `${SUKIMA_URL}?uid=${userId}&tk=${token}`;
+        window.open(targetUrl, '_blank');
+      } else {
+        alert("連携に失敗しました: " + response.data.message);
+      }
+    } catch (e) {
+      console.error("スキマ君連携エラー:", e);
+      alert("エラーが発生しました。");
+    } finally {
+      setIsSukimaLoading(false); 
     }
-  } catch (e) {
-    console.error("スキマ君連携エラー:", e);
-    alert("エラーが発生しました。");
-  } finally {
-    setIsSukimaLoading(false); // 成功しても失敗しても読み込み解除！
-  }
-};
+  };
 
   useEffect(() => {
     const check = async () => {
@@ -235,16 +241,13 @@ const openSukimaKun = async () => {
     setCurrentSelecting({ subject, text });
     setShowUnitModal(true);
   };
-// 1. 教科リストの定義（これが不足しているためエラーになっています）
+
   const jukuSubjectList = ['国語', '数学', '英語', '理科', '社会'];
   const schoolSubjectList = ['国語', '数学', '英語', '理科', '社会'];
 
-  // 2. モード判定の定義
   const isSchoolMode = activeMenu === 'schoolProgress';
   const currentMaster = isSchoolMode ? schoolUnitMaster : unitMaster;
   
-  
-
   return (
     <div style={styles.container}>
       <header style={styles.header}>
@@ -263,7 +266,7 @@ const openSukimaKun = async () => {
             <button style={styles.navItem(activeMenu === 'kodore')} onClick={() => setActiveMenu('kodore')}>🎯 個トレサポート</button>
             <button style={styles.navItem(activeMenu === 'progress')} onClick={() => {setActiveMenu('progress'); setSelectedUnits({}); setDisplayGrade(toFullWidth(grade));}}>📈 個トレ進捗</button>
             <button style={styles.navItem(activeMenu === 'schoolProgress')} onClick={() => {setActiveMenu('schoolProgress'); setSelectedUnits({}); setSelectedGradeFilter(toFullWidth(grade)); setDisplayGrade(toFullWidth(grade));}}>🏫 学校進捗</button>
-            <button style={{...styles.navItem(false),opacity: isSukimaLoading ? 0.6 : 1,cursor: isSukimaLoading ? 'wait' : 'pointer' }} onClick={openSukimaKun}disabled={isSukimaLoading}>{isSukimaLoading ? "⏳ 読み込み中..." : "✨ スキマ君を起動"}</button>
+            <button style={{...styles.navItem(false),opacity: isSukimaLoading ? 0.6 : 1,cursor: isSukimaLoading ? 'wait' : 'pointer' }} onClick={openSukimaKun} disabled={isSukimaLoading}>{isSukimaLoading ? "⏳ 読み込み中..." : "✨ スキマ君を起動"}</button>
             <button style={styles.navItem(false)} onClick={() => setShowScoreModal(true)}>📝 点数回収</button>
             <button style={styles.navItem(false)} onClick={() => setShowTestReviewModal(true)}>📝 テスト振り返り</button>
             <button style={styles.navItem(false)} onClick={() => setShowReviewModal(true)}>📖 過去の振り返りを確認</button>
@@ -273,210 +276,68 @@ const openSukimaKun = async () => {
 
         <main style={styles.main}>
           {/* 1. 個トレサポート (kodore) */}
-           {activeMenu === 'kodore' && (
+          {activeMenu === 'kodore' && (
             <SupportManager 
-            unit={unit}
-            userName={userName}
-            userId={userId}
-            grade={grade}
-            school={school}
-            myQueueNumber={myQueueNumber}
-            submittingStatus={submittingStatus}
-            showCompleteMsg={showCompleteMsg}
-            lastStatus={lastStatus}
-            sendNotification={sendNotification}
-            styles={styles}
-           />
-        )}
+              unit={unit}
+              userName={userName}
+              userId={userId}
+              grade={grade}
+              school={school}
+              myQueueNumber={myQueueNumber}
+              submittingStatus={submittingStatus}
+              showCompleteMsg={showCompleteMsg}
+              lastStatus={lastStatus}
+              sendNotification={sendNotification}
+              styles={styles}
+            />
+          )}
 
-         {/* 2. 個トレ進捗 (progress) */}
-         {activeMenu === 'progress' && (
-          <JukuProgressManager 
-          　currentSubjects={jukuSubjectList}
-            selectedUnits={selectedUnits}
-            openUnitModal={openUnitModal}
-            sendToGAS={sendToGAS}
-            unitMaster={unitMaster}
-            grade={grade}
-            styles={styles}
-           />
-       )}
+          {/* 2. 個トレ進捗 (progress) */}
+          {activeMenu === 'progress' && (
+            <JukuProgressManager 
+              currentSubjects={jukuSubjectList}
+              selectedUnits={selectedUnits}
+              openUnitModal={openUnitModal}
+              sendToGAS={sendToGAS}
+              unitMaster={unitMaster}
+              grade={grade}
+              styles={styles}
+            />
+          )}
        
-         {/* 3. 学校進捗 (schoolProgress) */}
-         {activeMenu === 'schoolProgress' && (
-          <SchoolProgressManager 
-          　currentSubjects={schoolSubjectList}
-            selectedUnits={selectedUnits}
-            openUnitModal={openUnitModal}
-            sendToGAS={sendToGAS}
-            schoolUnitMaster={schoolUnitMaster}
-            selectedGradeFilter={selectedGradeFilter}
-            setSelectedGradeFilter={setSelectedGradeFilter}
-            styles={styles}
-          />
-        )}
-      </main> 
-     </div>
+          {/* 3. 学校進捗 (schoolProgress) */}
+          {activeMenu === 'schoolProgress' && (
+            <SchoolProgressManager 
+              currentSubjects={schoolSubjectList}
+              selectedUnits={selectedUnits}
+              completedPages={completedPages} 
+              openUnitModal={openUnitModal}
+              sendToGAS={sendToGAS}
+              schoolUnitMaster={schoolUnitMaster}
+              selectedGradeFilter={selectedGradeFilter}
+              setSelectedGradeFilter={setSelectedGradeFilter}
+              styles={styles}
+            />
+          )}
+        </main> 
+      </div>
 
-     {/* --- モーダル・ポップアップ類 --- */}
+      {/* --- モーダル・ポップアップ類 --- */}
 
-      {/* 1. 単元選択モーダル (個トレ・学校進捗 共通) */}
-      {showUnitModal && (
-        <div style={styles.overlay} onClick={() => setShowUnitModal(false)}>
-          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>
-                {currentSelecting?.subject} 単元選択（表示中：{selectedGradeFilter}）
-              </h3>
-              <button style={styles.modalCloseX} onClick={() => setShowUnitModal(false)}>×</button>
-            </div>
-
-            {/* 学校進捗モードの時だけ学年切り替えタブを表示 */}
-            {isSchoolMode && (
-              <div style={styles.filterBar}>
-                {['中１', '中２', '中３'].map(g => (
-                  <button 
-                    key={g} 
-                    style={styles.gradeTab(selectedGradeFilter === g)}
-                    onClick={() => setSelectedGradeFilter(g)}
-                  >
-                    {g}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div style={styles.unitListScroll}>
-              <table style={{ 
-                 ...styles.unitTable, 
-                 borderCollapse: 'collapse', // 隣り合う枠線を合体させる
-                 borderSpacing: 0,           // 隙間をゼロにする
-                 width: '100%',
-                 border: '1px solid #ddd'    // 外枠
-                }}>
-                <thead>
-                  <tr style={styles.modalThRow}>
-                    <th style={styles.modalTh}>章</th>
-                    <th style={styles.modalTh}>節</th>
-                    <th style={styles.modalTh}>単元名</th>
-                    <th style={styles.modalTh}>ページ</th>
-                    <th style={styles.modalTh}>選択</th>
-                  </tr>
-                </thead>
-                <tbody>
-  {(() => {
-    // 1. フィルタリング処理
-    const filteredUnits = currentMaster.filter(d => {
-      const isSubMatch = d.科目?.trim() === currentSelecting?.subject;
-      const isGrdMatch = d.学年?.includes(selectedGradeFilter);
-      let isTxtMatch = true;
-      if (isSchoolMode) {
-        isTxtMatch = true;
-      } else {
-        if (currentSelecting?.text) {
-          isTxtMatch = d.テキスト名?.trim() === currentSelecting?.text;
-        }
-      }
-      const hasContent = (d.単元 && d.単元.trim() !== "") || (d.節 && d.節.trim() !== "");
-      return isSubMatch && isGrdMatch && isTxtMatch && hasContent;
-    });
-
-    // 2. セル結合(rowSpan)のための計算
-    const calculateSpans = (data) => {
-      const chapterSpans = new Array(data.length).fill(0);
-      const sectionSpans = new Array(data.length).fill(0);
-      
-      let i = 0;
-      while (i < data.length) {
-        // 章の結合数をカウント
-        let j = i;
-        while (j < data.length && data[j].章 === data[i].章) {
-          j++;
-        }
-        chapterSpans[i] = j - i;
-        
-        // その章の範囲内で、節の結合数をカウント
-        let k = i;
-        while (k < j) {
-          let l = k;
-          while (l < j && data[l].節 === data[k].節) {
-            l++;
-          }
-          sectionSpans[k] = l - k;
-          k = l;
-        }
-        i = j;
-      }
-      return { chapterSpans, sectionSpans };
-    };
-
-    const { chapterSpans, sectionSpans } = calculateSpans(filteredUnits);
-    
-   // 3. レンダリング
-return filteredUnits.map((u, i) => {
-  const selKey = `${u.科目}-${u.テキスト名}`;
-  const unitId = `${u.章}-${u.単元}-${u.ページ}`;
-  const isChecked = (selectedUnits[selKey] || []).includes(unitId);
-
-  // 枠線を「全方向」に「強制」するスタイル
-  const tdStyle = { 
-    border: '1.5px solid #0a0a0a', // これが縦線・横線の正体です
-    padding: '10px 8px', 
-    backgroundColor: '#fff',
-    verticalAlign: 'middle',
-    fontSize: '13px',
-    boxSizing: 'border-box' // 枠線を含めてサイズ計算する
-  };
-
-  return (
-    <tr key={i} style={styles.modalTr}>
-      {/* 章 */}
-      {chapterSpans[i] > 0 && (
-        <td 
-          rowSpan={chapterSpans[i]} 
-          style={{ ...styles.modalTdMerge, ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}
-        >
-          {u.章}
-        </td>
-      )}
-      {/* 節 */}
-      {sectionSpans[i] > 0 && (
-        <td 
-          rowSpan={sectionSpans[i]} 
-          style={{ ...styles.modalTdMerge, ...tdStyle, textAlign: 'center' }}
-        >
-          {u.節}
-        </td>
-      )}
-      {/* 単元名 */}
-      <td style={{ ...styles.modalTdUnit, ...tdStyle }}>{u.単元}</td>
-      {/* ページ */}
-      <td style={{ ...styles.modalTdPage, ...tdStyle, textAlign: 'center' }}>{u.ページ || ""}</td>
-      {/* 選択 */}
-      <td style={{ ...styles.modalTdCheck, ...tdStyle, textAlign: 'center' }}>
-        <input 
-          type="checkbox" 
-          checked={isChecked} 
-          onChange={(e) => {
-            const curArr = selectedUnits[selKey] || [];
-            const newArr = e.target.checked ? [...curArr, unitId] : curArr.filter(id => id !== unitId);
-            setSelectedUnits({ ...selectedUnits, [selKey]: newArr });
-          }}
-        />
-      </td>
-    </tr>
-  );
-});
-  })()}
-</tbody>
-              </table>
-            </div>
-            <div style={styles.modalFooter}>
-              <button style={styles.confirmBtn} onClick={() => setShowUnitModal(false)}>選択を確定する</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 共通の単元選択モーダル（新設子コンポーネントへの移行完了） */}
+      <UnitSelectionModal
+        showUnitModal={showUnitModal}
+        setShowUnitModal={setShowUnitModal}
+        currentSelecting={currentSelecting}
+        isSchoolMode={isSchoolMode}
+        selectedGradeFilter={selectedGradeFilter}
+        setSelectedGradeFilter={setSelectedGradeFilter}
+        currentMaster={currentMaster}
+        selectedUnits={selectedUnits}
+        setSelectedUnits={setSelectedUnits}
+        completedPages={completedPages}
+        styles={styles}
+      />
 
       {/* 2. 過去の振り返り確認モーダル */}
       {showReviewModal && (
@@ -524,7 +385,6 @@ return filteredUnits.map((u, i) => {
               <button style={styles.modalCloseX} onClick={() => setShowScoreModal(false)}>×</button>
             </div>
             <div style={styles.unitListScroll}>
-              {/* ✅ srcを新設した関数を呼び出す形に変更 */}
               <iframe 
                 src={getScoreFormUrl()} 
                 style={{ width: '100%', height: '70vh', border: 'none' }} 
@@ -535,7 +395,7 @@ return filteredUnits.map((u, i) => {
         </div>
       )}
 
-      {/* 4. テスト振り返りポップアップ (Google Forms) */}
+      {/* 4. テスト振り返りポップアップ */}
       {showTestReviewModal && (
         <div style={styles.overlay} onClick={() => setShowTestReviewModal(false)}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
