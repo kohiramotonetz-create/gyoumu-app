@@ -6,6 +6,8 @@ import JukuProgressManager from './components/JukuProgressManager.jsx';
 import SchoolProgressManager from './components/SchoolProgressTracker.jsx';
 // 新設した子コンポーネントをインポート
 import UnitSelectionModal from './components/UnitSelectionModal.jsx';
+import PastReviewModal from './components/PastReviewModal.jsx';
+import PastReviewView from './components/PastReviewView.jsx';
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
@@ -41,7 +43,10 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
   const [myReviews, setMyReviews] = useState([]);
   const [reviewLoading, setReviewLoading] = useState(false);
-  const [showReviewModal, setShowReviewModal] = useState(false);
+  // 💡 【新規追加】テスト選択ドロップリスト用、および選択中のテスト名、表示確定したデータ用のステート
+  const [testOptions, setTestOptions] = useState([]); // GASから返されるユニークなテスト一覧（H列）
+  const [selectedTest, setSelectedTest] = useState(''); // ドロップダウンで選択中の値
+  const [displayReviewData, setDisplayReviewData] = useState(null); // 「表示」ボタン押下後に描画するデータ
 
   const [displayGrade, setDisplayGrade] = useState(toFullWidth(grade));
   const [completedPages, setCompletedPages] = useState([]);
@@ -126,18 +131,12 @@ export default function StudentView({ userId, userName, grade, school, unit, han
     });
   };
 
-  const fetchMyReviews = async () => {
-    setReviewLoading(true);
-    try {
-      const response = await axios.post(GAS_URL, JSON.stringify({
-        action: "getMyReviews", apiKey: API_KEY, userId: userId
-      }), { headers: { 'Content-Type': 'text/plain' } });
-      if (response.data.result === "success") setMyReviews(response.data.reviews);
-    } catch (e) { console.error("振り返り取得失敗", e); }
-    finally { setReviewLoading(false); }
-  };
 
-  useEffect(() => { if (showReviewModal) fetchMyReviews(); }, [showReviewModal]);
+  useEffect(() => {
+    if (activeMenu === 'schoolProgress' || activeMenu === 'progress') {
+      fetchCompletedUnits();
+    }
+  }, [activeMenu]);
 
   // --- 4. アクションハンドラ ---
   const sendToGAS = async (action, successMsg) => {
@@ -269,8 +268,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
             <button style={{...styles.navItem(false),opacity: isSukimaLoading ? 0.6 : 1,cursor: isSukimaLoading ? 'wait' : 'pointer' }} onClick={openSukimaKun} disabled={isSukimaLoading}>{isSukimaLoading ? "⏳ 読み込み中..." : "✨ スキマ君を起動"}</button>
             <button style={styles.navItem(false)} onClick={() => setShowScoreModal(true)}>📝 点数回収</button>
             <button style={styles.navItem(false)} onClick={() => setShowTestReviewModal(true)}>📝 テスト振り返り</button>
-            <button style={styles.navItem(false)} onClick={() => setShowReviewModal(true)}>📖 過去の振り返りを確認</button>
-          </nav>
+            <button style={styles.navItem(activeMenu === 'pastReviews')} onClick={() => setActiveMenu('pastReviews')}>📖 過去の振り返りを確認</button>          </nav>
           <button onClick={handleLogout} style={styles.logoutBtn}>ログアウト</button>
         </aside>
 
@@ -301,6 +299,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
               sendToGAS={sendToGAS}
               unitMaster={unitMaster}
               grade={grade}
+              completedPages={completedPages} // 💡 ここにこれを追記して手渡した（初期表示バグ修正）
               styles={styles}
             />
           )}
@@ -319,7 +318,17 @@ export default function StudentView({ userId, userName, grade, school, unit, han
               styles={styles}
             />
           )}
-        </main> 
+
+          {/* 💡 【分離完了】メイン領域用子コンポーネントを呼び出すだけに集約 */}
+          {activeMenu === 'pastReviews' && (
+            <PastReviewView 
+              styles={styles}
+              GAS_URL={GAS_URL}
+              API_KEY={API_KEY}
+              userId={userId}
+            />
+          )}
+        </main>
       </div>
 
       {/* --- モーダル・ポップアップ類 --- */}
@@ -339,42 +348,6 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         styles={styles}
       />
 
-      {/* 2. 過去の振り返り確認モーダル */}
-      {showReviewModal && (
-        <div style={styles.overlay} onClick={() => setShowReviewModal(false)}>
-          <div style={{...styles.modalContent, maxWidth: '600px'}} onClick={e => e.stopPropagation()}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>📖 過去の振り返り</h3>
-              <button style={styles.modalCloseX} onClick={() => setShowReviewModal(false)}>×</button>
-            </div>
-            <div style={{...styles.unitListScroll, padding: '15px'}}>
-              {reviewLoading ? (
-                <p style={{textAlign: 'center', padding: '20px'}}>読み込み中...</p>
-              ) : myReviews.length === 0 ? (
-                <p style={{textAlign: 'center', padding: '20px', color: '#999'}}>まだデータがありません。</p>
-              ) : (
-                myReviews.map((r, i) => (
-                  <div key={i} style={styles.reviewCard}>
-                    <div style={styles.reviewDate}>📅 {r["タイムスタンプ"]}</div>
-                    <div style={styles.reviewSection}>
-                      <strong style={{color: '#27ae60'}}>✅ よかったこと</strong>
-                      <div style={styles.reviewText}>{r["よかったこと"]}</div>
-                    </div>
-                    <div style={styles.reviewSection}>
-                      <strong style={{color: '#e67e22'}}>⚠️ 改善点</strong>
-                      <div style={styles.reviewText}>{r["改善点"]}</div>
-                    </div>
-                    <div style={styles.reviewSection}>
-                      <strong style={{color: '#2980b9'}}>🎯 次回に向けて</strong>
-                      <div style={styles.reviewText}>{r["次回に向けて"]}</div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 3. 点数回収ポップアップ */}
       {showScoreModal && (

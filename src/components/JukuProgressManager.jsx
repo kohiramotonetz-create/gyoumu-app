@@ -1,5 +1,4 @@
-// 講師：個トレ進捗管理
-
+// 生徒：個トレ進捗管理（過去入力の自動✅表示対応完全版）
 import React from 'react';
 
 const JukuProgressManager = ({ 
@@ -9,6 +8,7 @@ const JukuProgressManager = ({
   sendToGAS, 
   unitMaster, // 個トレ用マスター
   grade, // ログイン時の学年
+  completedPages = [], // 💡 親から受け取る過去完了データ配列 (例: ["数学iワークドリルp4"])
   styles 
 }) => {
   
@@ -19,6 +19,31 @@ const JukuProgressManager = ({
       .map(d => d.テキスト名?.trim())
       .filter((v, i, a) => v && a.indexOf(v) === i);
     return books.length > 0 ? books : ["テキスト未設定"];
+  };
+
+  // 💡 対象のデータ項目が、個トレの過去完了履歴（科目＋テキスト名＋ページ）と一致するか正確に判定する
+  const isPageCompleted = (d) => {
+    if (!d.ページ || d.ページ.trim() === "") return false;
+    
+    const subject = d.科目?.trim() || "";
+    const textName = d.テキスト名?.trim() || "";
+    const page = d.ページ?.trim() || "";
+    
+    // GAS側の仕様（getStudentKoToreProgress）に100%合わせるため
+    // 「科目名 ＋ テキスト名 ＋ ページ」を結合し、スペース・ドットを消して小文字化
+    const target = `${subject}${textName}${page}`.toLowerCase().replace(/[\.\s]/g, "");
+    
+    return completedPages.includes(target);
+  };
+
+  // 💡 対象の教科・テキストに属するマスタ項目の中に、1つでも過去入力（完了）の単元があるか判定する
+  const hasCompletedUnit = (subject, book) => {
+    return unitMaster.some(d => {
+      const isSubMatch = d.科目?.trim() === subject;
+      const isGrdMatch = d.学年?.includes(grade);
+      const isTxtMatch = d.テキスト名?.trim() === book;
+      return isSubMatch && isGrdMatch && isTxtMatch && isPageCompleted(d);
+    });
   };
 
   // 選択された単元名を詳細に表示する（二重のp.を防止）
@@ -90,6 +115,10 @@ const JukuProgressManager = ({
                         )}
                         <td style={{ ...styles.td, border: '1px solid #ccc', textAlign: 'left', padding: '10px' }}>
                           {book}
+                          {/* 💡 過去の入力履歴（completedPages）にデータが存在すれば、画面初期表示から緑のチェック（✅）を表示 */}
+                          {hasCompletedUnit(sub, book) && (
+                            <span style={{ color: '#22c55e', marginLeft: '6px', fontWeight: 'bold' }} title="過去に入力履歴あり">✅</span>
+                          )}
                         </td>
                         <td style={{ ...styles.td, border: '1px solid #ccc', padding: '8px', verticalAlign: 'top' }}>
                           {getSelectedUnitNames(sub, book)}

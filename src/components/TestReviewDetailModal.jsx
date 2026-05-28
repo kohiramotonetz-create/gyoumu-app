@@ -49,40 +49,76 @@ const TestReviewDetailModal = ({ student, testName, year, onClose }) => {
           </p>
         </div>
 
-        {/* 各科目の詳細表 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          {Object.keys(subjectMap).map((key) => {
-            const subData = student.subjects?.[key];
-            return (
-              <div key={key} style={{ border: '1px solid #ddd', borderRadius: '6px', overflow: 'hidden' }}>
-                {/* 科目名ヘッダー */}
-                <div style={{ backgroundColor: '#f1f5f9', padding: '8px 12px', fontWeight: 'bold', fontSize: '14px', borderBottom: '1px solid #ddd', color: '#334155' }}>
-                  📚 {subjectMap[key]}
-                </div>
-                {/* 3項目の一覧内容 */}
-                <div style={{ padding: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', backgroundColor: '#fff' }}>
-                  <div>
-                    <div style={{ fontSize: '11px', color: '#166534', fontWeight: 'bold', marginBottom: '4px' }}>▼ 点につながったこと（成果）</div>
-                    <div style={{ fontSize: '13px', whiteSpace: 'pre-wrap', color: subData?.good ? '#333' : '#999' }}>
-                      {subData?.good ? subData.good : "（未入力）"}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '11px', color: '#b91c1c', fontWeight: 'bold', marginBottom: '4px' }}>▼ 点につながらなかったこと（改善）</div>
-                    <div style={{ fontSize: '13px', whiteSpace: 'pre-wrap', color: subData?.bad ? '#333' : '#999' }}>
-                      {subData?.bad ? subData.bad : "（未入力）"}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 'bold', marginBottom: '4px' }}>▼ 次回の定期テストに向けて</div>
-                    <div style={{ fontSize: '13px', whiteSpace: 'pre-wrap', color: subData?.next ? '#333' : '#999' }}>
-                      {subData?.next ? subData.next : "（未入力）"}
-                    </div>
-                  </div>
+        {/* メインエリア（全体振り返り ＋ 各科目振り返り） */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+          
+          {/* 💡 追加：テスト全体の振り返り（生徒用画面のデザインを踏襲） */}
+          <div style={{ border: '1px solid #166534', borderRadius: '6px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <div style={{ backgroundColor: '#eef9f1', padding: '10px 15px', fontWeight: 'bold', fontSize: '14px', borderBottom: '1px solid #166534', color: '#166534' }}>
+              📊 テスト全体の振り返り
+            </div>
+            <div style={{ padding: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', backgroundColor: '#fff' }}>
+              <div>
+                <div style={{ fontSize: '11px', color: '#166534', fontWeight: 'bold', marginBottom: '6px' }}>✅ テスト全体を振り返ってよかったこと</div>
+                <div style={{ fontSize: '13px', whiteSpace: 'pre-wrap', color: student.details?.good ? '#333' : '#999', lineHeight: '1.5' }}>
+                  {student.details?.good ? student.details.good : "（未入力）"}
                 </div>
               </div>
-            );
-          })}
+              <div>
+                <div style={{ fontSize: '11px', color: '#b91c1c', fontWeight: 'bold', marginBottom: '6px' }}>⚠️ テスト全体を振り返っての改善点</div>
+                <div style={{ fontSize: '13px', whiteSpace: 'pre-wrap', color: student.details?.bad ? '#333' : '#999', lineHeight: '1.5' }}>
+                  {student.details?.bad ? student.details.bad : "（未入力）"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 'bold', marginBottom: '6px' }}>🎯 次回に向けて</div>
+                <div style={{ fontSize: '13px', whiteSpace: 'pre-wrap', color: student.details?.next ? '#333' : '#999', lineHeight: '1.5' }}>
+                  {student.details?.next ? student.details.next : "（未入力）"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 各科目の詳細表 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <h4 style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#334155', borderLeft: '4px solid #64748b', paddingLeft: '8px' }}>
+              📚 各科目ごとの振り返り
+            </h4>
+
+            {Object.keys(subjectMap).map((key) => {
+              const subData = student.subjects?.[key];
+              return (
+                <div key={key} style={{ border: '1px solid #ddd', borderRadius: '6px', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  {/* 科目名ヘッダー */}
+                  <div style={{ backgroundColor: '#f1f5f9', padding: '8px 12px', fontWeight: 'bold', fontSize: '13px', borderBottom: '1px solid #ddd', color: '#334155' }}>
+                    ● {subjectMap[key]}
+                  </div>
+                  {/* 3項目の一覧内容 */}
+                  <div style={{ padding: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', backgroundColor: '#fff' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#166534', fontWeight: 'bold', marginBottom: '4px' }}>▼ 点につながったこと（成果）</div>
+                      <div style={{ fontSize: '13px', whiteSpace: 'pre-wrap', color: subData?.good ? '#333' : '#999', lineHeight: '1.4' }}>
+                        {subData?.good ? subData.good : "（未入力）"}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#b91c1c', fontWeight: 'bold', marginBottom: '4px' }}>▼ 点につながらなかったこと（改善）</div>
+                      <div style={{ fontSize: '13px', whiteSpace: 'pre-wrap', color: subData?.bad ? '#333' : '#999', lineHeight: '1.4' }}>
+                        {subData?.bad ? subData.bad : "（未入力）"}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 'bold', marginBottom: '4px' }}>▼ 次回の定期テストに向けて</div>
+                      <div style={{ fontSize: '13px', whiteSpace: 'pre-wrap', color: subData?.next ? '#333' : '#999', lineHeight: '1.4' }}>
+                        {subData?.next ? subData.next : "（未入力）"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
         </div>
 
         {/* 下部閉じるボタン */}
