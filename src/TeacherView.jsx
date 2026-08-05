@@ -10,13 +10,14 @@ import AccountGenerator from './components/AccountGenerator.jsx'
 import SchoolProgressTracker from './components/SchoolProgressManager.jsx'
 import KoToreProgressTracker from './components/KoToreProgressTracker.jsx'
 import AppUsageTracker from './components/AppUsageTracker.jsx'
+import SukimakunPermissionManager from './components/SukimakunPermissionManager.jsx'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
 const APP_VERSION = "3.5.3";
 
 // 【修正箇所】引数に「school」を正しく追加して受け取れるようにする
-export default function TeacherView({ userName, role, unit, school, handleLogout }) {
+export default function TeacherView({ userName, role, unit, school, sessionToken, handleLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeContent, setActiveContent] = useState('notices');
   const [notifications, setNotifications] = useState([]);
@@ -133,6 +134,7 @@ export default function TeacherView({ userName, role, unit, school, handleLogout
     { id: 'takamatsu-staff', label: '高松スタッフ(SharePoint)', icon: '🏢', isLink: true, url: 'https://edunetz.sharepoint.com/sites/takamatustaff/SitePages/CollabHome.aspx?ga=1' },
     { id: 'model-answer', label: '個トレ２（模範解答）', icon: '✅' },
     { id: 'test-review-check', label: 'テスト振り返り確認', icon: '📝' },
+    { id: 'sukimakun-permissions', label: 'スキマ君利用設定', icon: '⚙️', adminOnly: true },
   ];
 
   const menuItems = useMemo(() => {
@@ -217,6 +219,17 @@ export default function TeacherView({ userName, role, unit, school, handleLogout
                 schools={schools}
                 unitOptions={unitOptions} // 💡 ここにこれを追記して手渡した
                 styles={styles}
+              />
+            )}
+
+            {activeContent === 'sukimakun-permissions' && role === 'admin' && (
+              <SukimakunPermissionManager
+                GAS_URL={GAS_URL}
+                API_KEY={API_KEY}
+                sessionToken={sessionToken}
+                schools={schools}
+                styles={styles}
+                onSessionExpired={handleLogout}
               />
             )}
 

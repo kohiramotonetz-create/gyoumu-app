@@ -205,9 +205,25 @@ Googleスプレッドシートの実カラム、型、制約、追記・更新�
 
 ## 17. 未確認事項
 
-- GASコード、認証・権限・データ更新・エラー処理。
+- ローカルGASコードの本番デプロイ後の挙動、既存action全体の認証・権限・データ更新・エラー処理。
 - Googleスプレッドシートの構造、データ、共有範囲。
 - スキマ君側の認証、トークン期限・失効・利用ログ・小テスト結果。
 - Vercelプロジェクト、環境変数、デプロイ設定、本番・検証環境。
 - 講師・校舎責任者の担当範囲をAPI側で強制する仕組み。
 - 同日重複登録、授業終了記録、通知表成績、テスト目標点の保存処理。
+
+## 18. Issue-001 スキマ君利用コンテンツ制御
+
+- GASに、初回セットアップ専用の21件の初期コンテンツ定義が1か所ある。通常のAPI応答・権限判定には使用しない。
+- 「スキマ君コンテンツ」は`contentId`、`displayName`、`category`、`schoolType`、`subject`、`enabled`、`sortOrder`の7列を持ち、実行時の唯一のコンテンツ情報源である。
+- 共通読取処理は空の`contentId`、重複`contentId`、数値化できない`sortOrder`をエラーとし、`enabled`をboolean化して`sortOrder`とシート行順で安定ソートする。
+- 手動実行用の`setupSukimakunPermissionSheets`が、「スキマ君コンテンツ」「スキマ君利用権限」「管理セッション」の3シートを初期化し、初期定義にだけ存在するcontentIdを追加する。旧4列コンテンツシートは既存の有効状態と表示順を新しい列へ移して7列化する。自動実行はされない。
+- 手動移行用の`initializeExistingStudentSukimakunPermissions`が、既存studentへ有効な全コンテンツを初期許可する。
+- ユーザーマスター上の現在roleがadminの場合だけ、`login`成功応答に15分有効の`sessionToken`と`sessionExpiresAt`を追加し、管理action利用時に期限を延長する。admin以外は管理セッションシートへ依存しない。
+- `getSukimakunPermissionMatrix`と`updateSukimakunPermissions`は、GAS側で現在のroleがadminであることを再確認する。
+- 権限未設定の既存生徒は移行互換として全有効コンテンツ許可を返し、`permissionsInitialized`で未設定を識別する。
+- `validateToken`はstudentに`allowedContentIds`と`permissionsInitialized`を追加して返す。既存の成功項目とトークン失効処理は維持する。
+- 新規student作成時は全有効コンテンツを初期許可し、権限初期化に失敗した場合は作成したユーザー行を削除してエラーを返す。
+- Reactは管理セッションをメモリstateだけに保持し、logout時にGASへ失効要求を送る。
+- admin専用の「スキマ君利用設定」画面で、校舎・学年別の生徒取得と1名ずつの権限更新ができる。チェックボックスはAPIがマスターから返す`contents`を使って動的生成する。
+- スキマ君本体側の権限強制は本リポジトリの実装対象外であり、未実装・未確認である。

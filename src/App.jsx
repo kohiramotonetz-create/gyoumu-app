@@ -20,6 +20,7 @@ function App() {
   const [userName, setUserName] = useState('');
   const [school, setSchool] = useState('');  // 校舎情報
   const [unit, setUnit] = useState('');    
+  const [sessionToken, setSessionToken] = useState('');
   const [loading, setLoading] = useState(false);
 
   // --- ★ パスワード強度チェック関数 ---
@@ -72,6 +73,8 @@ function App() {
         setRole(response.data.role);
         setGrade(response.data.grade);
         setSchool(fetchedSchool);
+        setSessionToken(response.data.sessionToken || '');
+        setPassword('');
 
         const detectedUnit = await getUnitFromCSV(fetchedSchool);
         setUnit(detectedUnit);
@@ -83,7 +86,7 @@ function App() {
           setStep('menu');
         }
       } else {
-        alert("認証に失敗しました。");
+        alert(response.data.message || "認証に失敗しました。");
       }
     } catch (e) {
       console.error(e);
@@ -130,6 +133,7 @@ function App() {
 
   // --- ログアウト処理 ---
   const handleLogout = () => {
+    const tokenToInvalidate = sessionToken;
     setStep('login');
     setRole('');
     setUserId('');
@@ -139,6 +143,20 @@ function App() {
     setGrade('');
     setSchool('');
     setUnit('');
+    setSessionToken('');
+
+    if (tokenToInvalidate) {
+      axios.post(GAS_URL, JSON.stringify({
+        action: 'logout',
+        apiKey: API_KEY,
+        sessionToken: tokenToInvalidate
+      }), {
+        headers: { 'Content-Type': 'text/plain' },
+        timeout: 10000
+      }).catch(() => {
+        // ローカル状態は先に破棄し、サーバー側の期限切れでも失効させる。
+      });
+    }
   };
 
   return (
@@ -175,6 +193,7 @@ function App() {
                 role={role} 
                 unit={unit} 
                 school={school} //
+                sessionToken={sessionToken}
                 handleLogout={handleLogout} 
               />
             </div>

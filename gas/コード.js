@@ -19,6 +19,393 @@ function openSpreadsheetByProperty(propertyName) {
   return SpreadsheetApp.openById(spreadsheetId);
 }
 
+const MANAGEMENT_SESSION_DURATION_MS = 15 * 60 * 1000;
+const SUKIMAKUN_CONTENT_SHEET_NAME = "スキマ君コンテンツ";
+const SUKIMAKUN_PERMISSION_SHEET_NAME = "スキマ君利用権限";
+const MANAGEMENT_SESSION_SHEET_NAME = "管理セッション";
+const SUKIMAKUN_CONTENT_HEADERS = ["contentId", "displayName", "category", "schoolType", "subject", "enabled", "sortOrder"];
+const SUKIMAKUN_PERMISSION_HEADERS = ["userId", "contentId", "enabled", "updatedAt", "updatedBy"];
+const MANAGEMENT_SESSION_HEADERS = ["sessionToken", "userId", "role", "expiresAt", "createdAt"];
+
+const DEFAULT_SUKIMAKUN_CONTENTS = [
+  ["paper_english_test", "英単語テスト作成（紙）", "general", "all", "english", true, 1],
+  ["junior_english_quiz", "1問ずつテスト（自習）", "general", "all", "english", true, 2],
+  ["kakitan", "書き単", "general", "all", "english", true, 3],
+  ["irregular_verbs", "英単語（不規則変化）", "general", "all", "english", true, 4],
+  ["junior_kobun", "古文単語（自習）", "general", "all", "japanese", true, 5],
+  ["target_1900", "ターゲット1900", "general", "all", "english", true, 6],
+  ["target_1200", "ターゲット1200", "general", "all", "english", true, 7],
+  ["sokudoku_english", "速読英単語", "general", "all", "english", true, 8],
+  ["dragon_english", "ドラゴンイングリッシュ", "general", "all", "english", true, 9],
+  ["yumetan", "ユメタン", "general", "all", "english", true, 10],
+  ["kikutan_pre2", "キクタン準2級", "general", "all", "english", true, 11],
+  ["kakushin_kobun_351", "核心古文単語351", "general", "all", "japanese", true, 12],
+  ["kobun_315", "古文単語315", "general", "all", "japanese", true, 13],
+  ["iroha_nihoheto", "いろはにほへと", "general", "all", "japanese", true, 14],
+  ["kobun_325", "古文325", "general", "all", "japanese", true, 15],
+  ["formula_600", "FORMULA600", "general", "all", "english", true, 16],
+  ["kougei_art", "高松工芸美術科", "general", "all", "other", true, 17],
+  ["miki_bunri", "三木高校文理コース", "general", "all", "other", true, 18],
+  ["takamatsu_higashi_humanities", "高松東高校2年人文コース", "general", "all", "other", true, 19],
+  ["kanji_test", "定期テスト 漢字対策", "general", "all", "japanese", true, 20],
+  ["chemistry_formulas", "化学式・イオン式", "general", "all", "science", true, 21]
+];
+
+function normalizeUserId(value) {
+  return String(value || "").replace(/^'/, "").trim();
+}
+
+function toSafeSheetText(value) {
+  const text = String(value || "");
+  return /^[=+\-@]/.test(text) ? "'" + text : text;
+}
+
+function isEnabledValue(value) {
+  return value === true || String(value).trim().toUpperCase() === "TRUE";
+}
+
+function getRequiredSheet(sheetName) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) throw new Error(`Required sheet is not configured: ${sheetName}`);
+  return sheet;
+}
+
+function ensureSheetWithHeaders(spreadsheet, sheetName, headers, result) {
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(sheetName);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    result.createdSheets.push(sheetName);
+    return sheet;
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    result.initializedHeaders.push(sheetName);
+    return sheet;
+  }
+
+  const actualHeaders = sheet.getRange(1, 1, 1, headers.length).getValues()[0].map(String);
+  if (actualHeaders.join("\t") !== headers.join("\t")) {
+    result.warnings.push(`Header mismatch: ${sheetName}`);
+  }
+  return sheet;
+}
+
+function migrateLegacySukimakunContentSheet(spreadsheet, result) {
+  const sheet = spreadsheet.getSheetByName(SUKIMAKUN_CONTENT_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() === 0) return;
+  const legacyHeaders = ["contentId", "displayName", "enabled", "sortOrder"];
+  const actualHeaders = sheet.getRange(1, 1, 1, legacyHeaders.length).getValues()[0].map(String);
+  if (actualHeaders.join("\t") !== legacyHeaders.join("\t")) return;
+  if (sheet.getLastColumn() > legacyHeaders.length) {
+    result.warnings.push("Legacy content sheet has unexpected extra columns; migration was skipped");
+    return;
+  }
+
+  const legacyRows = sheet.getRange(1, 1, sheet.getLastRow(), legacyHeaders.length).getValues();
+  const migratedRows = [SUKIMAKUN_CONTENT_HEADERS].concat(legacyRows.slice(1).map(row => [
+    row[0], row[1], "general", "all", "other", row[2], row[3]
+  ]));
+  sheet.getRange(1, 1, migratedRows.length, SUKIMAKUN_CONTENT_HEADERS.length).setValues(migratedRows);
+  result.migratedLegacyContentSheet = true;
+}
+
+function setupSukimakunPermissionSheets() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const result = { createdSheets: [], initializedHeaders: [], migratedLegacyContentSheet: false, addedContents: 0, skippedContents: 0, warnings: [] };
+  migrateLegacySukimakunContentSheet(spreadsheet, result);
+  const contentSheet = ensureSheetWithHeaders(spreadsheet, SUKIMAKUN_CONTENT_SHEET_NAME, SUKIMAKUN_CONTENT_HEADERS, result);
+  ensureSheetWithHeaders(spreadsheet, SUKIMAKUN_PERMISSION_SHEET_NAME, SUKIMAKUN_PERMISSION_HEADERS, result);
+  ensureSheetWithHeaders(spreadsheet, MANAGEMENT_SESSION_SHEET_NAME, MANAGEMENT_SESSION_HEADERS, result);
+
+  const rows = contentSheet.getDataRange().getValues();
+  const actualContentHeaders = rows.length > 0 ? rows[0].slice(0, SUKIMAKUN_CONTENT_HEADERS.length).map(String) : [];
+  if (actualContentHeaders.join("\t") !== SUKIMAKUN_CONTENT_HEADERS.join("\t")) {
+    result.warnings.push("Content initialization was skipped because the header could not be safely migrated");
+    result.createdCount = result.createdSheets.length;
+    result.warningCount = result.warnings.length;
+    return result;
+  }
+  const counts = Object.create(null);
+  for (let i = 1; i < rows.length; i++) {
+    const contentId = String(rows[i][0] || "").trim();
+    const hasAnyValue = rows[i].slice(0, SUKIMAKUN_CONTENT_HEADERS.length).some(value => String(value || "").trim() !== "");
+    if (!contentId) {
+      if (hasAnyValue) result.warnings.push(`Empty contentId detected at row ${i + 1}`);
+      continue;
+    }
+    counts[contentId] = (counts[contentId] || 0) + 1;
+    const sortOrder = rows[i][6];
+    if (String(sortOrder || "").trim() === "" || !Number.isFinite(Number(sortOrder))) {
+      result.warnings.push(`Invalid sortOrder detected at row ${i + 1}`);
+    }
+  }
+  Object.keys(counts).forEach(contentId => {
+    if (counts[contentId] > 1) result.warnings.push(`Duplicate contentId detected: ${contentId}`);
+  });
+
+  const additions = DEFAULT_SUKIMAKUN_CONTENTS.filter(row => {
+    if (counts[row[0]]) {
+      result.skippedContents++;
+      return false;
+    }
+    return true;
+  });
+  if (additions.length > 0) {
+    contentSheet.getRange(contentSheet.getLastRow() + 1, 1, additions.length, SUKIMAKUN_CONTENT_HEADERS.length).setValues(additions);
+    result.addedContents = additions.length;
+  }
+  result.createdCount = result.createdSheets.length;
+  result.warningCount = result.warnings.length;
+  return result;
+}
+
+function getSukimakunContentMaster() {
+  const sheet = getRequiredSheet(SUKIMAKUN_CONTENT_SHEET_NAME);
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows.length > 0 ? rows[0].slice(0, SUKIMAKUN_CONTENT_HEADERS.length).map(String) : [];
+  if (headers.join("\t") !== SUKIMAKUN_CONTENT_HEADERS.join("\t")) {
+    throw new Error("スキマ君コンテンツのヘッダーが不正です");
+  }
+  const contentMap = Object.create(null);
+  const contents = [];
+  for (let i = 1; i < rows.length; i++) {
+    const values = rows[i].slice(0, SUKIMAKUN_CONTENT_HEADERS.length);
+    if (values.every(value => String(value || "").trim() === "")) continue;
+    const contentId = String(rows[i][0] || "").trim();
+    if (!contentId) throw new Error(`Empty contentId detected at row ${i + 1}`);
+    if (contentMap[contentId]) throw new Error(`Duplicate contentId detected: ${contentId}`);
+    const rawSortOrder = rows[i][6];
+    if (String(rawSortOrder || "").trim() === "" || !Number.isFinite(Number(rawSortOrder))) {
+      throw new Error(`Invalid sortOrder detected at row ${i + 1}`);
+    }
+    const content = {
+      contentId,
+      displayName: String(rows[i][1] || "").trim(),
+      category: String(rows[i][2] || "").trim(),
+      schoolType: String(rows[i][3] || "").trim(),
+      subject: String(rows[i][4] || "").trim(),
+      enabled: isEnabledValue(rows[i][5]),
+      sortOrder: Number(rawSortOrder),
+      sourceRowIndex: i
+    };
+    contentMap[contentId] = content;
+    contents.push(content);
+  }
+  contents.sort((a, b) => a.sortOrder - b.sortOrder || a.sourceRowIndex - b.sourceRowIndex || a.contentId.localeCompare(b.contentId));
+  const publicContents = contents.map(content => ({
+    contentId: content.contentId,
+    displayName: content.displayName,
+    category: content.category,
+    schoolType: content.schoolType,
+    subject: content.subject,
+    enabled: content.enabled,
+    sortOrder: content.sortOrder
+  }));
+  const publicContentMap = Object.create(null);
+  publicContents.forEach(content => { publicContentMap[content.contentId] = content; });
+  return {
+    contents: publicContents,
+    enabledContents: publicContents.filter(content => content.enabled),
+    contentMap: publicContentMap
+  };
+}
+
+function getSukimakunContents(includeDisabled) {
+  const master = getSukimakunContentMaster();
+  return includeDisabled ? master.contents : master.enabledContents;
+}
+
+function getSukimakunPermissionState(userId, activeContents) {
+  const normalizedUserId = normalizeUserId(userId);
+  const activeIds = new Set(activeContents.map(content => content.contentId));
+  const rows = getRequiredSheet(SUKIMAKUN_PERMISSION_SHEET_NAME).getDataRange().getValues();
+  const seen = {};
+  const allowedContentIds = [];
+  let unknownContentIdCount = 0;
+  let emptyContentIdCount = 0;
+  let permissionsInitialized = false;
+  for (let i = 1; i < rows.length; i++) {
+    if (normalizeUserId(rows[i][0]) !== normalizedUserId) continue;
+    permissionsInitialized = true;
+    const contentId = String(rows[i][1] || "").trim();
+    if (!contentId) {
+      emptyContentIdCount++;
+      continue;
+    }
+    if (seen[contentId]) throw new Error(`Duplicate permission row detected for contentId: ${contentId}`);
+    seen[contentId] = true;
+    if (!activeIds.has(contentId)) {
+      unknownContentIdCount++;
+      continue;
+    }
+    if (isEnabledValue(rows[i][2])) allowedContentIds.push(contentId);
+  }
+  return {
+    permissionsInitialized,
+    allowedContentIds: permissionsInitialized ? allowedContentIds : activeContents.map(content => content.contentId),
+    warnings: { unknownContentIdCount, emptyContentIdCount }
+  };
+}
+
+function findUserRecord(userId) {
+  const normalizedUserId = normalizeUserId(userId);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (normalizeUserId(rows[i][1]) === normalizedUserId) {
+      return { rowIndex: i + 1, userId: normalizedUserId, school: rows[i][0], name: rows[i][4], grade: rows[i][5], role: String(rows[i][10] || "").trim() };
+    }
+  }
+  return null;
+}
+
+function createManagementSession(userId, role) {
+  const sheet = getRequiredSheet(MANAGEMENT_SESSION_SHEET_NAME);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + MANAGEMENT_SESSION_DURATION_MS);
+  const sessionToken = Utilities.getUuid() + Utilities.getUuid();
+  sheet.appendRow([sessionToken, toSafeSheetText(normalizeUserId(userId)), String(role || "").trim(), expiresAt, now]);
+  return { sessionToken, sessionExpiresAt: expiresAt.toISOString() };
+}
+
+function validateManagementSession(sessionToken, extendExpiration) {
+  if (!sessionToken || typeof sessionToken !== "string") throw new Error("管理セッションが必要です");
+  const sheet = getRequiredSheet(MANAGEMENT_SESSION_SHEET_NAME);
+  const rows = sheet.getDataRange().getValues();
+  const now = new Date();
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || "") !== sessionToken) continue;
+    const expiresAt = new Date(rows[i][3]);
+    if (!(expiresAt instanceof Date) || isNaN(expiresAt.getTime()) || now >= expiresAt) {
+      sheet.deleteRow(i + 1);
+      throw new Error("管理セッションが無効または期限切れです");
+    }
+    const user = findUserRecord(rows[i][1]);
+    if (!user) throw new Error("管理セッションの利用者が存在しません");
+    if (extendExpiration) {
+      const nextExpiresAt = new Date(now.getTime() + MANAGEMENT_SESSION_DURATION_MS);
+      sheet.getRange(i + 1, 4).setValue(nextExpiresAt);
+      return { userId: user.userId, role: user.role, sessionExpiresAt: nextExpiresAt.toISOString() };
+    }
+    return { userId: user.userId, role: user.role, sessionExpiresAt: expiresAt.toISOString() };
+  }
+  throw new Error("管理セッションが無効または期限切れです");
+}
+
+function requireAdminSession(sessionToken) {
+  const session = validateManagementSession(sessionToken, true);
+  if (session.role !== "admin") throw new Error("管理者権限が必要です");
+  return session;
+}
+
+function isManagementAuthorizationError(error) {
+  return /管理セッション|管理者権限/.test(String(error && error.message || ""));
+}
+
+function deleteManagementSession(sessionToken) {
+  if (!sessionToken || typeof sessionToken !== "string") return false;
+  const sheet = getRequiredSheet(MANAGEMENT_SESSION_SHEET_NAME);
+  const rows = sheet.getDataRange().getValues();
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][0] || "") === sessionToken) {
+      sheet.deleteRow(i + 1);
+      return true;
+    }
+  }
+  return false;
+}
+
+function replaceStudentSukimakunPermissions(targetUserId, allowedContentIds, updatedBy, lockAlreadyHeld) {
+  const lock = LockService.getDocumentLock();
+  if (!lockAlreadyHeld) lock.waitLock(10000);
+  try {
+    if (!Array.isArray(allowedContentIds)) throw new Error("利用権限の形式が不正です");
+    const currentUser = findUserRecord(targetUserId);
+    if (!currentUser || currentUser.role !== "student") throw new Error("対象の生徒が見つかりません");
+    const activeContents = getSukimakunContents(false);
+    const activeIds = new Set(activeContents.map(content => content.contentId));
+    const uniqueAllowedIds = Array.from(new Set(allowedContentIds));
+    uniqueAllowedIds.forEach(contentId => {
+      if (typeof contentId !== "string" || !activeIds.has(contentId)) throw new Error("利用できないcontentIdが含まれています");
+    });
+
+    const sheet = getRequiredSheet(SUKIMAKUN_PERMISSION_SHEET_NAME);
+    const rows = sheet.getDataRange().getValues();
+    const normalizedTarget = normalizeUserId(targetUserId);
+    const preservedRows = [];
+    const targetSeen = {};
+    for (let i = 1; i < rows.length; i++) {
+      const rowUserId = normalizeUserId(rows[i][0]);
+      const contentId = String(rows[i][1] || "").trim();
+      if (rowUserId === normalizedTarget) {
+        if (targetSeen[contentId]) throw new Error(`Duplicate permission row detected for contentId: ${contentId}`);
+        targetSeen[contentId] = true;
+        continue;
+      }
+      preservedRows.push(rows[i].slice(0, SUKIMAKUN_PERMISSION_HEADERS.length));
+    }
+
+    const now = new Date();
+    const allowedSet = new Set(uniqueAllowedIds);
+    const targetRows = activeContents.map(content => [toSafeSheetText(normalizedTarget), content.contentId, allowedSet.has(content.contentId), now, toSafeSheetText(normalizeUserId(updatedBy))]);
+    const nextRows = preservedRows.concat(targetRows);
+    const previousRowCount = Math.max(0, rows.length - 1);
+    try {
+      if (nextRows.length > 0) sheet.getRange(2, 1, nextRows.length, SUKIMAKUN_PERMISSION_HEADERS.length).setValues(nextRows);
+      if (previousRowCount > nextRows.length) {
+        sheet.getRange(nextRows.length + 2, 1, previousRowCount - nextRows.length, SUKIMAKUN_PERMISSION_HEADERS.length).clearContent();
+      }
+    } catch (writeError) {
+      const rollbackRowCount = Math.max(previousRowCount, nextRows.length);
+      try {
+        if (rollbackRowCount > 0) sheet.getRange(2, 1, rollbackRowCount, SUKIMAKUN_PERMISSION_HEADERS.length).clearContent();
+        if (previousRowCount > 0) {
+          sheet.getRange(2, 1, previousRowCount, SUKIMAKUN_PERMISSION_HEADERS.length).setValues(rows.slice(1).map(row => row.slice(0, SUKIMAKUN_PERMISSION_HEADERS.length)));
+        }
+      } catch {
+        throw new Error("利用権限の更新と復元に失敗しました");
+      }
+      throw writeError;
+    }
+    return { updatedAt: now, activeContents };
+  } finally {
+    if (!lockAlreadyHeld) lock.releaseLock();
+  }
+}
+
+function initializeStudentPermissionsForUser(userId, updatedBy, lockAlreadyHeld) {
+  const activeContents = getSukimakunContents(false);
+  const state = getSukimakunPermissionState(userId, activeContents);
+  if (state.permissionsInitialized) return { initialized: false, skipped: activeContents.length };
+  replaceStudentSukimakunPermissions(userId, activeContents.map(content => content.contentId), updatedBy, lockAlreadyHeld);
+  return { initialized: true, inserted: activeContents.length };
+}
+
+function initializeExistingStudentSukimakunPermissions() {
+  const rows = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0].getDataRange().getValues();
+  const activeContents = getSukimakunContents(false);
+  const result = { processedStudents: 0, insertedPermissions: 0, skippedPermissions: 0, errorCount: 0 };
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][10] || "").trim() !== "student") continue;
+    result.processedStudents++;
+    try {
+      const userId = normalizeUserId(rows[i][1]);
+      const state = getSukimakunPermissionState(userId, activeContents);
+      if (state.permissionsInitialized) {
+        result.skippedPermissions += activeContents.length;
+      } else {
+        replaceStudentSukimakunPermissions(userId, activeContents.map(content => content.contentId), "migration");
+        result.insertedPermissions += activeContents.length;
+      }
+    } catch {
+      result.errorCount++;
+    }
+  }
+  return result;
+}
+
 function doPost(e) {
   let data;
   try {
@@ -66,17 +453,123 @@ function doPost(e) {
     for (let i = 1; i < rows.length; i++) {
       const sheetId = String(rows[i][1]).replace(/^'/, "").trim();
       if (sheetId === inputId && rows[i][9].toString() === data.password.toString()) {
-        return responseJSON({
+        const currentRole = String(rows[i][10] || "").trim();
+        const loginResult = {
           result: "success",
           school: rows[i][0],
           name: rows[i][4],
           grade: rows[i][5],
           isInitial: rows[i][8],
-          role: rows[i][10]
-        });
+          role: currentRole
+        };
+        if (currentRole === "admin") {
+          try {
+            const managementSession = createManagementSession(inputId, currentRole);
+            loginResult.sessionToken = managementSession.sessionToken;
+            loginResult.sessionExpiresAt = managementSession.sessionExpiresAt;
+          } catch {
+            return responseJSON({
+              result: "error",
+              code: "MANAGEMENT_SESSION_SETUP_ERROR",
+              message: "管理者ログインの設定が完了していません"
+            });
+          }
+        }
+        return responseJSON(loginResult);
       }
     }
     return responseJSON({ result: "fail", message: "IDまたはパスワードが違います。" });
+  }
+
+  if (data.action === "logout") {
+    try {
+      deleteManagementSession(data.sessionToken);
+      return responseJSON({ result: "success" });
+    } catch (e) {
+      return responseJSON({ result: "error", message: "ログアウト処理に失敗しました" });
+    }
+  }
+
+  if (data.action === "getSukimakunPermissionMatrix") {
+    try {
+      const adminSession = requireAdminSession(data.sessionToken);
+      const school = typeof data.school === "string" ? data.school.trim() : "";
+      const grade = typeof data.grade === "string" ? data.grade.trim() : "";
+      if (!school || !grade || school.length > 100 || grade.length > 30) {
+        return responseJSON({ result: "error", code: "VALIDATION_ERROR", message: "校舎と学年を正しく指定してください" });
+      }
+
+      const allContents = getSukimakunContents(true);
+      const activeContents = allContents.filter(content => content.enabled);
+      const studentRows = rows.slice(1).filter(row => String(row[10] || "").trim() === "student");
+      const validSchools = new Set(studentRows.map(row => String(row[0] || "").trim()).filter(Boolean));
+      const validGrades = new Set(studentRows.map(row => String(row[5] || "").trim()).filter(Boolean));
+      if (!validSchools.has(school) || !validGrades.has(grade)) {
+        return responseJSON({ result: "error", code: "VALIDATION_ERROR", message: "指定された校舎または学年は利用できません" });
+      }
+
+      const students = studentRows
+        .filter(row => String(row[0] || "").trim() === school && String(row[5] || "").trim() === grade)
+        .map(row => {
+          const userId = normalizeUserId(row[1]);
+          const permissionState = getSukimakunPermissionState(userId, activeContents);
+          return {
+            userId,
+            name: String(row[4] || "").trim(),
+            school: String(row[0] || "").trim(),
+            grade: String(row[5] || "").trim(),
+            allowedContentIds: permissionState.allowedContentIds,
+            permissionsInitialized: permissionState.permissionsInitialized,
+            permissionWarnings: permissionState.warnings
+          };
+        });
+
+      return responseJSON({
+        result: "success",
+        contents: allContents,
+        students,
+        sessionExpiresAt: adminSession.sessionExpiresAt
+      });
+    } catch (e) {
+      const isAuthorizationError = isManagementAuthorizationError(e);
+      return responseJSON({
+        result: "error",
+        code: isAuthorizationError ? "AUTHORIZATION_ERROR" : "DATA_ERROR",
+        message: isAuthorizationError ? "管理セッションが無効か、権限がありません" : "スキマ君利用権限を取得できません"
+      });
+    }
+  }
+
+  if (data.action === "updateSukimakunPermissions") {
+    try {
+      const adminSession = requireAdminSession(data.sessionToken);
+      const targetUserId = normalizeUserId(data.targetUserId);
+      if (!targetUserId || !Array.isArray(data.allowedContentIds)) {
+        return responseJSON({ result: "error", code: "VALIDATION_ERROR", message: "対象生徒と利用権限を正しく指定してください" });
+      }
+      const targetUser = findUserRecord(targetUserId);
+      if (!targetUser || targetUser.role !== "student") {
+        return responseJSON({ result: "error", code: "VALIDATION_ERROR", message: "対象の生徒が見つかりません" });
+      }
+
+      const updateResult = replaceStudentSukimakunPermissions(targetUserId, data.allowedContentIds, adminSession.userId);
+      const permissionState = getSukimakunPermissionState(targetUserId, updateResult.activeContents);
+      return responseJSON({
+        result: "success",
+        targetUserId,
+        allowedContentIds: permissionState.allowedContentIds,
+        permissionsInitialized: permissionState.permissionsInitialized,
+        updatedAt: updateResult.updatedAt.toISOString(),
+        sessionExpiresAt: adminSession.sessionExpiresAt
+      });
+    } catch (e) {
+      const isAuthorizationError = isManagementAuthorizationError(e);
+      return responseJSON({
+        result: "error",
+        code: isAuthorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR",
+        message: isAuthorizationError ? "管理セッションが無効か、権限がありません" : "利用権限を更新できません"
+      });
+    }
   }
 
   // --- 2. パスワード変更処理 ---
@@ -448,6 +941,13 @@ function doPost(e) {
           grade: userRowData[5],
           role: userRowData[10]
         };
+
+        if (String(userRowData[10] || "").trim() === "student") {
+          const activeContents = getSukimakunContents(false);
+          const permissionState = getSukimakunPermissionState(data.userId, activeContents);
+          result.allowedContentIds = permissionState.allowedContentIds;
+          result.permissionsInitialized = permissionState.permissionsInitialized;
+        }
         
         userSheet.getRange(rowIndex, 12).clearContent();
         userSheet.getRange(rowIndex, 13).clearContent();
@@ -463,10 +963,13 @@ function doPost(e) {
 
   // --- 14. アカウント発行処理 ---
   if (data.action === "createAccount") {
+    const accountLock = LockService.getDocumentLock();
     try {
+      accountLock.waitLock(10000);
       const lastRow = userSheet.getLastRow();
       const nextRow = lastRow + 1;
       const formattedUserId = "'" + String(data.userId || "").trim().replace(/^'/, "");
+      const normalizedCreatedUserId = normalizeUserId(formattedUserId);
       const initialFlag = (data.role === "teacher");
 
       const newRow = [
@@ -482,9 +985,27 @@ function doPost(e) {
       ];
 
       userSheet.getRange(nextRow, 1, 1, newRow.length).setValues([newRow]);
-      return responseJSON({ result: "success" });
+      try {
+        if (data.role === "student") {
+          initializeStudentPermissionsForUser(formattedUserId, "system:createAccount", true);
+        }
+      } catch {
+        const insertedRowUserId = normalizeUserId(userSheet.getRange(nextRow, 2).getValue());
+        const rollbackSucceeded = insertedRowUserId === normalizedCreatedUserId;
+        if (rollbackSucceeded) userSheet.deleteRow(nextRow);
+        return responseJSON({
+          result: "error",
+          code: rollbackSucceeded ? "PERMISSION_INITIALIZATION_ERROR" : "ACCOUNT_ROLLBACK_ERROR",
+          message: rollbackSucceeded
+            ? "アカウントを作成できませんでした。スキマ君利用権限の初期化を確認してください"
+            : "アカウント作成の復元を完了できませんでした。管理者へ確認してください"
+        });
+      }
+      return responseJSON({ result: "success", permissionsInitialized: data.role === "student" });
     } catch (e) {
       return responseJSON({ result: "error", message: e.toString() });
+    } finally {
+      if (accountLock.hasLock()) accountLock.releaseLock();
     }
   }
 
