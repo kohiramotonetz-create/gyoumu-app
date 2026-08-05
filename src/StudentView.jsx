@@ -11,6 +11,7 @@ import PastReviewView from './components/PastReviewView.jsx';
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
+const STUDENT_APP_URL = import.meta.env.VITE_STUDENT_APP_URL;
 
 export default function StudentView({ userId, userName, grade, school, unit, handleLogout }) {
   // --- 1. ヘルパー関数 ---
@@ -197,6 +198,10 @@ export default function StudentView({ userId, userName, grade, school, unit, han
   
   const openSukimaKun = async () => {
     if (isSukimaLoading) return;
+    if (!STUDENT_APP_URL) {
+      alert("スキマ君URLが設定されていません");
+      return;
+    }
     setIsSukimaLoading(true); 
 
     try {
@@ -206,8 +211,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
 
       if (response.data.result === "success") {
         const token = response.data.token;
-        const SUKIMA_URL = "https://student-app-nu-lyart.vercel.app/";      
-        const targetUrl = `${SUKIMA_URL}?uid=${userId}&tk=${token}`;
+        const targetUrl = `${STUDENT_APP_URL}?uid=${userId}&tk=${token}`;
         window.open(targetUrl, '_blank');
       } else {
         alert("連携に失敗しました: " + response.data.message);
