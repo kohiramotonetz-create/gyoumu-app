@@ -3,6 +3,16 @@ import axios from 'axios';
 
 const API_TIMEOUT_MS = 15000;
 const GRADE_OPTIONS = ['小４', '小５', '小６', '中１', '中２', '中３', '高１', '高２', '高３', '一貫中１', '一貫中２', '一貫中３'];
+const NAME_COLUMN_WIDTH = 180;
+const ID_COLUMN_WIDTH = 130;
+
+const getStudentDisplayName = student => String(student?.name || '').trim() || '氏名未登録';
+
+const areSameContentIds = (left = [], right = []) => {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every(contentId => rightSet.has(contentId));
+};
 
 export default function SukimakunPermissionManager({
   GAS_URL,
@@ -17,14 +27,16 @@ export default function SukimakunPermissionManager({
   const [query, setQuery] = useState('');
   const [contents, setContents] = useState([]);
   const [students, setStudents] = useState([]);
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [editingContentIds, setEditingContentIds] = useState([]);
+  const [editingByStudentId, setEditingByStudentId] = useState({});
+  const [rowStatusByStudentId, setRowStatusByStudentId] = useState({});
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [sessionExpired, setSessionExpired] = useState(false);
 
-  const selectedStudent = students.find(student => student.userId === selectedStudentId) || null;
+  const activeContents = useMemo(() => contents
+    .filter(content => content.enabled === true)
+    .sort((left, right) => Number(left.sortOrder) - Number(right.sortOrder)), [contents]);
+
   const filteredStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return students;
@@ -53,17 +65,16 @@ export default function SukimakunPermissionManager({
     return response.data;
   };
 
-  const handleApiError = (error, fallbackMessage) => {
+  const getApiErrorMessage = (error, fallbackMessage) => {
     if (error?.code === 'AUTHORIZATION_ERROR') {
       setSessionExpired(true);
       setStatus({ type: 'error', message: '管理セッションが期限切れです。再ログインしてください。' });
-      return;
+      return '管理セッションが期限切れです。';
     }
     if (error?.code === 'ECONNABORTED') {
-      setStatus({ type: 'error', message: '通信がタイムアウトしました。時間をおいて再度お試しください。' });
-      return;
+      return '通信がタイムアウトしました。時間をおいて再度お試しください。';
     }
-    setStatus({ type: 'error', message: error?.message || fallbackMessage });
+    return error?.message || fallbackMessage;
   };
 
   const fetchPermissions = async () => {
@@ -79,53 +90,62 @@ export default function SukimakunPermissionManager({
         school: selectedSchool,
         grade: selectedGrade
       });
-      setContents(data.contents || []);
-      setStudents(data.students || []);
-      setSelectedStudentId('');
-      setEditingContentIds([]);
-      setStatus({ type: 'success', message: `${(data.students || []).length}名の設定を取得しました。` });
+      const nextStudents = Array.isArray(data.students) ? data.students : [];
+      const nextContents = Array.isArray(data.contents) ? data.contents : [];
+      const activeContentIds = new Set(nextContents.filter(content => content.enabled === true).map(content => content.contentId));
+      setContents(nextContents);
+      setStudents(nextStudents);
+      setEditingByStudentId(Object.fromEntries(nextStudents.map(student => [
+        student.userId,
+        (student.allowedContentIds || []).filter(contentId => activeContentIds.has(contentId))
+      ])));
+      setRowStatusByStudentId({});
+      setStatus({ type: 'success', message: `${nextStudents.length}名の設定を取得しました。` });
     } catch (error) {
-      handleApiError(error, '利用設定を取得できませんでした。');
+      setStatus({ type: 'error', message: getApiErrorMessage(error, '利用設定を取得できませんでした。') });
     } finally {
       setLoading(false);
     }
   };
 
-  const selectStudent = student => {
-    setSelectedStudentId(student.userId);
-    setEditingContentIds([...(student.allowedContentIds || [])]);
-    setStatus({ type: '', message: '' });
+  const toggleContent = (studentId, contentId) => {
+    setEditingByStudentId(current => {
+      const currentIds = current[studentId] || [];
+      return {
+        ...current,
+        [studentId]: currentIds.includes(contentId)
+          ? currentIds.filter(id => id !== contentId)
+          : [...currentIds, contentId]
+      };
+    });
+    setRowStatusByStudentId(current => ({ ...current, [studentId]: { type: '', message: '' } }));
   };
 
-  const toggleContent = contentId => {
-    setEditingContentIds(current =>
-      current.includes(contentId)
-        ? current.filter(id => id !== contentId)
-        : [...current, contentId]
-    );
-  };
+  const savePermissions = async student => {
+    const studentId = student.userId;
+    const editingContentIds = editingByStudentId[studentId] || [];
+    const displayName = getStudentDisplayName(student);
+    if (!window.confirm(`${displayName}さんのスキマ君利用設定を保存しますか？`)) return;
 
-  const savePermissions = async () => {
-    if (!selectedStudent) return;
-    if (!window.confirm(`${selectedStudent.name}さんのスキマ君利用設定を保存しますか？`)) return;
-    setSaving(true);
-    setStatus({ type: '', message: '' });
+    setRowStatusByStudentId(current => ({ ...current, [studentId]: { type: 'saving', message: '保存中...' } }));
     try {
       const data = await postAction('updateSukimakunPermissions', {
-        targetUserId: selectedStudent.userId,
+        targetUserId: studentId,
         allowedContentIds: editingContentIds
       });
-      setStudents(current => current.map(student =>
-        student.userId === selectedStudent.userId
-          ? { ...student, allowedContentIds: data.allowedContentIds || [], permissionsInitialized: true }
-          : student
+      const savedContentIds = Array.isArray(data.allowedContentIds) ? data.allowedContentIds : editingContentIds;
+      setStudents(current => current.map(currentStudent =>
+        currentStudent.userId === studentId
+          ? { ...currentStudent, allowedContentIds: savedContentIds, permissionsInitialized: true }
+          : currentStudent
       ));
-      setEditingContentIds(data.allowedContentIds || []);
-      setStatus({ type: 'success', message: '利用設定を保存しました。' });
+      setEditingByStudentId(current => ({ ...current, [studentId]: savedContentIds }));
+      setRowStatusByStudentId(current => ({ ...current, [studentId]: { type: 'success', message: '保存しました' } }));
     } catch (error) {
-      handleApiError(error, '利用設定を保存できませんでした。');
-    } finally {
-      setSaving(false);
+      setRowStatusByStudentId(current => ({
+        ...current,
+        [studentId]: { type: 'error', message: getApiErrorMessage(error, '保存できませんでした。') }
+      }));
     }
   };
 
@@ -133,6 +153,25 @@ export default function SukimakunPermissionManager({
   const statusStyle = status.type === 'error'
     ? { color: '#b91c1c', background: '#fee2e2', border: '1px solid #fecaca' }
     : { color: '#166534', background: '#dcfce7', border: '1px solid #bbf7d0' };
+  const headerCellStyle = {
+    position: 'sticky',
+    top: 0,
+    zIndex: 10,
+    minWidth: '132px',
+    maxWidth: '180px',
+    height: '68px',
+    padding: '8px',
+    borderRight: '1px solid #d1d5db',
+    borderBottom: '2px solid #cbd5e1',
+    background: '#f1f5f9',
+    color: '#334155',
+    fontSize: '12px',
+    lineHeight: 1.35,
+    textAlign: 'center',
+    whiteSpace: 'normal',
+    verticalAlign: 'middle',
+    boxSizing: 'border-box'
+  };
 
   return (
     <div style={{ padding: '10px' }}>
@@ -157,66 +196,80 @@ export default function SukimakunPermissionManager({
         <button onClick={fetchPermissions} disabled={loading || sessionExpired} style={styles.doneBtn}>
           {loading ? '読み込み中...' : '生徒一覧を取得'}
         </button>
+        <label style={{ flex: '1 1 240px', minWidth: '220px' }}>
+          <span style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>生徒検索</span>
+          <input value={query} onChange={event => setQuery(event.target.value)} placeholder="氏名またはID" style={{ ...styles.select, width: '100%', boxSizing: 'border-box' }} />
+        </label>
       </div>
 
       {status.message && <div role="status" style={{ ...statusStyle, padding: '10px', borderRadius: '6px', marginBottom: '16px' }}>{status.message}</div>}
       {sessionExpired && <button onClick={onSessionExpired} style={{ ...styles.doneBtn, marginBottom: '16px' }}>ログイン画面へ戻る</button>}
 
       {students.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) minmax(360px, 2fr)', gap: '16px', alignItems: 'start' }}>
-          <div style={panelStyle}>
-            <label>
-              <span style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>生徒検索</span>
-              <input value={query} onChange={event => setQuery(event.target.value)} placeholder="氏名またはID" style={{ ...styles.select, width: '100%', boxSizing: 'border-box' }} />
-            </label>
-            <div style={{ marginTop: '12px', maxHeight: '520px', overflowY: 'auto' }}>
-              {filteredStudents.map(student => (
-                <button
-                  key={student.userId}
-                  onClick={() => selectStudent(student)}
-                  style={{
-                    width: '100%', textAlign: 'left', padding: '10px', marginBottom: '6px', cursor: 'pointer',
-                    border: student.userId === selectedStudentId ? '2px solid #166534' : '1px solid #ddd',
-                    borderRadius: '6px', background: student.userId === selectedStudentId ? '#f0fdf4' : '#fff'
-                  }}
-                >
-                  <strong>{student.name}</strong> <span style={{ color: '#666' }}>({student.userId})</span>
-                  {!student.permissionsInitialized && <div style={{ color: '#b45309', fontSize: '12px' }}>未設定（現在は全コンテンツ許可）</div>}
-                </button>
-              ))}
-              {filteredStudents.length === 0 && <p style={{ color: '#666' }}>該当する生徒はいません。</p>}
-            </div>
+        <div style={{ ...panelStyle, padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '10px 14px', color: '#475569', fontSize: '13px', borderBottom: '1px solid #e2e8f0' }}>
+            表示 {filteredStudents.length}名／全{students.length}名 ・ 編集対象 {activeContents.length}コンテンツ
           </div>
-
-          <div style={panelStyle}>
-            {!selectedStudent ? (
-              <p style={{ color: '#666' }}>設定する生徒を選択してください。</p>
-            ) : (
-              <>
-                <h3 style={{ marginTop: 0 }}>{selectedStudent.name}さんの利用コンテンツ</h3>
-                <p style={{ color: '#666' }}>{selectedStudent.school}／{selectedStudent.grade}／ID: {selectedStudent.userId}</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px', margin: '16px 0' }}>
-                  {contents.map(content => (
-                    <label key={content.contentId} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '6px', opacity: content.enabled ? 1 : 0.55 }}>
-                      <input
-                        type="checkbox"
-                        checked={editingContentIds.includes(content.contentId)}
-                        onChange={() => toggleContent(content.contentId)}
-                        disabled={!content.enabled || saving}
-                        style={{ marginRight: '8px' }}
-                      />
-                      {content.displayName}
-                      {!content.enabled && <span style={{ color: '#b91c1c', marginLeft: '6px' }}>無効</span>}
-                    </label>
+          <div style={{ overflow: 'auto', maxHeight: '68vh', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', minWidth: '100%', background: '#fff' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...headerCellStyle, left: 0, zIndex: 30, minWidth: `${NAME_COLUMN_WIDTH}px`, width: `${NAME_COLUMN_WIDTH}px`, textAlign: 'left' }}>生徒名</th>
+                  <th style={{ ...headerCellStyle, left: `${NAME_COLUMN_WIDTH}px`, zIndex: 30, minWidth: `${ID_COLUMN_WIDTH}px`, width: `${ID_COLUMN_WIDTH}px` }}>生徒ID</th>
+                  {activeContents.map(content => (
+                    <th key={content.contentId} title={content.displayName} style={headerCellStyle}>{content.displayName}</th>
                   ))}
-                </div>
-                <div style={{ marginBottom: '12px', color: '#555' }}>{editingContentIds.length}件を許可</div>
-                <button onClick={savePermissions} disabled={saving || sessionExpired} style={styles.doneBtn}>
-                  {saving ? '保存中...' : 'この生徒の設定を保存'}
-                </button>
-              </>
-            )}
+                  <th style={{ ...headerCellStyle, minWidth: '170px' }}>保存</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStudents.map(student => {
+                  const editingContentIds = editingByStudentId[student.userId] || [];
+                  const rowStatus = rowStatusByStudentId[student.userId] || { type: '', message: '' };
+                  const isSaving = rowStatus.type === 'saving';
+                  const isDirty = !areSameContentIds(editingContentIds, student.allowedContentIds || []);
+                  const needsSave = isDirty || !student.permissionsInitialized;
+                  const rowBackground = student.permissionsInitialized ? '#fff' : '#fffbeb';
+                  return (
+                    <tr key={student.userId} style={{ height: '58px', background: rowBackground }}>
+                      <td style={{ position: 'sticky', left: 0, zIndex: 5, width: `${NAME_COLUMN_WIDTH}px`, minWidth: `${NAME_COLUMN_WIDTH}px`, padding: '8px 10px', borderRight: '1px solid #d1d5db', borderBottom: '1px solid #e5e7eb', background: rowBackground, boxSizing: 'border-box' }}>
+                        <div style={{ fontWeight: 'bold', color: student.name ? '#1f2937' : '#9a3412' }}>{getStudentDisplayName(student)}</div>
+                        {!student.permissionsInitialized && <span style={{ display: 'inline-block', marginTop: '3px', padding: '2px 6px', borderRadius: '999px', background: '#fef3c7', color: '#92400e', fontSize: '11px' }}>未設定・現在は全許可</span>}
+                      </td>
+                      <td style={{ position: 'sticky', left: `${NAME_COLUMN_WIDTH}px`, zIndex: 5, width: `${ID_COLUMN_WIDTH}px`, minWidth: `${ID_COLUMN_WIDTH}px`, padding: '8px', borderRight: '1px solid #d1d5db', borderBottom: '1px solid #e5e7eb', background: rowBackground, color: '#64748b', fontSize: '12px', textAlign: 'center', boxSizing: 'border-box' }}>
+                        {student.userId}
+                      </td>
+                      {activeContents.map(content => (
+                        <td key={content.contentId} style={{ minWidth: '132px', padding: '8px', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
+                          <input
+                            type="checkbox"
+                            aria-label={`${getStudentDisplayName(student)}の${content.displayName}`}
+                            checked={editingContentIds.includes(content.contentId)}
+                            onChange={() => toggleContent(student.userId, content.contentId)}
+                            disabled={isSaving || sessionExpired}
+                            style={{ width: '18px', height: '18px', cursor: isSaving || sessionExpired ? 'not-allowed' : 'pointer' }}
+                          />
+                        </td>
+                      ))}
+                      <td style={{ minWidth: '170px', padding: '7px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle' }}>
+                        <button onClick={() => savePermissions(student)} disabled={isSaving || sessionExpired || !needsSave} style={{ ...styles.doneBtn, padding: '7px 14px', opacity: !needsSave ? 0.55 : 1 }}>
+                          {isSaving ? '保存中...' : '保存'}
+                        </button>
+                        {isDirty && !isSaving && <div style={{ marginTop: '3px', color: '#b45309', fontSize: '11px', fontWeight: 'bold' }}>未保存の変更</div>}
+                        {rowStatus.message && !isDirty && (
+                          <div role="status" style={{ marginTop: '3px', color: rowStatus.type === 'error' ? '#b91c1c' : rowStatus.type === 'success' ? '#166534' : '#475569', fontSize: '11px' }}>
+                            {rowStatus.message}
+                          </div>
+                        )}
+                        {rowStatus.type === 'error' && isDirty && <div role="alert" style={{ marginTop: '3px', color: '#b91c1c', fontSize: '11px' }}>{rowStatus.message}</div>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+          {filteredStudents.length === 0 && <p style={{ color: '#666', padding: '16px' }}>該当する生徒はいません。</p>}
         </div>
       )}
     </div>

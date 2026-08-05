@@ -52,7 +52,14 @@ const DEFAULT_SUKIMAKUN_CONTENTS = [
 ];
 
 function normalizeUserId(value) {
-  return String(value || "").replace(/^'/, "").trim();
+  const normalized = String(value || "").replace(/^'/, "").trim();
+  if (/^\d{1,6}$/.test(normalized)) return normalized.padStart(6, "0");
+  return normalized;
+}
+
+function formatUserIdForSheet(value) {
+  const normalized = normalizeUserId(value);
+  return normalized ? "'" + normalized : "";
 }
 
 function toSafeSheetText(value) {
@@ -349,7 +356,7 @@ function replaceStudentSukimakunPermissions(targetUserId, allowedContentIds, upd
 
     const now = new Date();
     const allowedSet = new Set(uniqueAllowedIds);
-    const targetRows = activeContents.map(content => [toSafeSheetText(normalizedTarget), content.contentId, allowedSet.has(content.contentId), now, toSafeSheetText(normalizeUserId(updatedBy))]);
+    const targetRows = activeContents.map(content => [formatUserIdForSheet(normalizedTarget), content.contentId, allowedSet.has(content.contentId), now, toSafeSheetText(normalizeUserId(updatedBy))]);
     const nextRows = preservedRows.concat(targetRows);
     const previousRowCount = Math.max(0, rows.length - 1);
     try {
@@ -968,7 +975,7 @@ function doPost(e) {
       accountLock.waitLock(10000);
       const lastRow = userSheet.getLastRow();
       const nextRow = lastRow + 1;
-      const formattedUserId = "'" + String(data.userId || "").trim().replace(/^'/, "");
+      const formattedUserId = formatUserIdForSheet(data.userId);
       const normalizedCreatedUserId = normalizeUserId(formattedUserId);
       const initialFlag = (data.role === "teacher");
 
