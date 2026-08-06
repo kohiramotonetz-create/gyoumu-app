@@ -256,6 +256,15 @@ function getSukimakunPermissionState(userId, activeContents) {
   };
 }
 
+function appendStudentPermissionInfo(result, userId, role) {
+  if (String(role || "").trim() !== "student") return result;
+  const activeContents = getSukimakunContents(false);
+  const permissionState = getSukimakunPermissionState(normalizeUserId(userId), activeContents);
+  result.allowedContentIds = permissionState.allowedContentIds;
+  result.permissionsInitialized = permissionState.permissionsInitialized;
+  return result;
+}
+
 function findUserRecord(userId) {
   const normalizedUserId = normalizeUserId(userId);
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
@@ -456,9 +465,9 @@ function doPost(e) {
   
   // --- 1. ログイン処理 ---
   if (data.action === "login") {
-    const inputId = String(data.userId).trim();
+    const inputId = normalizeUserId(data.userId);
     for (let i = 1; i < rows.length; i++) {
-      const sheetId = String(rows[i][1]).replace(/^'/, "").trim();
+      const sheetId = normalizeUserId(rows[i][1]);
       if (sheetId === inputId && rows[i][9].toString() === data.password.toString()) {
         const currentRole = String(rows[i][10] || "").trim();
         const loginResult = {
@@ -479,6 +488,17 @@ function doPost(e) {
               result: "error",
               code: "MANAGEMENT_SESSION_SETUP_ERROR",
               message: "管理者ログインの設定が完了していません"
+            });
+          }
+        }
+        if (currentRole === "student") {
+          try {
+            appendStudentPermissionInfo(loginResult, inputId, currentRole);
+          } catch {
+            return responseJSON({
+              result: "error",
+              code: "STUDENT_PERMISSION_ERROR",
+              message: "利用可能コンテンツの取得に失敗しました"
             });
           }
         }
@@ -949,12 +969,7 @@ function doPost(e) {
           role: userRowData[10]
         };
 
-        if (String(userRowData[10] || "").trim() === "student") {
-          const activeContents = getSukimakunContents(false);
-          const permissionState = getSukimakunPermissionState(data.userId, activeContents);
-          result.allowedContentIds = permissionState.allowedContentIds;
-          result.permissionsInitialized = permissionState.permissionsInitialized;
-        }
+        appendStudentPermissionInfo(result, data.userId, userRowData[10]);
         
         userSheet.getRange(rowIndex, 12).clearContent();
         userSheet.getRange(rowIndex, 13).clearContent();

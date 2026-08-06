@@ -223,6 +223,7 @@ Googleスプレッドシートの実カラム、型、制約、追記・更新�
 - `getSukimakunPermissionMatrix`と`updateSukimakunPermissions`は、GAS側で現在のroleがadminであることを再確認する。
 - 権限未設定の既存生徒は移行互換として全有効コンテンツ許可を返し、`permissionsInitialized`で未設定を識別する。
 - `validateToken`はstudentに`allowedContentIds`と`permissionsInitialized`を追加して返す。既存の成功項目とトークン失効処理は維持する。
+- `login`もstudentの認証成功時に`allowedContentIds`と`permissionsInitialized`を追加し、スキマ君の直接ログインでも同じ権限情報を返す。
 - 新規student作成時は全有効コンテンツを初期許可し、権限初期化に失敗した場合は作成したユーザー行を削除してエラーを返す。
 - Reactは管理セッションをメモリstateだけに保持し、logout時にGASへ失効要求を送る。
 - admin専用の「スキマ君利用設定」画面で、校舎・学年別の生徒取得と1名ずつの権限更新ができる。チェックボックスはAPIがマスターから返す`contents`を使って動的生成する。
