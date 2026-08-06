@@ -2,18 +2,17 @@
 
 import React, { useState } from 'react';
 import axios from 'axios';
-import FilterButtonGroup from './FilterButtonGroup';
 import UsageDetailView from './UsageDetailView.jsx';
+import SchoolSelect from './common/SchoolSelect.jsx';
+import GradeSelect from './common/GradeSelect.jsx';
 
-const AppUsageTracker = ({ styles, GAS_URL, API_KEY, schools = [] }) => {
+const AppUsageTracker = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) => {
   const [selectedSchool, setSelectedSchool] = useState('');
   const [selectedGrade, setSelectedGrade] = useState([]);
   const [tableData, setTableData] = useState({ apps: [], students: [] });
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState('list'); 
   const [selectedStudent, setSelectedStudent] = useState(null);
-
-  const grades = ["小４", "小５", "小６", "中１", "中２", "中３", "高１", "高２", "高３", "一貫中１", "一貫中２", "一貫中３"];
 
   const fetchUsage = async () => {
   if (!selectedSchool || selectedGrade.length === 0) return alert("校舎と学年を選択してください");
@@ -63,22 +62,13 @@ const AppUsageTracker = ({ styles, GAS_URL, API_KEY, schools = [] }) => {
             <div style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px' }}>
               <span style={{ width: '60px', fontSize: '13px', fontWeight: 'bold' }}>校舎:</span>
               
-              {/* 💡 個別校舎の選択のみに完全巻き戻し */}
-              <select style={styles.select} value={selectedSchool} onChange={e => setSelectedSchool(e.target.value)}>
-                <option value="">選択してください</option>
-                {schools.filter(s => s !== 'すべて').map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+              <SchoolSelect style={styles.select} value={selectedSchool} onChange={e => setSelectedSchool(e.target.value)} assignedSchools={assignedSchools} />
             </div>
 
-            <FilterButtonGroup 
-              label="学年" 
-              options={grades} 
-              selected={selectedGrade} 
-              onSelect={setSelectedGrade} 
-              isMultiple={true} // 💡 複数選択を有効化
-            />
+            <div style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <span style={{ width: '60px', fontSize: '13px', fontWeight: 'bold' }}>学年</span>
+              <GradeSelect style={styles.select} value={selectedGrade} onChange={setSelectedGrade} />
+            </div>
 
             <button onClick={fetchUsage} style={{ ...styles.doneBtn, width: '100%', marginTop: '10px', backgroundColor: '#166534' }} disabled={loading}>
               {loading ? '読込中...' : '表示更新'}

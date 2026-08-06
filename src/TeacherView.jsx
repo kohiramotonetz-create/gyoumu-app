@@ -11,6 +11,7 @@ import SchoolProgressTracker from './components/SchoolProgressManager.jsx'
 import KoToreProgressTracker from './components/KoToreProgressTracker.jsx'
 import AppUsageTracker from './components/AppUsageTracker.jsx'
 import SukimakunPermissionManager from './components/SukimakunPermissionManager.jsx'
+import { ALL_SCHOOLS } from './constants/organization.js'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
@@ -21,8 +22,8 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeContent, setActiveContent] = useState('notices');
   const [notifications, setNotifications] = useState([]);
-  const [schools, setSchools] = useState([]);
-  const [unitOptions, setUnitOptions] = useState([]); // ← これを追加！
+  const schools = ALL_SCHOOLS;
+  const assignedSchools = school ? [school] : [];
   const [selectedSchool, setSelectedSchool] = useState('すべて');
   const [openPdf, setOpenPdf] = useState(null);
   const timeoutRef = useRef(null);
@@ -46,32 +47,6 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
       events.forEach(event => window.removeEventListener(event, handleUserActivity));
     };
   }, []);
-
-  useEffect(() => {
-  const loadSchools = async () => {
-    try {
-      const response = await fetch('/schools.csv');
-      const text = await response.text();
-      const rows = text.split('\n').map(row => row.trim()).filter(row => row !== "");
-      
-      const schoolNames = [];
-      const units = new Set(); // 重複排除のためのセット
-
-      rows.slice(1).forEach(row => {
-        const cols = row.split(',');
-        const schoolName = cols[0]?.trim(); // 1列目: 校舎名
-        const unitName = cols[1]?.trim();   // 2列目: ユニット名（高松、福岡東など）
-
-        if (schoolName) schoolNames.push(schoolName);
-        if (unitName) units.add(`${unitName}U`); // 末尾に「U」を付与して保存
-      });
-
-      setSchools(schoolNames);
-      setUnitOptions([...units]); // ['高松U', '福岡東U'] のような配列がセットされる
-    } catch (e) { console.error("校舎・ユニットリスト読み込み失敗"); }
-  };
-  loadSchools();
-}, []);
 
   const fetchNotifications = async () => {
     try {
@@ -216,8 +191,7 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
               <TestReviewManager 
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}
-                schools={schools}
-                unitOptions={unitOptions} // 💡 ここにこれを追記して手渡した
+                assignedSchools={assignedSchools}
                 styles={styles}
               />
             )}
@@ -227,7 +201,7 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}
                 sessionToken={sessionToken}
-                schools={schools}
+                assignedSchools={assignedSchools}
                 styles={styles}
                 onSessionExpired={handleLogout}
               />
@@ -246,8 +220,7 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
                 styles={styles} 
                 GAS_URL={GAS_URL} 
                 API_KEY={API_KEY} 
-                schools={schools}
-                unitOptions={unitOptions} // 💡 ここにこれを追記して手渡した
+                assignedSchools={assignedSchools}
               />
             )}
 
@@ -256,8 +229,7 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
                 styles={styles} 
                 GAS_URL={GAS_URL} 
                 API_KEY={API_KEY} 
-                schools={schools} 
-                unitOptions={unitOptions} // 💡 ここを追加して親のデータを引き渡す！
+                assignedSchools={assignedSchools}
               />
             )}
 
@@ -266,8 +238,7 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
                 styles={styles} 
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY} 
-                schools={schools} 
-                unitOptions={unitOptions} // 💡 ここを追加して親のデータを引き渡す！
+                assignedSchools={assignedSchools}
               />
             )}
           </div>

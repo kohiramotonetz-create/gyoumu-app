@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import axios from 'axios';
+import SchoolSelect from './common/SchoolSelect.jsx';
+import GradeSelect from './common/GradeSelect.jsx';
 
 const API_TIMEOUT_MS = 15000;
-const GRADE_OPTIONS = ['小４', '小５', '小６', '中１', '中２', '中３', '高１', '高２', '高３', '一貫中１', '一貫中２', '一貫中３'];
 const NAME_COLUMN_WIDTH = 180;
 const ID_COLUMN_WIDTH = 130;
 
@@ -18,12 +19,12 @@ export default function SukimakunPermissionManager({
   GAS_URL,
   API_KEY,
   sessionToken,
-  schools = [],
+  assignedSchools = [],
   styles,
   onSessionExpired
 }) {
   const [selectedSchool, setSelectedSchool] = useState('');
-  const [selectedGrade, setSelectedGrade] = useState('');
+  const [selectedGrades, setSelectedGrades] = useState([]);
   const [query, setQuery] = useState('');
   const [contents, setContents] = useState([]);
   const [students, setStudents] = useState([]);
@@ -78,7 +79,7 @@ export default function SukimakunPermissionManager({
   };
 
   const fetchPermissions = async () => {
-    if (!selectedSchool || !selectedGrade) {
+    if (!selectedSchool || selectedGrades.length === 0) {
       setStatus({ type: 'error', message: '校舎と学年を選択してください。' });
       return;
     }
@@ -86,12 +87,23 @@ export default function SukimakunPermissionManager({
     setSessionExpired(false);
     setStatus({ type: '', message: '' });
     try {
-      const data = await postAction('getSukimakunPermissionMatrix', {
-        school: selectedSchool,
-        grade: selectedGrade
+      const responses = [];
+      for (const grade of selectedGrades) {
+        responses.push(await postAction('getSukimakunPermissionMatrix', {
+          school: selectedSchool,
+          grade
+        }));
+      }
+      const nextContents = Array.isArray(responses[0]?.contents) ? responses[0].contents : [];
+      const contentSignature = JSON.stringify(nextContents.map(content => content.contentId));
+      if (responses.some(data => JSON.stringify((data.contents || []).map(content => content.contentId)) !== contentSignature)) {
+        throw new Error('学年ごとのコンテンツ一覧が一致しません。');
+      }
+      const studentMap = new Map();
+      responses.forEach(data => {
+        (Array.isArray(data.students) ? data.students : []).forEach(student => studentMap.set(student.userId, student));
       });
-      const nextStudents = Array.isArray(data.students) ? data.students : [];
-      const nextContents = Array.isArray(data.contents) ? data.contents : [];
+      const nextStudents = [...studentMap.values()];
       const activeContentIds = new Set(nextContents.filter(content => content.enabled === true).map(content => content.contentId));
       setContents(nextContents);
       setStudents(nextStudents);
@@ -181,17 +193,11 @@ export default function SukimakunPermissionManager({
       <div style={{ ...panelStyle, display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'end', marginBottom: '16px' }}>
         <label>
           <span style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>校舎</span>
-          <select value={selectedSchool} onChange={event => setSelectedSchool(event.target.value)} style={styles.select}>
-            <option value="">選択してください</option>
-            {[...new Set(schools)].filter(Boolean).map(schoolName => <option key={schoolName} value={schoolName}>{schoolName}</option>)}
-          </select>
+          <SchoolSelect value={selectedSchool} onChange={event => setSelectedSchool(event.target.value)} assignedSchools={assignedSchools} style={styles.select} />
         </label>
         <label>
           <span style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>学年</span>
-          <select value={selectedGrade} onChange={event => setSelectedGrade(event.target.value)} style={styles.select}>
-            <option value="">選択してください</option>
-            {GRADE_OPTIONS.map(grade => <option key={grade} value={grade}>{grade}</option>)}
-          </select>
+          <GradeSelect value={selectedGrades} onChange={setSelectedGrades} style={styles.select} />
         </label>
         <button onClick={fetchPermissions} disabled={loading || sessionExpired} style={styles.doneBtn}>
           {loading ? '読み込み中...' : '生徒一覧を取得'}

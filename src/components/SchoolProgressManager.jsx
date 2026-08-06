@@ -3,8 +3,10 @@
 import React, { useState, useMemo } from 'react';
 import axios from 'axios';
 import FilterButtonGroup from './FilterButtonGroup'; 
+import SchoolSelect from './common/SchoolSelect.jsx';
+import GradeSelect from './common/GradeSelect.jsx';
 
-const SchoolProgressManager = ({ styles, GAS_URL, API_KEY, schools = [], unitOptions = [] }) => {
+const SchoolProgressManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) => {
   const [selectedSchool, setSelectedSchool] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -12,7 +14,6 @@ const SchoolProgressManager = ({ styles, GAS_URL, API_KEY, schools = [], unitOpt
   const [tableData, setTableData] = useState({ headers: [], matrix: [] });
   const [loading, setLoading] = useState(false);
 
-  const grades = ["小４", "小５", "小６", "中１", "中２", "中３", "高１", "高２", "高３"];
   const subjects = ["国語", "数学", "英語", "理科", "社会"];
 
   const parsedHeaders = useMemo(() => {
@@ -121,18 +122,13 @@ const SchoolProgressManager = ({ styles, GAS_URL, API_KEY, schools = [], unitOpt
         {/* 校舎選択 */}
         <div style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px' }}>
           <span style={{ width: '60px', fontSize: '13px', fontWeight: 'bold' }}>校舎:</span>
-          <select style={styles.select} value={selectedSchool} onChange={e => setSelectedSchool(e.target.value)}>
-            <option value="">選択してください</option>
-            <optgroup label="ーー ユニット一括表示 ーー">
-              {unitOptions.map(u => <option key={u} value={u}>{u}（全校舎一括）</option>)}
-            </optgroup>
-            <optgroup label="ーー 個別校舎絞り込み ーー">
-              {schools.filter(s => s !== 'すべて').map(s => <option key={s} value={s}>{s}</option>)}
-            </optgroup>
-          </select>
+          <SchoolSelect style={styles.select} value={selectedSchool} onChange={e => setSelectedSchool(e.target.value)} assignedSchools={assignedSchools} />
         </div>
 
-        <FilterButtonGroup label="学年" options={grades} selected={selectedGrade} onSelect={setSelectedGrade} isMultiple={false} />
+        <div style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <span style={{ width: '60px', fontSize: '13px', fontWeight: 'bold' }}>学年</span>
+          <GradeSelect style={styles.select} value={selectedGrade} onChange={values => setSelectedGrade(values[0] || '')} includeGroups={false} />
+        </div>
         <FilterButtonGroup label="科目" options={subjects} selected={selectedSubject} onSelect={setSelectedSubject} isMultiple={false} />
 
         <div style={{ textAlign: 'center', marginTop: '20px' }}>

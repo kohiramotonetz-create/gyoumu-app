@@ -3,8 +3,16 @@ import React, { useState } from 'react';
 import axios from 'axios';
 // 別ファイルに切り出した詳細モーダルをインポート
 import TestReviewDetailModal from './TestReviewDetailModal.jsx'; 
+import SchoolSelect from './common/SchoolSelect.jsx';
 
-const TestReviewManager = ({ styles, GAS_URL, API_KEY, schools = [] , unitOptions = []}) => {
+const GRADE_OPTIONS = [
+  '小１', '小２', '小３', '小４', '小５', '小６',
+  '中１', '中２', '中３',
+  '高１', '高２', '高３',
+  '大学受験'
+];
+
+const TestReviewManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) => {
   const [selectedSchool, setSelectedSchool] = useState('');
   const [selectedGrades, setSelectedGrades] = useState([]); // 複数選択用
   const [selectedTest, setSelectedTest] = useState('2学期中間／前期期末');
@@ -18,22 +26,15 @@ const TestReviewManager = ({ styles, GAS_URL, API_KEY, schools = [] , unitOption
 
   const years = ["2024年度", "2025年度", "2026年度"];
   
-  const gradeOptions = [
-    "中１", "中２", "中３", "高校受験", "一貫中１", "一貫中２", "一貫中３",
-    "高１", "高２", "高３", "大学受験",
-    "小１", "小２", "小３", "小４", "小５", "小６", "受験小１", "受験小２", "受験小３", "受験小４", "受験小５", "受験小６"
-  ];
-
   const testOptions = [
     "１学期中間", "１学期期末／前期中間", "２学期中間／前期期末", 
     "２学期期末／後期中間", "学年末／後期期末", "実力テスト、模試など上記以外のテスト"
   ];
 
-  // 学年ボタンの切り替えロジック
-  const toggleGrade = (grade) => {
-    setSelectedGrades(prev => 
-      prev.includes(grade) ? prev.filter(g => g !== grade) : [...prev, grade]
-    );
+  const toggleGrade = grade => {
+    setSelectedGrades(current => current.includes(grade)
+      ? current.filter(selectedGrade => selectedGrade !== grade)
+      : [...current, grade]);
   };
 
   // GASからのデータ取得処理
@@ -127,43 +128,32 @@ const TestReviewManager = ({ styles, GAS_URL, API_KEY, schools = [] , unitOption
 
         <div style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '15px' }}>
           <span style={{ width: '60px', fontWeight: 'bold' }}>教室：</span>
-          <select style={styles.select} value={selectedSchool} onChange={e => setSelectedSchool(e.target.value)}>
-           <option value="">選択してください</option>
-
-          　{/* 💡 ユニット一括表示の選択肢を追加 */}
-          <optgroup label="ーー ユニット一括表示 ーー">
-            {unitOptions.map(u => <option key={u} value={u}>{u}（全校舎一括）</option>)}
-          </optgroup>
-          
-          　{/* 💡 個別校舎の絞り込みエリア（既存のコードを内包） */}
-          <optgroup label="ーー 個別校舎絞り込み ーー">
-            {schools.filter(s => s !== 'すべて').map(s => <option key={s} value={s}>{s}</option>)}
-          </optgroup>
-          </select>
+          <SchoolSelect style={styles.select} value={selectedSchool} onChange={e => setSelectedSchool(e.target.value)} assignedSchools={assignedSchools} />
         </div>
 
-        {/* 学年選択ボタン群 */}
+        {/* 学年選択 */}
         <div style={{ marginBottom: '15px', display: 'flex', gap: '15px' }}>
           <span style={{ width: '60px', fontWeight: 'bold', paddingTop: '5px' }}>学年：</span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', flex: 1 }}>
-            <button 
-              onClick={() => setSelectedGrades([])}
-              style={{ padding: '4px 8px', border: '1px solid #1d4ed8', color: '#1d4ed8', backgroundColor: '#fff', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-            >
-              全OFF
-            </button>
-            {gradeOptions.map(g => (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', flex: 1 }}>
+            {GRADE_OPTIONS.map(grade => (
               <button
-                key={g}
-                onClick={() => toggleGrade(g)}
+                key={grade}
+                type="button"
+                onClick={() => toggleGrade(grade)}
+                aria-pressed={selectedGrades.includes(grade)}
                 style={{
-                  padding: '5px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px',
-                  backgroundColor: selectedGrades.includes(g) ? '#166534' : '#fff',
-                  color: selectedGrades.includes(g) ? '#fff' : '#166534',
-                  border: '1px solid #166534', transition: '0.2s'
+                  padding: '10px 15px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  backgroundColor: selectedGrades.includes(grade) ? '#166534' : '#fff',
+                  color: selectedGrades.includes(grade) ? '#fff' : '#333',
+                  fontWeight: selectedGrades.includes(grade) ? 'bold' : 'normal',
+                  transition: 'background-color 0.2s'
                 }}
               >
-                {g}
+                {grade}
               </button>
             ))}
           </div>
