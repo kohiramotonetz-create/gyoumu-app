@@ -26,6 +26,24 @@ const MANAGEMENT_SESSION_SHEET_NAME = "管理セッション";
 const SUKIMAKUN_CONTENT_HEADERS = ["contentId", "displayName", "category", "schoolType", "subject", "enabled", "sortOrder"];
 const SUKIMAKUN_PERMISSION_HEADERS = ["userId", "contentId", "enabled", "updatedAt", "updatedBy"];
 const MANAGEMENT_SESSION_HEADERS = ["sessionToken", "userId", "role", "expiresAt", "createdAt"];
+const ACCOUNT_MASTER_SHEET_SPECS = [
+  { name: "アカウントマスター", headers: ["userId", "password", "isInitial", "role", "enabled", "sukimakunToken", "sukimakunTokenExpire", "createdAt", "updatedAt", "deletedAt"], textColumns: [1], dateColumns: [7, 8, 9, 10] },
+  { name: "生徒マスター", headers: ["userId", "school", "name", "nameKana", "grade", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [6, 7] },
+  { name: "講師マスター", headers: ["userId", "name", "nameKana", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [4, 5] },
+  { name: "講師担当校舎", headers: ["userId", "school", "isPrimary", "enabled", "createdAt", "updatedAt", "updatedBy"], textColumns: [1, 7], dateColumns: [5, 6] }
+];
+const ACCOUNT_MIGRATION_ROLES = ["admin", "head-teacher", "teacher", "student"];
+const ACCOUNT_MIGRATION_SCHOOLS = [
+  "みらいミッテ栗林", "早稲田", "上板橋駅前", "要町", "豊玉", "和光", "志木駅前", "鶴瀬", "薬院", "西新修猷館前",
+  "大橋駅前", "長住", "六本松", "原", "橋本", "前原駅前", "西鉄久留米", "小郡", "都府楼前", "井尻",
+  "香椎", "和白", "古賀駅前", "東郷", "赤間", "西小倉駅前", "荒生田", "戸畑", "八幡", "折尾駅前", "高須", "下曽根", "守恒駅前",
+  "門司駅前", "安岡", "長府駅前", "小倉駅", "新宮中央", "箱崎", "志免南里", "佐賀駅前", "本庄大崎", "鳥栖",
+  "長崎駅前", "城栄", "南長崎", "住吉", "葉山", "水前寺", "健軍", "武蔵ヶ丘", "長嶺",
+  "大分駅前本高等部", "春日", "南大分", "光吉", "戸次", "明野", "宮崎駅前", "生目大塚", "花ヶ島", "赤江",
+  "鹿児島中央", "紫原", "宇宿", "東谷山", "慈眼寺", "白島", "緑井", "上安", "中広",
+  "広島駅前", "中筋", "古江", "皆実町", "安芸府中", "岡山駅前", "HS岡山駅前", "岡北", "伊島", "津高",
+  "国富", "西古松", "高島駅南口", "栗林", "木太南", "水田", "番町"
+];
 
 const DEFAULT_SUKIMAKUN_CONTENTS = [
   ["paper_english_test", "英単語テスト作成（紙）", "general", "all", "english", true, 1],
@@ -69,6 +87,178 @@ function toSafeSheetText(value) {
 
 function isEnabledValue(value) {
   return value === true || String(value).trim().toUpperCase() === "TRUE";
+}
+
+function getLegacyAccountSheet_() {
+  // eslint-disable-next-line no-undef
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  return spreadsheet.getSheetByName("ログイン認証") || spreadsheet.getSheets()[0];
+}
+
+function diagnoseLegacyAccountData() {
+  const sheet = getLegacyAccountSheet_();
+  const rows = sheet.getDataRange().getValues();
+  const dataRows = rows.slice(1).map((row, index) => ({ row, sheetRow: index + 2 }))
+    .filter(item => item.row.slice(0, 13).some(value => String(value == null ? "" : value).trim() !== ""));
+  const roleCounts = { admin: 0, "head-teacher": 0, teacher: 0, student: 0 };
+  const counts = {
+    unknownRole: 0, emptyUserId: 0, duplicateUserId: 0, normalizedDuplicateUserId: 0,
+    shorterThanSixDigitId: 0, longerThanSixDigitId: 0, nonNumericUserId: 0, leadingZeroUserId: 0,
+    normalizedUserIdChanged: 0, emptyName: 0, emptySchool: 0, studentEmptyGrade: 0, staffGradePresent: 0,
+    columnCValuePresent: 0, columnDValuePresent: 0, columnGValuePresent: 0, columnHValuePresent: 0,
+    organizationSchoolMismatch: 0
+  };
+  const exactIdCounts = Object.create(null);
+  const normalizedIdCounts = Object.create(null);
+  const validSchools = new Set(ACCOUNT_MIGRATION_SCHOOLS);
+  const issueSamples = [];
+  const maxIssueSamples = 100;
+  const addIssueSample = (sheetRow, userId, type) => {
+    if (issueSamples.length >= maxIssueSamples) return;
+    issueSamples.push({ sheetRow, userId: userId || "", type });
+  };
+
+  dataRows.forEach(item => {
+    const row = item.row;
+    const rawUserId = String(row[1] == null ? "" : row[1]).trim();
+    const comparableRawUserId = rawUserId.replace(/^'/, "");
+    const normalizedUserId = normalizeUserId(row[1]);
+    const role = String(row[10] || "").trim();
+    const school = String(row[0] || "").trim();
+    const name = String(row[4] || "").trim();
+    const grade = String(row[5] || "").trim();
+
+    if (ACCOUNT_MIGRATION_ROLES.includes(role)) roleCounts[role]++;
+    else {
+      counts.unknownRole++;
+      addIssueSample(item.sheetRow, normalizedUserId, "UNKNOWN_ROLE");
+    }
+    if (!comparableRawUserId) {
+      counts.emptyUserId++;
+      addIssueSample(item.sheetRow, "", "EMPTY_USER_ID");
+    } else {
+      exactIdCounts[rawUserId] = (exactIdCounts[rawUserId] || 0) + 1;
+      normalizedIdCounts[normalizedUserId] = (normalizedIdCounts[normalizedUserId] || 0) + 1;
+      if (!/^\d+$/.test(comparableRawUserId)) counts.nonNumericUserId++;
+      else {
+        if (comparableRawUserId.length < 6) counts.shorterThanSixDigitId++;
+        if (comparableRawUserId.length > 6) counts.longerThanSixDigitId++;
+        if (/^0/.test(comparableRawUserId)) counts.leadingZeroUserId++;
+      }
+      if (comparableRawUserId !== normalizedUserId) {
+        counts.normalizedUserIdChanged++;
+        addIssueSample(item.sheetRow, normalizedUserId, "USER_ID_NORMALIZED_VALUE_DIFFERS");
+      }
+    }
+    if (!name) counts.emptyName++;
+    if (!school) counts.emptySchool++;
+    if (role === "student" && !grade) counts.studentEmptyGrade++;
+    if (role !== "student" && ACCOUNT_MIGRATION_ROLES.includes(role) && grade) counts.staffGradePresent++;
+    if (String(row[2] == null ? "" : row[2]).trim()) counts.columnCValuePresent++;
+    if (String(row[3] == null ? "" : row[3]).trim()) counts.columnDValuePresent++;
+    if (String(row[6] == null ? "" : row[6]).trim()) counts.columnGValuePresent++;
+    if (String(row[7] == null ? "" : row[7]).trim()) counts.columnHValuePresent++;
+    if (school && !validSchools.has(school)) {
+      counts.organizationSchoolMismatch++;
+      addIssueSample(item.sheetRow, normalizedUserId, "ORGANIZATION_SCHOOL_MISMATCH");
+    }
+  });
+
+  Object.keys(exactIdCounts).forEach(userId => {
+    if (exactIdCounts[userId] > 1) counts.duplicateUserId += exactIdCounts[userId] - 1;
+  });
+  Object.keys(normalizedIdCounts).forEach(userId => {
+    if (normalizedIdCounts[userId] > 1) counts.normalizedDuplicateUserId += normalizedIdCounts[userId] - 1;
+  });
+
+  const blockingErrors = [];
+  if (counts.emptyUserId) blockingErrors.push({ type: "EMPTY_USER_ID", count: counts.emptyUserId });
+  if (counts.unknownRole) blockingErrors.push({ type: "UNKNOWN_ROLE", count: counts.unknownRole });
+  if (counts.duplicateUserId) blockingErrors.push({ type: "DUPLICATE_USER_ID", count: counts.duplicateUserId });
+  if (counts.normalizedDuplicateUserId) blockingErrors.push({ type: "NORMALIZED_DUPLICATE_USER_ID", count: counts.normalizedDuplicateUserId });
+  if (counts.nonNumericUserId) blockingErrors.push({ type: "NON_NUMERIC_USER_ID", count: counts.nonNumericUserId });
+  if (counts.longerThanSixDigitId) blockingErrors.push({ type: "USER_ID_LONGER_THAN_SIX_DIGITS", count: counts.longerThanSixDigitId });
+  const warnings = [];
+  if (counts.shorterThanSixDigitId) warnings.push({ type: "USER_ID_SHORTER_THAN_SIX_DIGITS", count: counts.shorterThanSixDigitId });
+  if (counts.normalizedUserIdChanged) warnings.push({ type: "USER_ID_NORMALIZED_VALUE_DIFFERS", count: counts.normalizedUserIdChanged });
+  ["emptyName", "emptySchool", "studentEmptyGrade", "staffGradePresent", "columnCValuePresent", "columnDValuePresent", "columnGValuePresent", "columnHValuePresent", "organizationSchoolMismatch"]
+    .forEach(key => { if (counts[key]) warnings.push({ type: key, count: counts[key] }); });
+
+  return {
+    targetSheetName: sheet.getName(),
+    totalRowCount: rows.length,
+    dataRowCount: dataRows.length,
+    roleCounts,
+    counts,
+    blockingErrorCount: blockingErrors.reduce((total, error) => total + error.count, 0),
+    warningCount: warnings.reduce((total, warning) => total + warning.count, 0),
+    blockingErrors,
+    warnings,
+    issueSamples,
+    issueSamplesTruncated: issueSamples.length >= maxIssueSamples
+  };
+}
+
+// eslint-disable-next-line no-unused-vars
+function setupAccountMasterSheets() {
+  // eslint-disable-next-line no-undef
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const existingSheets = {};
+  ACCOUNT_MASTER_SHEET_SPECS.forEach(spec => {
+    const sheet = spreadsheet.getSheetByName(spec.name);
+    if (!sheet) return;
+    if (sheet.getLastRow() < 1) throw new Error(`Header mismatch: ${spec.name}`);
+    if (sheet.getLastColumn() !== spec.headers.length) throw new Error(`Header mismatch: ${spec.name}`);
+    const actualHeaders = sheet.getRange(1, 1, 1, spec.headers.length).getValues()[0].map(String);
+    if (actualHeaders.join("\t") !== spec.headers.join("\t")) throw new Error(`Header mismatch: ${spec.name}`);
+    existingSheets[spec.name] = sheet;
+  });
+
+  const result = { createdSheets: [], existingSheets: [], warnings: [] };
+  ACCOUNT_MASTER_SHEET_SPECS.forEach(spec => {
+    if (existingSheets[spec.name]) {
+      result.existingSheets.push(spec.name);
+      return;
+    }
+    const sheet = spreadsheet.insertSheet(spec.name);
+    sheet.getRange(1, 1, 1, spec.headers.length).setValues([spec.headers]);
+    spec.textColumns.forEach(column => sheet.getRange(1, column, sheet.getMaxRows(), 1).setNumberFormat("@"));
+    spec.dateColumns.forEach(column => sheet.getRange(2, column, sheet.getMaxRows() - 1, 1).setNumberFormat("yyyy/MM/dd HH:mm:ss"));
+    result.createdSheets.push(spec.name);
+  });
+  result.createdCount = result.createdSheets.length;
+  result.existingCount = result.existingSheets.length;
+  result.warningCount = result.warnings.length;
+  return result;
+}
+
+// eslint-disable-next-line no-unused-vars
+function previewLegacyAccountMigration() {
+  const diagnosis = diagnoseLegacyAccountData();
+  if (diagnosis.blockingErrorCount > 0) {
+    return {
+      accountRows: 0, studentRows: 0, staffRows: 0, staffSchoolRows: 0,
+      skippedRows: diagnosis.dataRowCount, warningCount: diagnosis.warningCount,
+      blockingErrorCount: diagnosis.blockingErrorCount
+    };
+  }
+  const accountRows = ACCOUNT_MIGRATION_ROLES.reduce((total, role) => total + diagnosis.roleCounts[role], 0);
+  const studentRows = diagnosis.roleCounts.student;
+  const staffRows = diagnosis.roleCounts.admin + diagnosis.roleCounts["head-teacher"] + diagnosis.roleCounts.teacher;
+  const sheet = getLegacyAccountSheet_();
+  const staffSchoolRows = sheet.getDataRange().getValues().slice(1).filter(row => {
+    const role = String(row[10] || "").trim();
+    return role !== "student" && ACCOUNT_MIGRATION_ROLES.includes(role) && String(row[0] || "").trim();
+  }).length;
+  return {
+    accountRows,
+    studentRows,
+    staffRows,
+    staffSchoolRows,
+    skippedRows: diagnosis.dataRowCount - accountRows,
+    warningCount: diagnosis.warningCount,
+    blockingErrorCount: 0
+  };
 }
 
 function getRequiredSheet(sheetName) {
