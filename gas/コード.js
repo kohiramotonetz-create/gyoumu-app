@@ -224,36 +224,59 @@ function getSukimakunContents(includeDisabled) {
   return includeDisabled ? master.contents : master.enabledContents;
 }
 
+function buildSukimakunPermissionStateMap(permissionRows, activeContents) {
+  const activeIds = new Set(activeContents.map(content => content.contentId));
+  const stateMap = Object.create(null);
+  for (let i = 1; i < permissionRows.length; i++) {
+    const normalizedUserId = normalizeUserId(permissionRows[i][0]);
+    if (!stateMap[normalizedUserId]) {
+      stateMap[normalizedUserId] = {
+        permissionsInitialized: true,
+        allowedContentIds: [],
+        warnings: { unknownContentIdCount: 0, emptyContentIdCount: 0 },
+        seenContentIds: Object.create(null)
+      };
+    }
+    const state = stateMap[normalizedUserId];
+    const contentId = String(permissionRows[i][1] || "").trim();
+    if (!contentId) {
+      state.warnings.emptyContentIdCount++;
+      continue;
+    }
+    if (state.seenContentIds[contentId]) throw new Error(`Duplicate permission row detected for contentId: ${contentId}`);
+    state.seenContentIds[contentId] = true;
+    if (!activeIds.has(contentId)) {
+      state.warnings.unknownContentIdCount++;
+      continue;
+    }
+    if (isEnabledValue(permissionRows[i][2])) state.allowedContentIds.push(contentId);
+  }
+  Object.keys(stateMap).forEach(userId => { delete stateMap[userId].seenContentIds; });
+  return stateMap;
+}
+
+function normalizeGrade(value) {
+  return String(value == null ? "" : value).trim().normalize("NFKC");
+}
+
+function getSukimakunPermissionStateFromMap(userId, activeContents, permissionStateMap) {
+  const state = permissionStateMap[normalizeUserId(userId)];
+  if (state) return state;
+  return {
+    permissionsInitialized: false,
+    allowedContentIds: activeContents.map(content => content.contentId),
+    warnings: { unknownContentIdCount: 0, emptyContentIdCount: 0 }
+  };
+}
+
 function getSukimakunPermissionState(userId, activeContents) {
   const normalizedUserId = normalizeUserId(userId);
-  const activeIds = new Set(activeContents.map(content => content.contentId));
-  const rows = getRequiredSheet(SUKIMAKUN_PERMISSION_SHEET_NAME).getDataRange().getValues();
-  const seen = {};
-  const allowedContentIds = [];
-  let unknownContentIdCount = 0;
-  let emptyContentIdCount = 0;
-  let permissionsInitialized = false;
-  for (let i = 1; i < rows.length; i++) {
-    if (normalizeUserId(rows[i][0]) !== normalizedUserId) continue;
-    permissionsInitialized = true;
-    const contentId = String(rows[i][1] || "").trim();
-    if (!contentId) {
-      emptyContentIdCount++;
-      continue;
-    }
-    if (seen[contentId]) throw new Error(`Duplicate permission row detected for contentId: ${contentId}`);
-    seen[contentId] = true;
-    if (!activeIds.has(contentId)) {
-      unknownContentIdCount++;
-      continue;
-    }
-    if (isEnabledValue(rows[i][2])) allowedContentIds.push(contentId);
-  }
-  return {
-    permissionsInitialized,
-    allowedContentIds: permissionsInitialized ? allowedContentIds : activeContents.map(content => content.contentId),
-    warnings: { unknownContentIdCount, emptyContentIdCount }
-  };
+  const allPermissionRows = getRequiredSheet(SUKIMAKUN_PERMISSION_SHEET_NAME).getDataRange().getValues();
+  const permissionRows = allPermissionRows.slice(0, 1).concat(
+    allPermissionRows.slice(1).filter(row => normalizeUserId(row[0]) === normalizedUserId)
+  );
+  const permissionStateMap = buildSukimakunPermissionStateMap(permissionRows, activeContents);
+  return getSukimakunPermissionStateFromMap(normalizedUserId, activeContents, permissionStateMap);
 }
 
 function appendStudentPermissionInfo(result, userId, role) {
@@ -521,8 +544,9 @@ function doPost(e) {
     try {
       const adminSession = requireAdminSession(data.sessionToken);
       const school = typeof data.school === "string" ? data.school.trim() : "";
-      const grade = typeof data.grade === "string" ? data.grade.trim() : "";
-      if (!school || !grade || school.length > 100 || grade.length > 30) {
+      const grade = normalizeGrade(data.grade);
+      const isSupportedGrade = /^(小[1-6]|中[1-3]|高[1-3]|大学受験)$/.test(grade);
+      if (!school || !grade || school.length > 100 || grade.length > 30 || !isSupportedGrade) {
         return responseJSON({ result: "error", code: "VALIDATION_ERROR", message: "校舎と学年を正しく指定してください" });
       }
 
@@ -530,16 +554,25 @@ function doPost(e) {
       const activeContents = allContents.filter(content => content.enabled);
       const studentRows = rows.slice(1).filter(row => String(row[10] || "").trim() === "student");
       const validSchools = new Set(studentRows.map(row => String(row[0] || "").trim()).filter(Boolean));
-      const validGrades = new Set(studentRows.map(row => String(row[5] || "").trim()).filter(Boolean));
-      if (!validSchools.has(school) || !validGrades.has(grade)) {
+      if (!validSchools.has(school)) {
         return responseJSON({ result: "error", code: "VALIDATION_ERROR", message: "指定された校舎または学年は利用できません" });
       }
 
-      const students = studentRows
-        .filter(row => String(row[0] || "").trim() === school && String(row[5] || "").trim() === grade)
+      const targetStudentRows = studentRows
+        .filter(row => String(row[0] || "").trim() === school && normalizeGrade(row[5]) === grade);
+      let permissionStateMap = Object.create(null);
+      if (targetStudentRows.length > 0) {
+        const targetUserIds = new Set(targetStudentRows.map(row => normalizeUserId(row[1])));
+        const allPermissionRows = getRequiredSheet(SUKIMAKUN_PERMISSION_SHEET_NAME).getDataRange().getValues();
+        const permissionRows = allPermissionRows.slice(0, 1).concat(
+          allPermissionRows.slice(1).filter(row => targetUserIds.has(normalizeUserId(row[0])))
+        );
+        permissionStateMap = buildSukimakunPermissionStateMap(permissionRows, activeContents);
+      }
+      const students = targetStudentRows
         .map(row => {
           const userId = normalizeUserId(row[1]);
-          const permissionState = getSukimakunPermissionState(userId, activeContents);
+          const permissionState = getSukimakunPermissionStateFromMap(userId, activeContents, permissionStateMap);
           return {
             userId,
             name: String(row[4] || "").trim(),

@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
 
-const API_TIMEOUT_MS = 15000;
+const READ_API_TIMEOUT_MS = 30000;
+const WRITE_API_TIMEOUT_MS = 15000;
+const READ_RETRY_LIMIT = 1;
 const NAME_COLUMN_WIDTH = 180;
 const ID_COLUMN_WIDTH = 130;
 
@@ -33,6 +35,7 @@ export default function SukimakunPermissionManager({
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [sessionExpired, setSessionExpired] = useState(false);
+  const fetchInProgressRef = useRef(false);
 
   const activeContents = useMemo(() => contents
     .filter(content => content.enabled === true)
@@ -47,7 +50,7 @@ export default function SukimakunPermissionManager({
     );
   }, [students, query]);
 
-  const postAction = async (action, payload = {}) => {
+  const postAction = async (action, payload = {}, timeout = WRITE_API_TIMEOUT_MS) => {
     const response = await axios.post(GAS_URL, JSON.stringify({
       action,
       apiKey: API_KEY,
@@ -55,12 +58,18 @@ export default function SukimakunPermissionManager({
       ...payload
     }), {
       headers: { 'Content-Type': 'text/plain' },
-      timeout: API_TIMEOUT_MS
+      timeout
     });
 
-    if (response.data?.result !== 'success') {
+    if (!response.data || typeof response.data !== 'object') {
+      const error = new Error('サーバーから正しい形式の応答を受信できませんでした。');
+      error.code = 'INVALID_RESPONSE';
+      throw error;
+    }
+    if (response.data.result !== 'success') {
       const error = new Error(response.data?.message || '処理に失敗しました');
       error.code = response.data?.code;
+      error.isApiError = true;
       throw error;
     }
     return response.data;
@@ -72,31 +81,61 @@ export default function SukimakunPermissionManager({
       setStatus({ type: 'error', message: '管理セッションが期限切れです。再ログインしてください。' });
       return '管理セッションが期限切れです。';
     }
-    if (error?.code === 'ECONNABORTED') {
+    if (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT') {
       return '通信がタイムアウトしました。時間をおいて再度お試しください。';
+    }
+    if (error?.code === 'INVALID_RESPONSE') {
+      return 'サーバーから正しい応答を受信できませんでした。再度お試しください。';
+    }
+    if (error?.code === 'ERR_NETWORK' || !error?.response) {
+      return 'ネットワーク通信に失敗しました。接続を確認して再度お試しください。';
     }
     return error?.message || fallbackMessage;
   };
 
+  const shouldRetryRead = error => !error?.isApiError &&
+    error?.code !== 'AUTHORIZATION_ERROR' &&
+    (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT' || error?.code === 'ERR_NETWORK');
+
+  const fetchPermissionMatrix = async grade => {
+    for (let attempt = 0; attempt <= READ_RETRY_LIMIT; attempt++) {
+      try {
+        return await postAction('getSukimakunPermissionMatrix', {
+          school: selectedSchool,
+          grade
+        }, READ_API_TIMEOUT_MS);
+      } catch (error) {
+        if (attempt >= READ_RETRY_LIMIT || !shouldRetryRead(error)) throw error;
+        setStatus({ type: 'loading', message: '通信を再試行しています...' });
+      }
+    }
+  };
+
   const fetchPermissions = async () => {
+    if (fetchInProgressRef.current) return;
     if (!selectedSchool || selectedGrades.length === 0) {
       setStatus({ type: 'error', message: '校舎と学年を選択してください。' });
       return;
     }
+    fetchInProgressRef.current = true;
     setLoading(true);
     setSessionExpired(false);
     setStatus({ type: '', message: '' });
     try {
       const responses = [];
-      for (const grade of selectedGrades) {
-        responses.push(await postAction('getSukimakunPermissionMatrix', {
-          school: selectedSchool,
-          grade
-        }));
+      for (let index = 0; index < selectedGrades.length; index++) {
+        try {
+          responses.push(await fetchPermissionMatrix(selectedGrades[index]));
+        } catch (error) {
+          error.isPartialGradeFailure = selectedGrades.length > 1;
+          error.failedGrade = selectedGrades[index];
+          throw error;
+        }
       }
       const nextContents = Array.isArray(responses[0]?.contents) ? responses[0].contents : [];
-      const contentSignature = JSON.stringify(nextContents.map(content => content.contentId));
-      if (responses.some(data => JSON.stringify((data.contents || []).map(content => content.contentId)) !== contentSignature)) {
+      const getContentSignature = data => JSON.stringify((data.contents || []).map(content => content.contentId).sort());
+      const contentSignature = getContentSignature({ contents: nextContents });
+      if (responses.some(data => getContentSignature(data) !== contentSignature)) {
         throw new Error('学年ごとのコンテンツ一覧が一致しません。');
       }
       const studentMap = new Map();
@@ -112,10 +151,21 @@ export default function SukimakunPermissionManager({
         (student.allowedContentIds || []).filter(contentId => activeContentIds.has(contentId))
       ])));
       setRowStatusByStudentId({});
-      setStatus({ type: 'success', message: `${nextStudents.length}名の設定を取得しました。` });
+      setStatus({
+        type: 'success',
+        message: nextStudents.length > 0
+          ? `${nextStudents.length}名の設定を取得しました。`
+          : '対象となる生徒がいません。'
+      });
     } catch (error) {
-      setStatus({ type: 'error', message: getApiErrorMessage(error, '利用設定を取得できませんでした。') });
+      const message = error?.code === 'AUTHORIZATION_ERROR'
+        ? getApiErrorMessage(error, '利用設定を取得できませんでした。')
+        : error?.isPartialGradeFailure
+          ? `${error.failedGrade}の情報を取得できませんでした。再度お試しください。`
+          : getApiErrorMessage(error, '利用設定を取得できませんでした。');
+      setStatus({ type: 'error', message });
     } finally {
+      fetchInProgressRef.current = false;
       setLoading(false);
     }
   };
