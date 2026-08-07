@@ -27,12 +27,15 @@ const SUKIMAKUN_CONTENT_HEADERS = ["contentId", "displayName", "category", "scho
 const SUKIMAKUN_PERMISSION_HEADERS = ["userId", "contentId", "enabled", "updatedAt", "updatedBy"];
 const MANAGEMENT_SESSION_HEADERS = ["sessionToken", "userId", "role", "expiresAt", "createdAt"];
 const ACCOUNT_MASTER_SHEET_SPECS = [
-  { name: "アカウントマスター", headers: ["userId", "password", "isInitial", "role", "enabled", "sukimakunToken", "sukimakunTokenExpire", "createdAt", "updatedAt", "deletedAt"], textColumns: [1], dateColumns: [7, 8, 9, 10] },
+  { name: "アカウントマスター", headers: ["userId", "password", "isInitial", "passwordUpdatedAt", "role", "enabled", "sukimakunToken", "sukimakunTokenExpire", "createdAt", "updatedAt", "deletedAt"], textColumns: [1, 2, 7], dateColumns: [4, 8, 9, 10, 11] },
   { name: "生徒マスター", headers: ["userId", "school", "name", "nameKana", "grade", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [6, 7] },
   { name: "講師マスター", headers: ["userId", "name", "nameKana", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [4, 5] },
   { name: "講師担当校舎", headers: ["userId", "school", "isPrimary", "enabled", "createdAt", "updatedAt", "updatedBy"], textColumns: [1, 7], dateColumns: [5, 6] }
 ];
 const ACCOUNT_MIGRATION_ROLES = ["admin", "head-teacher", "teacher", "student"];
+const LEGACY_ALLOWED_ADMIN_USER_IDS = ["admin"];
+const ACCOUNT_MIGRATION_METADATA_PROPERTY = "ACCOUNT_MIGRATION_METADATA";
+const ACCOUNT_MIGRATION_SOURCE_SHEET_NAME = "シート1";
 const ACCOUNT_MIGRATION_SCHOOLS = [
   "みらいミッテ栗林", "早稲田", "上板橋駅前", "要町", "豊玉", "和光", "志木駅前", "鶴瀬", "薬院", "西新修猷館前",
   "大橋駅前", "長住", "六本松", "原", "橋本", "前原駅前", "西鉄久留米", "小郡", "都府楼前", "井尻",
@@ -95,6 +98,19 @@ function getLegacyAccountSheet_() {
   return spreadsheet.getSheetByName("ログイン認証") || spreadsheet.getSheets()[0];
 }
 
+function validateLegacyMigrationUserId_(rawValue, role) {
+  const userId = String(rawValue == null ? "" : rawValue).trim().replace(/^'/, "");
+  const isNumeric = /^\d+$/.test(userId);
+  const isAllowedAdminId = LEGACY_ALLOWED_ADMIN_USER_IDS.includes(userId) && role === "admin";
+  return {
+    userId,
+    isNumeric,
+    isAllowedAdminId,
+    isValid: /^\d{6}$/.test(userId) || isAllowedAdminId,
+    isInvalidNonNumeric: Boolean(userId) && !isNumeric && !isAllowedAdminId
+  };
+}
+
 function diagnoseLegacyAccountData() {
   const sheet = getLegacyAccountSheet_();
   const rows = sheet.getDataRange().getValues();
@@ -104,6 +120,7 @@ function diagnoseLegacyAccountData() {
   const counts = {
     unknownRole: 0, emptyUserId: 0, duplicateUserId: 0, normalizedDuplicateUserId: 0,
     shorterThanSixDigitId: 0, longerThanSixDigitId: 0, nonNumericUserId: 0, leadingZeroUserId: 0,
+    allowedLegacyAdminId: 0, invalidNonNumericUserId: 0,
     normalizedUserIdChanged: 0, emptyName: 0, emptySchool: 0, studentEmptyGrade: 0, staffGradePresent: 0,
     columnCValuePresent: 0, columnDValuePresent: 0, columnGValuePresent: 0, columnHValuePresent: 0,
     organizationSchoolMismatch: 0
@@ -127,6 +144,7 @@ function diagnoseLegacyAccountData() {
     const school = String(row[0] || "").trim();
     const name = String(row[4] || "").trim();
     const grade = String(row[5] || "").trim();
+    const userIdValidation = validateLegacyMigrationUserId_(row[1], role);
 
     if (ACCOUNT_MIGRATION_ROLES.includes(role)) roleCounts[role]++;
     else {
@@ -144,6 +162,11 @@ function diagnoseLegacyAccountData() {
         if (comparableRawUserId.length < 6) counts.shorterThanSixDigitId++;
         if (comparableRawUserId.length > 6) counts.longerThanSixDigitId++;
         if (/^0/.test(comparableRawUserId)) counts.leadingZeroUserId++;
+      }
+      if (userIdValidation.isAllowedAdminId) counts.allowedLegacyAdminId++;
+      if (userIdValidation.isInvalidNonNumeric) {
+        counts.invalidNonNumericUserId++;
+        addIssueSample(item.sheetRow, normalizedUserId, "INVALID_NON_NUMERIC_USER_ID");
       }
       if (comparableRawUserId !== normalizedUserId) {
         counts.normalizedUserIdChanged++;
@@ -176,10 +199,10 @@ function diagnoseLegacyAccountData() {
   if (counts.unknownRole) blockingErrors.push({ type: "UNKNOWN_ROLE", count: counts.unknownRole });
   if (counts.duplicateUserId) blockingErrors.push({ type: "DUPLICATE_USER_ID", count: counts.duplicateUserId });
   if (counts.normalizedDuplicateUserId) blockingErrors.push({ type: "NORMALIZED_DUPLICATE_USER_ID", count: counts.normalizedDuplicateUserId });
-  if (counts.nonNumericUserId) blockingErrors.push({ type: "NON_NUMERIC_USER_ID", count: counts.nonNumericUserId });
+  if (counts.invalidNonNumericUserId) blockingErrors.push({ type: "INVALID_NON_NUMERIC_USER_ID", count: counts.invalidNonNumericUserId });
+  if (counts.shorterThanSixDigitId) blockingErrors.push({ type: "USER_ID_SHORTER_THAN_SIX_DIGITS", count: counts.shorterThanSixDigitId });
   if (counts.longerThanSixDigitId) blockingErrors.push({ type: "USER_ID_LONGER_THAN_SIX_DIGITS", count: counts.longerThanSixDigitId });
   const warnings = [];
-  if (counts.shorterThanSixDigitId) warnings.push({ type: "USER_ID_SHORTER_THAN_SIX_DIGITS", count: counts.shorterThanSixDigitId });
   if (counts.normalizedUserIdChanged) warnings.push({ type: "USER_ID_NORMALIZED_VALUE_DIFFERS", count: counts.normalizedUserIdChanged });
   ["emptyName", "emptySchool", "studentEmptyGrade", "staffGradePresent", "columnCValuePresent", "columnDValuePresent", "columnGValuePresent", "columnHValuePresent", "organizationSchoolMismatch"]
     .forEach(key => { if (counts[key]) warnings.push({ type: key, count: counts[key] }); });
@@ -190,6 +213,12 @@ function diagnoseLegacyAccountData() {
     dataRowCount: dataRows.length,
     roleCounts,
     counts,
+    allowedLegacyAdminIdCount: counts.allowedLegacyAdminId,
+    invalidNonNumericUserIdCount: counts.invalidNonNumericUserId,
+    allowedLegacyAdminIdsUsed: LEGACY_ALLOWED_ADMIN_USER_IDS.filter(userId =>
+      dataRows.some(item => validateLegacyMigrationUserId_(item.row[1], String(item.row[10] || "").trim()).isAllowedAdminId &&
+        String(item.row[1] == null ? "" : item.row[1]).trim().replace(/^'/, "") === userId)
+    ),
     blockingErrorCount: blockingErrors.reduce((total, error) => total + error.count, 0),
     warningCount: warnings.reduce((total, warning) => total + warning.count, 0),
     blockingErrors,
@@ -259,6 +288,721 @@ function previewLegacyAccountMigration() {
     warningCount: diagnosis.warningCount,
     blockingErrorCount: 0
   };
+}
+
+function assertAccountMigrationSheets_(requireEmpty) {
+  // eslint-disable-next-line no-undef
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = Object.create(null);
+  ACCOUNT_MASTER_SHEET_SPECS.forEach(spec => {
+    const sheet = spreadsheet.getSheetByName(spec.name);
+    if (!sheet) throw new Error(`Required migration sheet is missing: ${spec.name}`);
+    if (sheet.getLastColumn() !== spec.headers.length || sheet.getLastRow() < 1) {
+      throw new Error(`Migration sheet header mismatch: ${spec.name}`);
+    }
+    const actualHeaders = sheet.getRange(1, 1, 1, spec.headers.length).getValues()[0].map(String);
+    if (actualHeaders.join("\t") !== spec.headers.join("\t")) {
+      throw new Error(`Migration sheet header mismatch: ${spec.name}`);
+    }
+    if (requireEmpty && sheet.getLastRow() > 1) {
+      throw new Error(`Migration sheet must be empty: ${spec.name}`);
+    }
+    sheets[spec.name] = sheet;
+  });
+  return sheets;
+}
+
+function normalizeLegacyMigrationBoolean_(value, fieldName) {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0 || value == null || String(value).trim() === "") return false;
+  const text = String(value).trim().toUpperCase();
+  if (text === "TRUE" || text === "1") return true;
+  if (text === "FALSE" || text === "0") return false;
+  throw new Error(`Invalid boolean value in ${fieldName}`);
+}
+
+function getLegacyMigrationUserId_(value, role) {
+  const validation = validateLegacyMigrationUserId_(value, role);
+  if (!validation.isValid) throw new Error("Invalid legacy userId detected");
+  return validation.userId;
+}
+
+function createAccountMigrationId_(now) {
+  // eslint-disable-next-line no-undef
+  const timestamp = Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyyMMdd'T'HHmmss");
+  // eslint-disable-next-line no-undef
+  return `account-migration-${timestamp}-${Utilities.getUuid().slice(0, 8)}`;
+}
+
+function getAccountMigrationDataRows_(sheet) {
+  if (sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+}
+
+function getAccountMigrationDigest_(rows) {
+  const serializableRows = rows.map(row => row.map(value => value instanceof Date ? value.toISOString() : value));
+  // eslint-disable-next-line no-undef
+  const digest = Utilities.computeDigest(
+    // eslint-disable-next-line no-undef
+    Utilities.DigestAlgorithm.SHA_256,
+    JSON.stringify(serializableRows),
+    // eslint-disable-next-line no-undef
+    Utilities.Charset.UTF_8
+  );
+  // eslint-disable-next-line no-undef
+  return Utilities.base64EncodeWebSafe(digest);
+}
+
+function assertUniqueMigrationKeys_(rows, indexes, label) {
+  const seen = new Set();
+  rows.forEach(row => {
+    const key = indexes.map(index => String(row[index] == null ? "" : row[index])).join("\u0000");
+    if (seen.has(key)) throw new Error(`Duplicate key detected in ${label}`);
+    seen.add(key);
+  });
+}
+
+function buildLegacyAccountMigrationData_(legacySheet, migratedAt, migrationId) {
+  const rawRows = legacySheet.getDataRange().getValues().slice(1)
+    .filter(row => row.slice(0, 13).some(value => String(value == null ? "" : value).trim() !== ""));
+  const accountRows = [];
+  const studentRows = [];
+  const staffRows = [];
+  const staffSchoolRows = [];
+
+  rawRows.forEach(row => {
+    const role = String(row[10] || "").trim();
+    if (!ACCOUNT_MIGRATION_ROLES.includes(role)) throw new Error("Invalid legacy role detected");
+    const userId = getLegacyMigrationUserId_(row[1], role);
+    const isStudent = role === "student";
+    accountRows.push([
+      userId,
+      row[9],
+      normalizeLegacyMigrationBoolean_(row[8], "isInitial"),
+      isStudent ? "" : (row[7] || ""),
+      role,
+      true,
+      row[11] || "",
+      row[12] || "",
+      migratedAt,
+      migratedAt,
+      ""
+    ]);
+    if (isStudent) {
+      studentRows.push([userId, row[0] || "", row[4] || "", "", row[5] || "", migratedAt, migratedAt]);
+      return;
+    }
+    staffRows.push([userId, row[4] || "", "", migratedAt, migratedAt]);
+    const school = String(row[0] || "").trim();
+    if (school) staffSchoolRows.push([userId, school, true, true, migratedAt, migratedAt, migrationId]);
+  });
+
+  assertUniqueMigrationKeys_(accountRows, [0], "account master");
+  assertUniqueMigrationKeys_(studentRows, [0], "student master");
+  assertUniqueMigrationKeys_(staffRows, [0], "staff master");
+  assertUniqueMigrationKeys_(staffSchoolRows, [0, 1], "staff school master");
+  if (accountRows.length !== rawRows.length) throw new Error("Account migration count mismatch");
+  const studentCount = rawRows.filter(row => String(row[10] || "").trim() === "student").length;
+  const staffCount = rawRows.length - studentCount;
+  if (studentRows.length !== studentCount || staffRows.length !== staffCount) {
+    throw new Error("Profile migration count mismatch");
+  }
+  const accountRoleById = Object.create(null);
+  accountRows.forEach(row => { accountRoleById[row[0]] = row[4]; });
+  studentRows.forEach(row => {
+    if (accountRoleById[row[0]] !== "student") throw new Error("Student profile role mismatch");
+    if (row[3] !== "") throw new Error("Student nameKana must be empty");
+  });
+  staffRows.forEach(row => {
+    if (!["admin", "head-teacher", "teacher"].includes(accountRoleById[row[0]])) {
+      throw new Error("Staff profile role mismatch");
+    }
+    if (row[2] !== "") throw new Error("Staff nameKana must be empty");
+  });
+  return { rawRows, accountRows, studentRows, staffRows, staffSchoolRows };
+}
+
+function getAccountMigrationMetadata_() {
+  // eslint-disable-next-line no-undef
+  const raw = PropertiesService.getScriptProperties().getProperty(ACCOUNT_MIGRATION_METADATA_PROPERTY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error("Account migration metadata is invalid");
+  }
+}
+
+function setAccountMigrationMetadata_(metadata) {
+  // eslint-disable-next-line no-undef
+  PropertiesService.getScriptProperties().setProperty(ACCOUNT_MIGRATION_METADATA_PROPERTY, JSON.stringify(metadata));
+}
+
+function buildAccountMigrationSheetMetadata_(sheets, generatedData) {
+  const rowsBySheet = {
+    "アカウントマスター": generatedData.accountRows,
+    "生徒マスター": generatedData.studentRows,
+    "講師マスター": generatedData.staffRows,
+    "講師担当校舎": generatedData.staffSchoolRows
+  };
+  const result = Object.create(null);
+  ACCOUNT_MASTER_SHEET_SPECS.forEach(spec => {
+    const rows = rowsBySheet[spec.name];
+    result[spec.name] = {
+      sheetId: sheets[spec.name].getSheetId(),
+      rowCount: rows.length,
+      digest: getAccountMigrationDigest_(rows)
+    };
+  });
+  return result;
+}
+
+// eslint-disable-next-line no-unused-vars
+function migrateLegacyAccounts() {
+  // eslint-disable-next-line no-undef
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(5000)) throw new Error("Account migration is already running");
+  try {
+    const existingMetadata = getAccountMigrationMetadata_();
+    if (existingMetadata && existingMetadata.status !== "rolledBack") {
+      throw new Error("An account migration record already exists");
+    }
+    const diagnosis = diagnoseLegacyAccountData();
+    if (diagnosis.blockingErrorCount > 0) throw new Error("Legacy account diagnosis contains blocking errors");
+    if (diagnosis.targetSheetName !== ACCOUNT_MIGRATION_SOURCE_SHEET_NAME) {
+      throw new Error("Unexpected legacy account source sheet");
+    }
+    const sheets = assertAccountMigrationSheets_(true);
+    const migratedAt = new Date();
+    const migrationId = createAccountMigrationId_(migratedAt);
+    if (existingMetadata && existingMetadata.migrationId === migrationId) {
+      throw new Error("Duplicate migrationId detected");
+    }
+    const legacySheet = getLegacyAccountSheet_();
+    const generatedData = buildLegacyAccountMigrationData_(legacySheet, migratedAt, migrationId);
+    if (generatedData.rawRows.length !== diagnosis.dataRowCount) {
+      throw new Error("Legacy source row count changed after diagnosis");
+    }
+    ACCOUNT_MIGRATION_ROLES.forEach(role => {
+      const generatedRoleCount = generatedData.rawRows.filter(row => String(row[10] || "").trim() === role).length;
+      if (generatedRoleCount !== diagnosis.roleCounts[role]) throw new Error("Legacy role counts changed after diagnosis");
+    });
+    const sheetMetadata = buildAccountMigrationSheetMetadata_(sheets, generatedData);
+    const metadata = {
+      migrationId,
+      status: "writing",
+      migratedAt: migratedAt.toISOString(),
+      sourceSheetName: legacySheet.getName(),
+      sourceRowCount: generatedData.rawRows.length,
+      sheets: sheetMetadata
+    };
+    setAccountMigrationMetadata_(metadata);
+
+    const writePlan = [
+      ["アカウントマスター", generatedData.accountRows],
+      ["生徒マスター", generatedData.studentRows],
+      ["講師マスター", generatedData.staffRows],
+      ["講師担当校舎", generatedData.staffSchoolRows]
+    ];
+    try {
+      writePlan.forEach(([sheetName, rows]) => {
+        if (rows.length) sheets[sheetName].getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+      });
+      ACCOUNT_MASTER_SHEET_SPECS.forEach(spec => {
+        const actualRows = getAccountMigrationDataRows_(sheets[spec.name]);
+        const expected = sheetMetadata[spec.name];
+        if (actualRows.length !== expected.rowCount || getAccountMigrationDigest_(actualRows) !== expected.digest) {
+          throw new Error(`Post-write verification failed: ${spec.name}`);
+        }
+      });
+    } catch {
+      metadata.status = "failed";
+      metadata.failedAt = new Date().toISOString();
+      try {
+        ACCOUNT_MASTER_SHEET_SPECS.forEach(spec => {
+          const actualRows = getAccountMigrationDataRows_(sheets[spec.name]);
+          metadata.sheets[spec.name] = {
+            sheetId: sheets[spec.name].getSheetId(),
+            rowCount: actualRows.length,
+            digest: getAccountMigrationDigest_(actualRows)
+          };
+        });
+      } catch {
+        metadata.status = "failedUnverifiable";
+      }
+      setAccountMigrationMetadata_(metadata);
+      throw new Error("Account migration failed during write or verification");
+    }
+    metadata.status = "completed";
+    metadata.completedAt = new Date().toISOString();
+    setAccountMigrationMetadata_(metadata);
+    return {
+      success: true,
+      migrationId,
+      accountRows: generatedData.accountRows.length,
+      studentRows: generatedData.studentRows.length,
+      staffRows: generatedData.staffRows.length,
+      staffSchoolRows: generatedData.staffSchoolRows.length
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getMigrationComparableValue_(value) {
+  if (value instanceof Date) return value.toISOString();
+  return String(value == null ? "" : value).trim();
+}
+
+function getDuplicateKeyCount_(rows, indexes) {
+  const counts = Object.create(null);
+  rows.forEach(row => {
+    const key = indexes.map(index => String(row[index] == null ? "" : row[index])).join("\u0000");
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return Object.keys(counts).reduce((total, key) => total + Math.max(0, counts[key] - 1), 0);
+}
+
+// eslint-disable-next-line no-unused-vars
+function compareLegacyMigration() {
+  const legacySheet = getLegacyAccountSheet_();
+  if (legacySheet.getName() !== ACCOUNT_MIGRATION_SOURCE_SHEET_NAME) {
+    throw new Error("Unexpected legacy account source sheet");
+  }
+  const sheets = assertAccountMigrationSheets_(false);
+  const legacyRows = legacySheet.getDataRange().getValues().slice(1)
+    .filter(row => row.slice(0, 13).some(value => String(value == null ? "" : value).trim() !== ""));
+  const accountRows = getAccountMigrationDataRows_(sheets["アカウントマスター"]);
+  const studentRows = getAccountMigrationDataRows_(sheets["生徒マスター"]);
+  const staffRows = getAccountMigrationDataRows_(sheets["講師マスター"]);
+  const staffSchoolRows = getAccountMigrationDataRows_(sheets["講師担当校舎"]);
+  const mismatchCounts = Object.create(null);
+  const mismatchSamples = [];
+  const addMismatch = (type, userId) => {
+    mismatchCounts[type] = (mismatchCounts[type] || 0) + 1;
+    if (mismatchSamples.length < 100) mismatchSamples.push({ userId: String(userId || ""), type });
+  };
+  const legacyById = Object.create(null);
+  legacyRows.forEach(row => {
+    const role = String(row[10] || "").trim();
+    legacyById[getLegacyMigrationUserId_(row[1], role)] = row;
+  });
+  const accountById = Object.create(null);
+  accountRows.forEach(row => { accountById[String(row[0] || "").trim()] = row; });
+  const studentById = Object.create(null);
+  studentRows.forEach(row => { studentById[String(row[0] || "").trim()] = row; });
+  const staffById = Object.create(null);
+  staffRows.forEach(row => { staffById[String(row[0] || "").trim()] = row; });
+  const staffSchoolKeys = new Set(staffSchoolRows.map(row => `${String(row[0] || "").trim()}\u0000${String(row[1] || "").trim()}`));
+  const legacyIds = new Set(Object.keys(legacyById));
+  const accountIds = new Set(Object.keys(accountById));
+
+  legacyIds.forEach(userId => {
+    if (!accountIds.has(userId)) addMismatch("MISSING_ACCOUNT_USER_ID", userId);
+  });
+  accountIds.forEach(userId => {
+    if (!legacyIds.has(userId)) addMismatch("EXTRA_ACCOUNT_USER_ID", userId);
+  });
+  legacyIds.forEach(userId => {
+    const legacy = legacyById[userId];
+    const account = accountById[userId];
+    if (!account) return;
+    const role = String(legacy[10] || "").trim();
+    if (String(account[4] || "").trim() !== role) addMismatch("ROLE_MISMATCH", userId);
+    if (normalizeLegacyMigrationBoolean_(account[2], "isInitial") !== normalizeLegacyMigrationBoolean_(legacy[8], "isInitial")) {
+      addMismatch("IS_INITIAL_MISMATCH", userId);
+    }
+    const expectedPasswordUpdatedAt = role === "student" ? "" : legacy[7];
+    if (getMigrationComparableValue_(account[3]) !== getMigrationComparableValue_(expectedPasswordUpdatedAt)) {
+      addMismatch("PASSWORD_UPDATED_AT_MISMATCH", userId);
+    }
+    if (!isEnabledValue(account[5])) addMismatch("ACCOUNT_NOT_ENABLED", userId);
+    if (getMigrationComparableValue_(account[10]) !== "") addMismatch("DELETED_AT_NOT_EMPTY", userId);
+    if (role === "student") {
+      const student = studentById[userId];
+      if (!student) addMismatch("MISSING_STUDENT_PROFILE", userId);
+      else {
+        if (String(student[1] || "").trim() !== String(legacy[0] || "").trim()) addMismatch("STUDENT_SCHOOL_MISMATCH", userId);
+        if (String(student[4] || "").trim() !== String(legacy[5] || "").trim()) addMismatch("STUDENT_GRADE_MISMATCH", userId);
+        if (String(student[3] || "") !== "") addMismatch("STUDENT_NAME_KANA_NOT_EMPTY", userId);
+      }
+      if (staffById[userId]) addMismatch("STUDENT_HAS_STAFF_PROFILE", userId);
+    } else {
+      const staff = staffById[userId];
+      if (!staff) addMismatch("MISSING_STAFF_PROFILE", userId);
+      else if (String(staff[2] || "") !== "") addMismatch("STAFF_NAME_KANA_NOT_EMPTY", userId);
+      if (studentById[userId]) addMismatch("STAFF_HAS_STUDENT_PROFILE", userId);
+      const school = String(legacy[0] || "").trim();
+      if (school && !staffSchoolKeys.has(`${userId}\u0000${school}`)) addMismatch("STAFF_SCHOOL_MISMATCH", userId);
+    }
+  });
+  studentRows.forEach(row => {
+    const userId = String(row[0] || "").trim();
+    if (!legacyIds.has(userId)) addMismatch("EXTRA_STUDENT_PROFILE", userId);
+  });
+  staffRows.forEach(row => {
+    const userId = String(row[0] || "").trim();
+    if (!legacyIds.has(userId)) addMismatch("EXTRA_STAFF_PROFILE", userId);
+  });
+  staffSchoolRows.forEach(row => {
+    const userId = String(row[0] || "").trim();
+    if (!legacyIds.has(userId)) addMismatch("EXTRA_STAFF_SCHOOL", userId);
+    if (!isEnabledValue(row[3])) addMismatch("STAFF_SCHOOL_NOT_ENABLED", userId);
+  });
+
+  const legacyRoleCounts = { admin: 0, "head-teacher": 0, teacher: 0, student: 0 };
+  const accountRoleCounts = { admin: 0, "head-teacher": 0, teacher: 0, student: 0 };
+  legacyRows.forEach(row => { legacyRoleCounts[String(row[10] || "").trim()]++; });
+  accountRows.forEach(row => {
+    const role = String(row[4] || "").trim();
+    if (Object.prototype.hasOwnProperty.call(accountRoleCounts, role)) accountRoleCounts[role]++;
+  });
+  ACCOUNT_MIGRATION_ROLES.forEach(role => {
+    if (legacyRoleCounts[role] !== accountRoleCounts[role]) addMismatch(`ROLE_COUNT_MISMATCH_${role}`, "");
+  });
+  const legacyStaffPasswordUpdatedCount = legacyRows.filter(row =>
+    ["admin", "head-teacher", "teacher"].includes(String(row[10] || "").trim()) && getMigrationComparableValue_(row[7]) !== ""
+  ).length;
+  const migratedStaffPasswordUpdatedCount = accountRows.filter(row =>
+    ["admin", "head-teacher", "teacher"].includes(String(row[4] || "").trim()) && getMigrationComparableValue_(row[3]) !== ""
+  ).length;
+  if (legacyStaffPasswordUpdatedCount !== migratedStaffPasswordUpdatedCount) {
+    addMismatch("PASSWORD_UPDATED_AT_COUNT_MISMATCH", "");
+  }
+  const accountDuplicateCount = getDuplicateKeyCount_(accountRows, [0]);
+  const studentDuplicateCount = getDuplicateKeyCount_(studentRows, [0]);
+  const staffDuplicateCount = getDuplicateKeyCount_(staffRows, [0]);
+  const staffSchoolDuplicateCount = getDuplicateKeyCount_(staffSchoolRows, [0, 1]);
+  if (accountDuplicateCount) mismatchCounts.ACCOUNT_USER_ID_DUPLICATE = accountDuplicateCount;
+  if (studentDuplicateCount) mismatchCounts.STUDENT_USER_ID_DUPLICATE = studentDuplicateCount;
+  if (staffDuplicateCount) mismatchCounts.STAFF_USER_ID_DUPLICATE = staffDuplicateCount;
+  if (staffSchoolDuplicateCount) mismatchCounts.STAFF_SCHOOL_DUPLICATE = staffSchoolDuplicateCount;
+  const errorCount = Object.keys(mismatchCounts).reduce((total, key) => total + mismatchCounts[key], 0);
+  return {
+    success: errorCount === 0,
+    errorCount,
+    warningCount: 0,
+    countSummary: {
+      legacyRows: legacyRows.length,
+      accountRows: accountRows.length,
+      legacyStudentRows: legacyRoleCounts.student,
+      studentRows: studentRows.length,
+      legacyStaffRows: legacyRoleCounts.admin + legacyRoleCounts["head-teacher"] + legacyRoleCounts.teacher,
+      staffRows: staffRows.length,
+      staffSchoolRows: staffSchoolRows.length,
+      legacyRoleCounts,
+      accountRoleCounts,
+      legacyUserIdCount: legacyIds.size,
+      accountUserIdCount: accountIds.size,
+      legacyStaffPasswordUpdatedCount,
+      migratedStaffPasswordUpdatedCount,
+      emptyStudentNameKanaCount: studentRows.filter(row => String(row[3] || "") === "").length,
+      emptyStaffNameKanaCount: staffRows.filter(row => String(row[2] || "") === "").length,
+      enabledAccountCount: accountRows.filter(row => isEnabledValue(row[5])).length,
+      emptyDeletedAtCount: accountRows.filter(row => getMigrationComparableValue_(row[10]) === "").length,
+      allowedAdminIdPresent: Boolean(accountById.admin && String(accountById.admin[4] || "").trim() === "admin"),
+      excludedLegacyColumnsPresentInNewHeaders: false
+    },
+    mismatchSummary: mismatchCounts,
+    mismatchSamples,
+    mismatchSamplesTruncated: errorCount > mismatchSamples.length
+  };
+}
+
+function assertRollbackMetadataMatches_(metadata, sheets) {
+  if (!metadata || !["completed", "failed"].includes(metadata.status)) {
+    throw new Error("Verifiable migration metadata is required");
+  }
+  ACCOUNT_MASTER_SHEET_SPECS.forEach(spec => {
+    const saved = metadata.sheets && metadata.sheets[spec.name];
+    const sheet = sheets[spec.name];
+    if (!saved || saved.sheetId !== sheet.getSheetId()) throw new Error(`Migration sheet identity mismatch: ${spec.name}`);
+    const rows = getAccountMigrationDataRows_(sheet);
+    if (rows.length !== saved.rowCount) throw new Error(`Migration row count changed: ${spec.name}`);
+    if (getAccountMigrationDigest_(rows) !== saved.digest) throw new Error(`Migration data changed: ${spec.name}`);
+  });
+}
+
+// eslint-disable-next-line no-unused-vars
+function rollbackAccountMigration(migrationId) {
+  if (!migrationId || !String(migrationId).trim()) throw new Error("migrationId is required");
+  // eslint-disable-next-line no-undef
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(5000)) throw new Error("Account migration operation is already running");
+  try {
+    const metadata = getAccountMigrationMetadata_();
+    if (!metadata || metadata.migrationId !== String(migrationId).trim()) throw new Error("migrationId does not match");
+    const legacySheet = getLegacyAccountSheet_();
+    if (!legacySheet || legacySheet.getName() !== metadata.sourceSheetName) throw new Error("Legacy source sheet is missing");
+    const sheets = assertAccountMigrationSheets_(false);
+    assertRollbackMetadataMatches_(metadata, sheets);
+    ["講師担当校舎", "講師マスター", "生徒マスター", "アカウントマスター"].forEach(sheetName => {
+      const sheet = sheets[sheetName];
+      if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
+    });
+    metadata.status = "rolledBack";
+    metadata.rolledBackAt = new Date().toISOString();
+    setAccountMigrationMetadata_(metadata);
+    return { success: true, migrationId: metadata.migrationId, status: metadata.status };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// eslint-disable-next-line no-unused-vars
+function runAccountDiagnosisSummary() {
+  const result = diagnoseLegacyAccountData();
+
+  console.log(JSON.stringify({
+    targetSheetName: result.targetSheetName,
+    totalRows: result.totalRowCount,
+    dataRows: result.dataRowCount,
+    roleCounts: result.roleCounts,
+    unknownRoleCount: result.counts.unknownRole,
+    emptyUserIdCount: result.counts.emptyUserId,
+    duplicateUserIdCount: result.counts.duplicateUserId,
+    normalizedDuplicateUserIdCount:
+      result.counts.normalizedDuplicateUserId,
+    shorterThan6DigitIdCount:
+      result.counts.shorterThanSixDigitId,
+    longerThan6DigitIdCount:
+      result.counts.longerThanSixDigitId,
+    nonNumericUserIdCount:
+      result.counts.nonNumericUserId,
+    allowedLegacyAdminIdCount:
+      result.allowedLegacyAdminIdCount,
+    invalidNonNumericUserIdCount:
+      result.invalidNonNumericUserIdCount,
+    allowedLegacyAdminIdsUsed:
+      result.allowedLegacyAdminIdsUsed,
+    leadingZeroUserIdCount:
+      result.counts.leadingZeroUserId,
+    emptyNameCount: result.counts.emptyName,
+    emptySchoolCount: result.counts.emptySchool,
+    studentEmptyGradeCount:
+      result.counts.studentEmptyGrade,
+    staffWithGradeCount:
+      result.counts.staffGradePresent,
+    columnCValueCount:
+      result.counts.columnCValuePresent,
+    columnDValueCount:
+      result.counts.columnDValuePresent,
+    columnGValueCount:
+      result.counts.columnGValuePresent,
+    columnHValueCount:
+      result.counts.columnHValuePresent,
+    unknownSchoolCount:
+      result.counts.organizationSchoolMismatch,
+    blockingErrorCount:
+      result.blockingErrorCount,
+    warningCount:
+      result.warningCount
+  }, null, 2));
+}
+
+function getAccountDiagnosisValueType_(value) {
+  if (value instanceof Date) return "date";
+  if (typeof value === "string") return "string";
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  return "other";
+}
+
+function getAccountDiagnosisFirstCharacterType_(value) {
+  const firstCharacter = String(value == null ? "" : value).charAt(0);
+  if (!firstCharacter) return "empty";
+  if (/[0-9０-９]/.test(firstCharacter)) return "digit";
+  if (/[ぁ-ん]/.test(firstCharacter)) return "hiragana";
+  if (/[ァ-ヶー]/.test(firstCharacter)) return "katakana";
+  if (/[一-龠々]/.test(firstCharacter)) return "kanji";
+  if (/[A-Za-z]/.test(firstCharacter)) return "latin";
+  return "other";
+}
+
+function getAccountDiagnosisValueKey_(value) {
+  const type = getAccountDiagnosisValueType_(value);
+  const comparableValue = type === "date" ? value.toISOString() : String(value);
+  return `${type}\t${comparableValue}`;
+}
+
+function summarizeLegacyUnknownColumn_(dataRows, columnIndex) {
+  const roleCounts = { admin: 0, "head-teacher": 0, teacher: 0, student: 0, unknown: 0 };
+  const typeCounts = { string: 0, number: 0, boolean: 0, date: 0, other: 0 };
+  const valueGroups = Object.create(null);
+  const rowSamples = [];
+  let valueCount = 0;
+
+  dataRows.forEach(item => {
+    const value = item.row[columnIndex];
+    if (value == null || String(value).trim() === "") return;
+    valueCount++;
+    const role = String(item.row[10] || "").trim();
+    roleCounts[Object.prototype.hasOwnProperty.call(roleCounts, role) ? role : "unknown"]++;
+    const type = getAccountDiagnosisValueType_(value);
+    typeCounts[type]++;
+    const key = getAccountDiagnosisValueKey_(value);
+    if (!valueGroups[key]) {
+      valueGroups[key] = {
+        occurrenceCount: 0,
+        type,
+        length: String(value).length,
+        firstCharacterType: getAccountDiagnosisFirstCharacterType_(value),
+        firstRow: item.sheetRow
+      };
+    }
+    valueGroups[key].occurrenceCount++;
+    if (rowSamples.length < 20) rowSamples.push({ sheetRow: item.sheetRow, role });
+  });
+
+  const frequentValues = Object.keys(valueGroups)
+    .map(key => valueGroups[key])
+    .sort((left, right) => right.occurrenceCount - left.occurrenceCount || left.firstRow - right.firstRow)
+    .slice(0, 20)
+    .map((summary, index) => ({
+      valueLabel: `value-${index + 1}`,
+      occurrenceCount: summary.occurrenceCount,
+      type: summary.type,
+      length: summary.length,
+      firstCharacterType: summary.firstCharacterType
+    }));
+
+  return {
+    valueCount,
+    roleCounts,
+    typeCounts,
+    distinctValueCount: Object.keys(valueGroups).length,
+    frequentValues,
+    rowSamples
+  };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runAccountDiagnosisDetails() {
+  const sheet = getLegacyAccountSheet_();
+  const rows = sheet.getDataRange().getValues();
+  const dataRows = rows.slice(1).map((row, index) => ({ row, sheetRow: index + 2 }))
+    .filter(item => item.row.slice(0, 13).some(value => String(value == null ? "" : value).trim() !== ""));
+  const exactUserIdGroups = Object.create(null);
+  const normalizedUserIdGroups = Object.create(null);
+  const nonNumericUserIds = [];
+  const staffColumnF = [];
+
+  dataRows.forEach(item => {
+    const role = String(item.row[10] || "").trim();
+    const school = String(item.row[0] || "").trim();
+    const rawUserId = String(item.row[1] == null ? "" : item.row[1]).trim();
+    const comparableRawUserId = rawUserId.replace(/^'/, "");
+    const normalizedUserId = normalizeUserId(item.row[1]);
+    const detail = { sheetRow: item.sheetRow, role, school, userId: rawUserId };
+
+    if (rawUserId) {
+      if (!exactUserIdGroups[rawUserId]) exactUserIdGroups[rawUserId] = [];
+      exactUserIdGroups[rawUserId].push(detail);
+      if (!normalizedUserIdGroups[normalizedUserId]) normalizedUserIdGroups[normalizedUserId] = [];
+      normalizedUserIdGroups[normalizedUserId].push(detail);
+      if (!/^\d+$/.test(comparableRawUserId)) nonNumericUserIds.push(detail);
+    }
+
+    if (["teacher", "head-teacher", "admin"].includes(role)) {
+      const columnFValue = item.row[5];
+      if (columnFValue != null && String(columnFValue).trim() !== "") {
+        staffColumnF.push({
+          sheetRow: item.sheetRow,
+          role,
+          school,
+          value: columnFValue instanceof Date ? columnFValue.toISOString() : columnFValue,
+          valueType: getAccountDiagnosisValueType_(columnFValue)
+        });
+      }
+    }
+  });
+
+  const duplicateUserIds = Object.keys(exactUserIdGroups)
+    .filter(userId => exactUserIdGroups[userId].length > 1)
+    .map(userId => ({ userId, rows: exactUserIdGroups[userId] }));
+  const normalizedDuplicateUserIds = Object.keys(normalizedUserIdGroups)
+    .filter(userId => normalizedUserIdGroups[userId].length > 1)
+    .map(userId => ({ normalizedUserId: userId, rows: normalizedUserIdGroups[userId] }));
+
+  console.log(JSON.stringify({
+    targetSheetName: sheet.getName(),
+    userIdProblems: {
+      duplicateUserIds,
+      normalizedDuplicateUserIds,
+      nonNumericUserIds
+    },
+    unknownColumns: {
+      columnC: summarizeLegacyUnknownColumn_(dataRows, 2),
+      columnD: summarizeLegacyUnknownColumn_(dataRows, 3),
+      columnG: summarizeLegacyUnknownColumn_(dataRows, 6),
+      columnH: summarizeLegacyUnknownColumn_(dataRows, 7)
+    },
+    staffColumnF
+  }, null, 2));
+}
+
+// eslint-disable-next-line no-unused-vars
+function runAccountUnknownColumnsSummary() {
+  const sheet = getLegacyAccountSheet_();
+  const rows = sheet.getDataRange().getValues();
+  const dataRows = rows.slice(1)
+    .filter(row => row.slice(0, 13).some(value => String(value == null ? "" : value).trim() !== ""));
+  const sensitiveValues = new Set();
+
+  dataRows.forEach(row => {
+    [row[1], normalizeUserId(row[1]), row[4], row[9], row[11]].forEach(value => {
+      const text = String(value == null ? "" : value).trim();
+      if (text) sensitiveValues.add(text);
+    });
+  });
+
+  const summarizeColumn = columnIndex => {
+    const roleCounts = { admin: 0, "head-teacher": 0, teacher: 0, student: 0, unknown: 0 };
+    const typeCounts = { string: 0, number: 0, boolean: 0, date: 0, other: 0 };
+    const valueGroups = Object.create(null);
+    let valueCount = 0;
+
+    dataRows.forEach((row, index) => {
+      const value = row[columnIndex];
+      const text = String(value == null ? "" : value).trim();
+      if (!text) return;
+      valueCount++;
+      const role = String(row[10] || "").trim();
+      roleCounts[Object.prototype.hasOwnProperty.call(roleCounts, role) ? role : "unknown"]++;
+      typeCounts[getAccountDiagnosisValueType_(value)]++;
+      const key = getAccountDiagnosisValueKey_(value);
+      if (!valueGroups[key]) valueGroups[key] = { value, text, count: 0, firstIndex: index };
+      valueGroups[key].count++;
+    });
+
+    const frequentValues = Object.keys(valueGroups)
+      .map(key => valueGroups[key])
+      .sort((left, right) => right.count - left.count || left.firstIndex - right.firstIndex)
+      .slice(0, 10)
+      .map(group => {
+        const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(group.text);
+        const looksLikePhone = /^\+?\d[\d\s()\-]{8,}\d$/.test(group.text);
+        let displayValue = group.value instanceof Date ? group.value.toISOString() : group.text;
+        if (group.text.length > 20) displayValue = "長文値";
+        else if (sensitiveValues.has(group.text) || looksLikeEmail || looksLikePhone) displayValue = "非表示";
+        return { value: displayValue, count: group.count };
+      });
+
+    return {
+      valueCount,
+      roleCounts,
+      typeCounts,
+      distinctValueCount: Object.keys(valueGroups).length,
+      frequentValues
+    };
+  };
+
+  console.log(JSON.stringify({
+    columnC: summarizeColumn(2),
+    columnD: summarizeColumn(3),
+    columnG: summarizeColumn(6),
+    columnH: summarizeColumn(7)
+  }, null, 2));
 }
 
 function getRequiredSheet(sheetName) {
