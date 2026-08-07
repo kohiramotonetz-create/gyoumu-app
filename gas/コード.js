@@ -709,6 +709,12 @@ function compareLegacyMigration() {
   };
 }
 
+// eslint-disable-next-line no-unused-vars
+function runCompareMigrationSummary() {
+  const result = compareLegacyMigration();
+  console.log(JSON.stringify(result, null, 2));
+}
+
 function assertRollbackMetadataMatches_(metadata, sheets) {
   if (!metadata || !["completed", "failed"].includes(metadata.status)) {
     throw new Error("Verifiable migration metadata is required");
