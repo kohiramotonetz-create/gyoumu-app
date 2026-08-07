@@ -1256,10 +1256,11 @@ function getNewAuthData_() {
     const primary = assigned.find(item => item.isPrimary) || assigned[0];
     return {
       rowIndex: index + 2, userId, password: row[1], isInitial: row[2], passwordUpdatedAt: row[3],
-      role, enabled, deleted, token: row[6], tokenExpire: row[7],
+      role, enabled, deleted, token: row[6], tokenExpire: row[7], createdAt: row[8], updatedAt: row[9], deletedAt: row[10],
       school: role === "student" ? String(profile && profile[1] || "").trim() : String(primary && primary.school || ""),
       name: String(profile && (role === "student" ? profile[2] : profile[1]) || "").trim(),
       grade: role === "student" ? String(profile && profile[4] || "").trim() : "",
+      nameKana: String(profile && (role === "student" ? profile[3] : profile[2]) || "").trim(),
       assignedSchools: assigned.map(item => item.school).filter(Boolean)
     };
   });
@@ -1488,6 +1489,178 @@ function initializeExistingStudentSukimakunPermissions() {
   return result;
 }
 
+function normalizeKana_(value) {
+  return String(value || "").normalize("NFKC").trim().replace(/\s+/g, " ")
+    .replace(/[ぁ-ゖ]/g, character => String.fromCharCode(character.charCodeAt(0) + 0x60));
+}
+
+function validateName_(value, label) {
+  const text = String(value || "").trim().replace(/\s+/g, " ");
+  if (!text || text.length > 100) throw new Error(`${label} is invalid`);
+  return text;
+}
+
+function validateSchool_(value) {
+  const school = String(value || "").trim();
+  if (!ACCOUNT_MIGRATION_SCHOOLS.includes(school)) throw new Error("School is invalid");
+  return school;
+}
+
+function validateGrade_(value) {
+  const grade = normalizeGrade(value);
+  if (!["小１", "小２", "小３", "小４", "小５", "小６", "中１", "中２", "中３", "高１", "高２", "高３", "大学受験"].includes(grade)) throw new Error("Grade is invalid");
+  return grade;
+}
+
+function validateRole_(value, allowedRoles) {
+  const role = String(value || "").trim();
+  if (!allowedRoles.includes(role)) throw new Error("Role is invalid");
+  return role;
+}
+
+function validateKana_(value) {
+  const kana = normalizeKana_(value);
+  if (!kana || kana.length > 100 || !/^[ァ-ヶー・ ]+$/.test(kana)) throw new Error("Name kana is invalid");
+  return kana;
+}
+
+function validateAssignedSchools_(value) {
+  if (!Array.isArray(value) || value.length < 1) throw new Error("Assigned schools are required");
+  const normalized = value.map((item, index) => typeof item === "string"
+    ? { school: validateSchool_(item), isPrimary: index === 0 }
+    : { school: validateSchool_(item && item.school), isPrimary: Boolean(item && item.isPrimary) });
+  if (new Set(normalized.map(item => item.school)).size !== normalized.length) throw new Error("Assigned schools contain duplicates");
+  if (normalized.filter(item => item.isPrimary).length !== 1) throw new Error("Exactly one primary school is required");
+  return normalized;
+}
+
+function validateStudentInput_(data) {
+  return { school: validateSchool_(data.school), grade: validateGrade_(data.grade), name: validateName_(data.name, "Name"), nameKana: validateKana_(data.nameKana) };
+}
+
+function validateStaffInput_(data) {
+  return { name: validateName_(data.name, "Name"), nameKana: validateKana_(data.nameKana), role: validateRole_(data.role, ["teacher", "head-teacher", "admin"]), assignedSchools: validateAssignedSchools_(data.assignedSchools) };
+}
+
+function generateUserId_(accountRows) {
+  const numericIds = accountRows.map(row => String(row[0] || "").trim()).filter(id => /^\d{6}$/.test(id)).map(Number);
+  const next = (numericIds.length ? Math.max(...numericIds) : 0) + 1;
+  if (next > 999999) throw new Error("No userId is available");
+  return String(next).padStart(6, "0");
+}
+
+function generateInitialPassword_() {
+  // eslint-disable-next-line no-undef
+  return Utilities.getUuid().replace(/-/g, "").slice(0, 12);
+}
+
+function writeAccountMasterRows_(sheet, rows) {
+  const existing = Math.max(0, sheet.getLastRow() - 1);
+  const clearCount = Math.max(existing, rows.length);
+  if (clearCount) sheet.getRange(2, 1, clearCount, sheet.getLastColumn()).clearContent();
+  if (rows.length) sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+function validateAccountMasterState_(state) {
+  assertUniqueMigrationKeys_(state.accounts, [0], "account master");
+  assertUniqueMigrationKeys_(state.students, [0], "student master");
+  assertUniqueMigrationKeys_(state.staff, [0], "staff master");
+  assertUniqueMigrationKeys_(state.assignments, [0, 1], "staff school master");
+  const roleById = Object.create(null);
+  state.accounts.forEach(row => { roleById[normalizeUserId(row[0])] = validateRole_(row[4], ACCOUNT_MIGRATION_ROLES); });
+  state.students.forEach(row => { if (roleById[normalizeUserId(row[0])] !== "student") throw new Error("Student reference is invalid"); });
+  state.staff.forEach(row => { if (!["teacher", "head-teacher", "admin"].includes(roleById[normalizeUserId(row[0])])) throw new Error("Staff reference is invalid"); });
+  state.assignments.forEach(row => { if (!["teacher", "head-teacher", "admin"].includes(roleById[normalizeUserId(row[0])])) throw new Error("Staff school reference is invalid"); });
+}
+
+function executeAccountTransaction_(buildNextState) {
+  // eslint-disable-next-line no-undef
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(10000)) throw new Error("Account operation is already running");
+  try {
+    const sheets = assertAccountMigrationSheets_(false);
+    const current = {
+      accounts: getAccountMigrationDataRows_(sheets["アカウントマスター"]), students: getAccountMigrationDataRows_(sheets["生徒マスター"]),
+      staff: getAccountMigrationDataRows_(sheets["講師マスター"]), assignments: getAccountMigrationDataRows_(sheets["講師担当校舎"])
+    };
+    const snapshot = { accounts: current.accounts.map(row => row.slice()), students: current.students.map(row => row.slice()), staff: current.staff.map(row => row.slice()), assignments: current.assignments.map(row => row.slice()) };
+    const result = buildNextState(current);
+    validateAccountMasterState_(current);
+    const plan = [["アカウントマスター", current.accounts], ["生徒マスター", current.students], ["講師マスター", current.staff], ["講師担当校舎", current.assignments]];
+    try {
+      plan.forEach(([name, rows]) => writeAccountMasterRows_(sheets[name], rows));
+    } catch {
+      try {
+        [["アカウントマスター", snapshot.accounts], ["生徒マスター", snapshot.students], ["講師マスター", snapshot.staff], ["講師担当校舎", snapshot.assignments]].forEach(([name, rows]) => writeAccountMasterRows_(sheets[name], rows));
+      } catch { throw new Error("Account operation and rollback failed"); }
+      throw new Error("Account operation failed and was rolled back");
+    }
+    return result;
+  } finally { lock.releaseLock(); }
+}
+
+function handleNewAccountAdminAction_(data) {
+  const admin = requireAdminSession(data.sessionToken);
+  const action = data.action;
+  if (action === "getStudentAccounts" || action === "getStaffAccounts") {
+    const users = getNewAuthData_().contexts;
+    if (action === "getStudentAccounts") return { result: "success", accounts: users.filter(user => user.role === "student").map(user => ({ userId: user.userId, school: user.school, grade: user.grade, name: user.name, nameKana: user.nameKana, enabled: user.enabled, createdAt: user.createdAt, updatedAt: user.updatedAt, deletedAt: user.deletedAt })) };
+    return { result: "success", accounts: users.filter(user => user.role !== "student").map(user => ({ userId: user.userId, name: user.name, nameKana: user.nameKana, role: user.role, assignedSchools: user.assignedSchools, primarySchool: user.school, enabled: user.enabled, createdAt: user.createdAt, updatedAt: user.updatedAt, deletedAt: user.deletedAt })) };
+  }
+  return executeAccountTransaction_(state => {
+    const now = new Date();
+    const targetId = normalizeUserId(data.userId);
+    const accountIndex = state.accounts.findIndex(row => normalizeUserId(row[0]) === targetId);
+    if (action.startsWith("create")) {
+      const userId = generateUserId_(state.accounts);
+      const password = generateInitialPassword_();
+      if (action === "createStudentAccount") {
+        const input = validateStudentInput_(data);
+        state.accounts.push([userId, password, true, "", "student", true, "", "", now, now, ""]);
+        state.students.push([userId, input.school, input.name, input.nameKana, input.grade, now, now]);
+      } else {
+        const input = validateStaffInput_(data);
+        state.accounts.push([userId, password, true, "", input.role, true, "", "", now, now, ""]);
+        state.staff.push([userId, input.name, input.nameKana, now, now]);
+        input.assignedSchools.forEach(item => state.assignments.push([userId, item.school, item.isPrimary, true, now, now, admin.userId]));
+      }
+      return { result: "success", userId, password };
+    }
+    if (accountIndex < 0) throw new Error("Account was not found");
+    const account = state.accounts[accountIndex];
+    const isStudent = account[4] === "student";
+    if ((action.includes("Student")) !== isStudent) throw new Error("Account type does not match");
+    if (action.startsWith("delete")) {
+      account[5] = false; account[6] = ""; account[7] = ""; account[9] = now; account[10] = now;
+      if (!isStudent) {
+        state.assignments.forEach(row => {
+          if (normalizeUserId(row[0]) === targetId && isEnabledValue(row[3])) {
+            row[3] = false;
+            row[5] = now;
+          }
+        });
+      }
+      return { result: "success", userId: targetId };
+    }
+    if (data.enabled !== undefined && typeof data.enabled !== "boolean") throw new Error("Enabled must be boolean");
+    const isDeleted = getMigrationComparableValue_(account[10]) !== "";
+    if (isDeleted && data.enabled === true) throw new Error("Deleted account cannot be re-enabled");
+    account[5] = data.enabled === undefined ? account[5] : data.enabled; account[9] = now;
+    if (isStudent) {
+      const input = validateStudentInput_(data); const index = state.students.findIndex(row => normalizeUserId(row[0]) === targetId);
+      if (index < 0) throw new Error("Student profile was not found");
+      state.students[index] = [targetId, input.school, input.name, input.nameKana, input.grade, state.students[index][5], now];
+    } else {
+      const input = validateStaffInput_(data); account[4] = input.role;
+      const index = state.staff.findIndex(row => normalizeUserId(row[0]) === targetId); if (index < 0) throw new Error("Staff profile was not found");
+      state.staff[index] = [targetId, input.name, input.nameKana, state.staff[index][3], now];
+      state.assignments = state.assignments.filter(row => normalizeUserId(row[0]) !== targetId);
+      input.assignedSchools.forEach(item => state.assignments.push([targetId, item.school, item.isPrimary, true, now, now, admin.userId]));
+    }
+    return { result: "success", userId: targetId };
+  });
+}
+
 function doPost(e) {
   let data;
   try {
@@ -1508,6 +1681,16 @@ function doPost(e) {
 
   if (!data.apiKey || data.apiKey !== validApiKey) {
     return responseJSON({ result: "error", message: "認証エラー" });
+  }
+
+  const newAccountActions = ["createStudentAccount", "updateStudentAccount", "deleteStudentAccount", "getStudentAccounts", "createStaffAccount", "updateStaffAccount", "deleteStaffAccount", "getStaffAccounts"];
+  if (newAccountActions.includes(data.action)) {
+    try {
+      return responseJSON(handleNewAccountAdminAction_(data));
+    } catch (error) {
+      const authorizationError = isManagementAuthorizationError(error);
+      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "管理者権限が必要です" : "アカウント処理に失敗しました" });
+    }
   }
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
