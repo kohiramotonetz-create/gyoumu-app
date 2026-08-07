@@ -1228,16 +1228,119 @@ function appendStudentPermissionInfo(result, userId, role) {
   return result;
 }
 
+function getNewAuthData_() {
+  const sheets = assertAccountMigrationSheets_(false);
+  const accounts = getAccountMigrationDataRows_(sheets["アカウントマスター"]);
+  const students = getAccountMigrationDataRows_(sheets["生徒マスター"]);
+  const staff = getAccountMigrationDataRows_(sheets["講師マスター"]);
+  const assignments = getAccountMigrationDataRows_(sheets["講師担当校舎"]);
+  const studentById = Object.create(null);
+  const staffById = Object.create(null);
+  students.forEach(row => { studentById[normalizeUserId(row[0])] = row; });
+  staff.forEach(row => { staffById[normalizeUserId(row[0])] = row; });
+  const schoolsById = Object.create(null);
+  assignments.forEach(row => {
+    if (!isEnabledValue(row[3])) return;
+    const id = normalizeUserId(row[0]);
+    if (!schoolsById[id]) schoolsById[id] = [];
+    schoolsById[id].push({ school: String(row[1] || "").trim(), isPrimary: isEnabledValue(row[2]) });
+  });
+  const contexts = accounts.map((row, index) => {
+    const userId = normalizeUserId(row[0]);
+    const role = String(row[4] || "").trim();
+    const enabled = isEnabledValue(row[5]);
+    const deleted = getMigrationComparableValue_(row[10]) !== "";
+    const profile = role === "student" ? studentById[userId] : staffById[userId];
+    if (!profile) throw new Error("Account profile data is incomplete");
+    const assigned = schoolsById[userId] || [];
+    const primary = assigned.find(item => item.isPrimary) || assigned[0];
+    return {
+      rowIndex: index + 2, userId, password: row[1], isInitial: row[2], passwordUpdatedAt: row[3],
+      role, enabled, deleted, token: row[6], tokenExpire: row[7],
+      school: role === "student" ? String(profile && profile[1] || "").trim() : String(primary && primary.school || ""),
+      name: String(profile && (role === "student" ? profile[2] : profile[1]) || "").trim(),
+      grade: role === "student" ? String(profile && profile[4] || "").trim() : "",
+      assignedSchools: assigned.map(item => item.school).filter(Boolean)
+    };
+  });
+  return { sheets, contexts };
+}
+
+function canUseLegacyAuthFallback_() {
+  const metadata = getAccountMigrationMetadata_();
+  return !metadata || metadata.status !== "completed";
+}
+
+function getUserAuthContexts_() {
+  try {
+    return getNewAuthData_().contexts;
+  } catch (error) {
+    if (!canUseLegacyAuthFallback_()) throw error;
+    const rows = getLegacyAccountSheet_().getDataRange().getValues();
+    return rows.slice(1).map((row, index) => ({
+      rowIndex: index + 2, userId: normalizeUserId(row[1]), password: row[9], isInitial: row[8],
+      passwordUpdatedAt: row[7], role: String(row[10] || "").trim(), enabled: true, deleted: false,
+      token: row[11], tokenExpire: row[12], school: row[0], name: row[4], grade: row[5], assignedSchools: row[0] ? [row[0]] : []
+    }));
+  }
+}
+
+function getLegacyCompatibleUserRows_() {
+  return [Array(13).fill("")].concat(getUserAuthContexts_().filter(user => user.enabled && !user.deleted).map(user => {
+    const row = Array(13).fill("");
+    row[0] = user.school; row[1] = user.userId; row[4] = user.name; row[5] = user.grade;
+    row[7] = user.passwordUpdatedAt; row[8] = user.isInitial; row[9] = user.password;
+    row[10] = user.role; row[11] = user.token; row[12] = user.tokenExpire;
+    return row;
+  }));
+}
+
+function compareLegacyAndNewAuthData() {
+  const legacyRows = getLegacyAccountSheet_().getDataRange().getValues().slice(1)
+    .filter(row => row.slice(0, 13).some(value => String(value == null ? "" : value).trim() !== ""));
+  const newUsers = getNewAuthData_().contexts;
+  const newById = Object.create(null);
+  newUsers.forEach(user => { newById[user.userId] = user; });
+  const roleCounts = { legacy: { admin: 0, "head-teacher": 0, teacher: 0, student: 0 }, new: { admin: 0, "head-teacher": 0, teacher: 0, student: 0 } };
+  const mismatchCounts = Object.create(null);
+  const mismatchSamples = [];
+  const addMismatch = (type, userId) => {
+    mismatchCounts[type] = (mismatchCounts[type] || 0) + 1;
+    if (mismatchSamples.length < 100) mismatchSamples.push({ userId, type });
+  };
+  legacyRows.forEach(row => {
+    const userId = normalizeUserId(row[1]);
+    const role = String(row[10] || "").trim();
+    if (Object.prototype.hasOwnProperty.call(roleCounts.legacy, role)) roleCounts.legacy[role]++;
+    const user = newById[userId];
+    if (!user) return addMismatch("MISSING_NEW_USER", userId);
+    if (user.role !== role) addMismatch("ROLE_MISMATCH", userId);
+    if (String(user.school || "").trim() !== String(row[0] || "").trim()) addMismatch("SCHOOL_MISMATCH", userId);
+    if (String(user.name || "").trim() !== String(row[4] || "").trim()) addMismatch("NAME_MISMATCH", userId);
+    if (role === "student" && String(user.grade || "").trim() !== String(row[5] || "").trim()) addMismatch("GRADE_MISMATCH", userId);
+    if (normalizeLegacyMigrationBoolean_(user.isInitial, "isInitial") !== normalizeLegacyMigrationBoolean_(row[8], "isInitial")) addMismatch("IS_INITIAL_MISMATCH", userId);
+    if (!user.enabled) addMismatch("DISABLED_ACCOUNT", userId);
+    if (user.deleted) addMismatch("DELETED_ACCOUNT", userId);
+  });
+  newUsers.forEach(user => {
+    if (Object.prototype.hasOwnProperty.call(roleCounts.new, user.role)) roleCounts.new[user.role]++;
+    if (!legacyRows.some(row => normalizeUserId(row[1]) === user.userId)) addMismatch("EXTRA_NEW_USER", user.userId);
+  });
+  const errorCount = Object.keys(mismatchCounts).reduce((sum, key) => sum + mismatchCounts[key], 0);
+  return { success: errorCount === 0, errorCount, warningCount: 0, userIdCounts: { legacy: legacyRows.length, new: newUsers.length }, roleCounts, mismatchSummary: mismatchCounts, mismatchSamples, mismatchSamplesTruncated: errorCount > mismatchSamples.length };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runCompareLegacyAndNewAuthSummary() {
+  const result = compareLegacyAndNewAuthData();
+  console.log(JSON.stringify(result, null, 2));
+}
+
 function findUserRecord(userId) {
   const normalizedUserId = normalizeUserId(userId);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
-  const rows = sheet.getDataRange().getValues();
-  for (let i = 1; i < rows.length; i++) {
-    if (normalizeUserId(rows[i][1]) === normalizedUserId) {
-      return { rowIndex: i + 1, userId: normalizedUserId, school: rows[i][0], name: rows[i][4], grade: rows[i][5], role: String(rows[i][10] || "").trim() };
-    }
-  }
-  return null;
+  const user = getUserAuthContexts_().find(item => item.userId === normalizedUserId);
+  if (!user || !user.enabled || user.deleted) return null;
+  return user;
 }
 
 function createManagementSession(userId, role) {
@@ -1363,7 +1466,7 @@ function initializeStudentPermissionsForUser(userId, updatedBy, lockAlreadyHeld)
 }
 
 function initializeExistingStudentSukimakunPermissions() {
-  const rows = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0].getDataRange().getValues();
+  const rows = getLegacyCompatibleUserRows_();
   const activeContents = getSukimakunContents(false);
   const result = { processedStudents: 0, insertedPermissions: 0, skippedPermissions: 0, errorCount: 0 };
   for (let i = 1; i < rows.length; i++) {
@@ -1408,8 +1511,7 @@ function doPost(e) {
   }
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const userSheet = ss.getSheets()[0];
-  const rows = userSheet.getDataRange().getValues();
+  const rows = getLegacyCompatibleUserRows_();
 
   // 💡 ユニット名から所属校舎リストを導き出すマッピング定義
   const unitGroups = {
@@ -1439,7 +1541,8 @@ function doPost(e) {
           name: rows[i][4],
           grade: rows[i][5],
           isInitial: rows[i][8],
-          role: currentRole
+          role: currentRole,
+          assignedSchools: findUserRecord(inputId).assignedSchools
         };
         if (currentRole === "admin") {
           try {
@@ -1574,13 +1677,15 @@ function doPost(e) {
 
   // --- 2. パスワード変更処理 ---
   if (data.action === "changePassword") {
-    for (let i = 1; i < rows.length; i++) {
-      if (rows[i][1].toString() === data.userId.toString()) {
-        userSheet.getRange(i + 1, 10).setValue(data.newPassword);
-        userSheet.getRange(i + 1, 9).setValue(false);
-        return responseJSON({ result: "success" });
-      }
-    }
+    const user = findUserRecord(data.userId);
+    if (!user) return responseJSON({ result: "error", message: "User not found" });
+    const sheet = getRequiredSheet("アカウントマスター");
+    const now = new Date();
+    sheet.getRange(user.rowIndex, 2).setValue(data.newPassword);
+    sheet.getRange(user.rowIndex, 3).setValue(false);
+    sheet.getRange(user.rowIndex, 4).setValue(now);
+    sheet.getRange(user.rowIndex, 10).setValue(now);
+    return responseJSON({ result: "success" });
   }
 
   // --- 3. 丸付け依頼の通知登録 ---
@@ -1765,9 +1870,7 @@ function doPost(e) {
   // --- 11. 講師：テスト振り返り状況マトリックス取得 ---
   if (data.action === "getTestReviewMatrix") {
     try {
-      const ssLogin = openSpreadsheetByProperty("USER_MASTER_SPREADSHEET_ID");
-      const userSheetByName = ssLogin.getSheetByName("ログイン認証") || ssLogin.getSheets()[0];
-      const userRowsData = userSheetByName.getDataRange().getValues();
+      const userRowsData = rows;
 
       const ssReview = openSpreadsheetByProperty("TEST_REVIEW_SPREADSHEET_ID");
       const reviewSheet = ssReview.getSheets()[0]; 
@@ -1892,21 +1995,16 @@ function doPost(e) {
   // --- 12. スキマ君連携：トークン発行処理 ---
   if (data.action === "issueToken") {
     try {
-      let targetRow = -1;
-      for (let i = 1; i < rows.length; i++) {
-        if (rows[i][1].toString() === data.userId.toString()) {
-          targetRow = i + 1;
-          break;
-        }
-      }
-
-      if (targetRow === -1) return responseJSON({ result: "error", message: "ユーザーが見つかりません" });
+      const user = findUserRecord(data.userId);
+      if (!user || user.role !== "student") return responseJSON({ result: "error", message: "ユーザーが見つかりません" });
 
       const token = Math.floor(100000 + Math.random() * 900000).toString();
       const expireTime = new Date(new Date().getTime() + 5 * 60000); 
 
-      userSheet.getRange(targetRow, 12).setValue(token);
-      userSheet.getRange(targetRow, 13).setValue(expireTime);
+      const accountSheet = getRequiredSheet("アカウントマスター");
+      accountSheet.getRange(user.rowIndex, 7).setValue(token);
+      accountSheet.getRange(user.rowIndex, 8).setValue(expireTime);
+      accountSheet.getRange(user.rowIndex, 10).setValue(new Date());
 
       return responseJSON({ result: "success", token: token });
     } catch (e) {
@@ -1917,35 +2015,27 @@ function doPost(e) {
   // --- 13. スキマ君連携：トークン検証処理 ---
   if (data.action === "validateToken") {
     try {
-      let userRowData = null;
-      let rowIndex = -1;
-      for (let i = 1; i < rows.length; i++) {
-        if (rows[i][1].toString() === data.userId.toString()) {
-          userRowData = rows[i];
-          rowIndex = i + 1;
-          break;
-        }
-      }
-
-      if (!userRowData) return responseJSON({ result: "error", message: "ユーザーが見つかりません" });
-
-      const savedToken = userRowData[11]; 
-      const expireTime = new Date(userRowData[12]); 
+      const user = findUserRecord(data.userId);
+      if (!user || user.role !== "student") return responseJSON({ result: "error", message: "ユーザーが見つかりません" });
+      const savedToken = user.token;
+      const expireTime = new Date(user.tokenExpire);
       const now = new Date();
 
       if (savedToken.toString() === data.token.toString() && now < expireTime) {
         const result = {
           result: "success",
-          school: userRowData[0],
-          name: userRowData[4],
-          grade: userRowData[5],
-          role: userRowData[10]
+          school: user.school,
+          name: user.name,
+          grade: user.grade,
+          role: user.role
         };
 
-        appendStudentPermissionInfo(result, data.userId, userRowData[10]);
+        appendStudentPermissionInfo(result, data.userId, user.role);
         
-        userSheet.getRange(rowIndex, 12).clearContent();
-        userSheet.getRange(rowIndex, 13).clearContent();
+        const accountSheet = getRequiredSheet("アカウントマスター");
+        accountSheet.getRange(user.rowIndex, 7).clearContent();
+        accountSheet.getRange(user.rowIndex, 8).clearContent();
+        accountSheet.getRange(user.rowIndex, 10).setValue(new Date());
 
         return responseJSON(result);
       } else {
@@ -1958,6 +2048,7 @@ function doPost(e) {
 
   // --- 14. アカウント発行処理 ---
   if (data.action === "createAccount") {
+    const userSheet = getLegacyAccountSheet_();
     const accountLock = LockService.getDocumentLock();
     try {
       accountLock.waitLock(10000);
@@ -2007,9 +2098,7 @@ function doPost(e) {
   // --- 15. 学校進捗マトリックスデータ取得 ---
   if (data.action === "getSchoolProgressMatrix") {
     try {
-      const ssLogin = SpreadsheetApp.getActiveSpreadsheet();
-      const userSheetLocal = ssLogin.getSheetByName("ログイン認証") || ssLogin.getSheets()[0];
-      const userRowsLocal = userSheetLocal.getDataRange().getValues();
+      const userRowsLocal = rows;
 
       const ssProgress = openSpreadsheetByProperty("SCHOOL_PROGRESS_SPREADSHEET_ID");
       const progressSheet = ssProgress.getSheetByName("progress");
@@ -2063,9 +2152,7 @@ function doPost(e) {
   // --- 16. 個トレ進捗マトリックス取得 ---
   if (data.action === "getKoToreProgressMatrix") {
     try {
-      const ssLogin = SpreadsheetApp.getActiveSpreadsheet();
-      const userSheetLocal = ssLogin.getSheetByName("ログイン認証") || ssLogin.getSheets()[0];
-      const userRowsLocal = userSheetLocal.getDataRange().getValues();
+      const userRowsLocal = rows;
 
       const ssKoTore = openSpreadsheetByProperty("KOTORE_PROGRESS_SPREADSHEET_ID");
       const progressSheet = ssKoTore.getSheetByName("progress") || ssKoTore.getSheets()[0];
@@ -2202,6 +2289,7 @@ function doPost(e) {
   // --- 18. アカウント削除処理 ---
   if (data.action === "deleteAccount") {
     try {
+      const userSheet = getLegacyAccountSheet_();
       const lastRow = userSheet.getLastRow();
       const targetId = String(data.userId || "").trim().replace(/^'/, ""); 
 
@@ -2249,6 +2337,7 @@ function doPost(e) {
   // --- 20. チェックボックスによる複数アカウント一括削除 ---
   if (data.action === "deleteAccountsBulk") {
     try {
+      const userSheet = getLegacyAccountSheet_();
       const lastRow = userSheet.getLastRow();
       const targetIds = data.userIds || []; 
 
