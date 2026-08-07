@@ -6,7 +6,7 @@ import { styles } from './styles/teacherViewStyles.js'
 import NotificationManager from './components/NotificationManager.jsx'
 import TestReviewManager from './components/TestReviewManager.jsx'
 import NoticeManager from './components/NotificationManager.jsx'
-import AccountGenerator from './components/AccountGenerator.jsx'
+import AccountManagement from './components/AccountManagement.jsx'
 import SchoolProgressTracker from './components/SchoolProgressManager.jsx'
 import KoToreProgressTracker from './components/KoToreProgressTracker.jsx'
 import AppUsageTracker from './components/AppUsageTracker.jsx'
@@ -167,11 +167,13 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
             )}
 
             {activeContent === 'create-account' && (
-              <AccountGenerator 
+              <AccountManagement
                 styles={styles}
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}
                 schools={schools}
+                sessionToken={sessionToken}
+                role={role}
               />
             )}
 
