@@ -1508,8 +1508,14 @@ function validateSchool_(value) {
 
 function validateGrade_(value) {
   const grade = normalizeGrade(value);
-  if (!["小１", "小２", "小３", "小４", "小５", "小６", "中１", "中２", "中３", "高１", "高２", "高３", "大学受験"].includes(grade)) throw new Error("Grade is invalid");
-  return grade;
+  const canonicalGrades = {
+    "小1": "小１", "小2": "小２", "小3": "小３", "小4": "小４", "小5": "小５", "小6": "小６",
+    "中1": "中１", "中2": "中２", "中3": "中３",
+    "高1": "高１", "高2": "高２", "高3": "高３",
+    "大学受験": "大学受験"
+  };
+  if (!Object.prototype.hasOwnProperty.call(canonicalGrades, grade)) throw new Error("Grade is invalid");
+  return canonicalGrades[grade];
 }
 
 function validateRole_(value, allowedRoles) {
@@ -1542,16 +1548,12 @@ function validateStaffInput_(data) {
   return { name: validateName_(data.name, "Name"), nameKana: validateKana_(data.nameKana), role: validateRole_(data.role, ["teacher", "head-teacher", "admin"]), assignedSchools: validateAssignedSchools_(data.assignedSchools) };
 }
 
-function generateUserId_(accountRows) {
-  const numericIds = accountRows.map(row => String(row[0] || "").trim()).filter(id => /^\d{6}$/.test(id)).map(Number);
-  const next = (numericIds.length ? Math.max(...numericIds) : 0) + 1;
-  if (next > 999999) throw new Error("No userId is available");
-  return String(next).padStart(6, "0");
-}
-
-function generateInitialPassword_() {
-  // eslint-disable-next-line no-undef
-  return Utilities.getUuid().replace(/-/g, "").slice(0, 12);
+function validateNewAccountUserId_(value, accountRows) {
+  const userId = String(value == null ? "" : value).trim();
+  if (!/^\d{6}$/.test(userId)) throw new Error("UserId must be six ASCII digits");
+  const normalized = normalizeUserId(userId);
+  if (accountRows.some(row => normalizeUserId(row[0]) === normalized)) throw new Error("UserId already exists");
+  return userId;
 }
 
 function writeAccountMasterRows_(sheet, rows) {
@@ -1599,9 +1601,41 @@ function executeAccountTransaction_(buildNextState) {
   } finally { lock.releaseLock(); }
 }
 
+const ACCOUNT_API_DEBUG_VALIDATION_MESSAGES = true;
+
+function getSafeAccountValidationMessage_(error) {
+  if (!ACCOUNT_API_DEBUG_VALIDATION_MESSAGES) return "アカウント処理に失敗しました";
+  const message = String(error && error.message || "");
+  const exactMessages = {
+    "UserId must be six ASCII digits": "IDは半角数字6桁で入力してください",
+    "UserId already exists": "IDが重複しています",
+    "School is invalid": "校舎が存在しません",
+    "Grade is invalid": "学年が不正です",
+    "Name is invalid": "氏名が不正です",
+    "Name kana is invalid": "フリガナが不正です",
+    "Role is invalid": "roleが不正です",
+    "Assigned schools are required": "担当校舎がありません",
+    "Assigned schools contain duplicates": "担当校舎が重複しています",
+    "Exactly one primary school is required": "主担当校舎を1件選択してください",
+    "Enabled must be boolean": "enabledの値が不正です",
+    "Deleted account cannot be re-enabled": "削除済みアカウントは再有効化できません",
+    "Account was not found": "対象アカウントが見つかりません",
+    "Account type does not match": "アカウント種別が一致しません",
+    "Student profile was not found": "生徒情報が見つかりません",
+    "Staff profile was not found": "講師情報が見つかりません"
+  };
+  return exactMessages[message] || "アカウント処理に失敗しました";
+}
+
 function handleNewAccountAdminAction_(data) {
   const admin = requireAdminSession(data.sessionToken);
   const action = data.action;
+  if (action === "checkUserIdAvailable") {
+    const userId = String(data.userId == null ? "" : data.userId).trim();
+    if (!/^\d{6}$/.test(userId)) return { result: "success", available: false, message: "IDは半角数字6桁で入力してください" };
+    const exists = getNewAuthData_().contexts.some(user => normalizeUserId(user.userId) === normalizeUserId(userId));
+    return { result: "success", available: !exists, message: exists ? "既に登録されています" : "登録可能" };
+  }
   if (action === "getStudentAccounts" || action === "getStaffAccounts") {
     const users = getNewAuthData_().contexts;
     if (action === "getStudentAccounts") return { result: "success", accounts: users.filter(user => user.role === "student").map(user => ({ userId: user.userId, school: user.school, grade: user.grade, name: user.name, nameKana: user.nameKana, enabled: user.enabled, createdAt: user.createdAt, updatedAt: user.updatedAt, deletedAt: user.deletedAt })) };
@@ -1612,8 +1646,8 @@ function handleNewAccountAdminAction_(data) {
     const targetId = normalizeUserId(data.userId);
     const accountIndex = state.accounts.findIndex(row => normalizeUserId(row[0]) === targetId);
     if (action.startsWith("create")) {
-      const userId = generateUserId_(state.accounts);
-      const password = generateInitialPassword_();
+      const userId = validateNewAccountUserId_(data.userId, state.accounts);
+      const password = action === "createStudentAccount" ? "netzs" + userId : "1234";
       if (action === "createStudentAccount") {
         const input = validateStudentInput_(data);
         state.accounts.push([userId, password, true, "", "student", true, "", "", now, now, ""]);
@@ -1683,13 +1717,13 @@ function doPost(e) {
     return responseJSON({ result: "error", message: "認証エラー" });
   }
 
-  const newAccountActions = ["createStudentAccount", "updateStudentAccount", "deleteStudentAccount", "getStudentAccounts", "createStaffAccount", "updateStaffAccount", "deleteStaffAccount", "getStaffAccounts"];
+  const newAccountActions = ["checkUserIdAvailable", "createStudentAccount", "updateStudentAccount", "deleteStudentAccount", "getStudentAccounts", "createStaffAccount", "updateStaffAccount", "deleteStaffAccount", "getStaffAccounts"];
   if (newAccountActions.includes(data.action)) {
     try {
       return responseJSON(handleNewAccountAdminAction_(data));
     } catch (error) {
       const authorizationError = isManagementAuthorizationError(error);
-      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "管理者権限が必要です" : "アカウント処理に失敗しました" });
+      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "管理者権限が必要です" : getSafeAccountValidationMessage_(error) });
     }
   }
 
