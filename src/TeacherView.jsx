@@ -18,12 +18,14 @@ const API_KEY = import.meta.env.VITE_API_KEY;
 const APP_VERSION = "3.5.3";
 
 // 【修正箇所】引数に「school」を正しく追加して受け取れるようにする
-export default function TeacherView({ userName, role, unit, school, sessionToken, handleLogout }) {
+export default function TeacherView({ userName, role, unit, school, assignedSchools, sessionToken, handleLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeContent, setActiveContent] = useState('notices');
   const [notifications, setNotifications] = useState([]);
   const schools = ALL_SCHOOLS;
-  const assignedSchools = school ? [school] : [];
+  const availableAssignedSchools = Array.isArray(assignedSchools) && assignedSchools.length > 0
+    ? assignedSchools
+    : school ? [school] : [];
   const [selectedSchool, setSelectedSchool] = useState('すべて');
   const [openPdf, setOpenPdf] = useState(null);
   const timeoutRef = useRef(null);
@@ -193,7 +195,7 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
               <TestReviewManager 
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}
-                assignedSchools={assignedSchools}
+                assignedSchools={availableAssignedSchools}
                 styles={styles}
               />
             )}
@@ -203,7 +205,7 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}
                 sessionToken={sessionToken}
-                assignedSchools={assignedSchools}
+                assignedSchools={availableAssignedSchools}
                 styles={styles}
                 onSessionExpired={handleLogout}
               />
@@ -222,7 +224,7 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
                 styles={styles} 
                 GAS_URL={GAS_URL} 
                 API_KEY={API_KEY} 
-                assignedSchools={assignedSchools}
+                assignedSchools={availableAssignedSchools}
               />
             )}
 
@@ -231,7 +233,7 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
                 styles={styles} 
                 GAS_URL={GAS_URL} 
                 API_KEY={API_KEY} 
-                assignedSchools={assignedSchools}
+                assignedSchools={availableAssignedSchools}
               />
             )}
 
@@ -240,7 +242,7 @@ export default function TeacherView({ userName, role, unit, school, sessionToken
                 styles={styles} 
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY} 
-                assignedSchools={assignedSchools}
+                assignedSchools={availableAssignedSchools}
               />
             )}
           </div>

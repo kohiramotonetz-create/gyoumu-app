@@ -19,6 +19,7 @@ function App() {
   const [newPassword, setNewPassword] = useState(''); // ★ 新規パスワード用
   const [userName, setUserName] = useState('');
   const [school, setSchool] = useState('');  // 校舎情報
+  const [assignedSchools, setAssignedSchools] = useState([]);
   const [unit, setUnit] = useState('');    
   const [sessionToken, setSessionToken] = useState('');
   const [loading, setLoading] = useState(false);
@@ -74,6 +75,9 @@ function App() {
         setRole(currentRole);
         setGrade(response.data.grade);
         setSchool(fetchedSchool);
+        setAssignedSchools(Array.isArray(response.data.assignedSchools) && response.data.assignedSchools.length > 0
+          ? response.data.assignedSchools
+          : fetchedSchool ? [fetchedSchool] : []);
         setSessionToken(response.data.sessionToken || '');
         setPassword('');
 
@@ -143,6 +147,7 @@ function App() {
     setUserName('');
     setGrade('');
     setSchool('');
+    setAssignedSchools([]);
     setUnit('');
     setSessionToken('');
 
@@ -194,6 +199,7 @@ function App() {
                 role={role} 
                 unit={unit} 
                 school={school} //
+                assignedSchools={assignedSchools}
                 sessionToken={sessionToken}
                 handleLogout={handleLogout} 
               />
