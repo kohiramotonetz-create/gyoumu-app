@@ -69,7 +69,10 @@ const DEFAULT_SUKIMAKUN_CONTENTS = [
   ["miki_bunri", "三木高校文理コース", "general", "all", "other", true, 18],
   ["takamatsu_higashi_humanities", "高松東高校2年人文コース", "general", "all", "other", true, 19],
   ["kanji_test", "定期テスト 漢字対策", "general", "all", "japanese", true, 20],
-  ["chemistry_formulas", "化学式・イオン式", "general", "all", "science", true, 21]
+  ["chemistry_formulas", "化学式・イオン式", "general", "all", "science", true, 21],
+  ["camp_kagawa_kanji", "香川県 覚えるべき漢字", "camp", "all", "japanese", true, 22],
+  ["camp_science_qa", "理科 一問一答", "camp", "all", "science", true, 23],
+  ["camp_social_qa", "社会 一問一答", "camp", "all", "social", true, 24]
 ];
 
 function normalizeUserId(value) {
