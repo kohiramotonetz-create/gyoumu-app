@@ -248,6 +248,22 @@ git log -3 --oneline
 
 コミットを依頼された場合も、対象ファイルと無関係な既存差分を同じコミットへ含めないでください。
 
+## CHANGELOG Rules
+
+Issue単位の開発を完了する際は、利用者から明示的な指示がなくても必ず`CHANGELOG.md`を更新してください。gyoumu-appの変更だけでなく、同じIssueに含まれるGAS、スプレッドシート／マスター、API、権限仕様、student-app連携もプロジェクト全体の主記録として扱います。ただし、student-appだけで完結する変更を無理に詳細記載しないでください。
+
+- 同じIssueを複数回重複追加しない
+- 既存Issue項目がある場合は新規追加せず、確認結果、Commit、mainマージ、GASデプロイ、Vercelデプロイ、本番確認、student-app影響などを既存項目へ追記・更新する
+- 新しいIssueはIssue Historyの最上部へ追加する
+- 確認できた事実だけを記載し、未確認事項を確認済みとして扱わない
+- 未実施・未確認・未記録の状態は、その状態を明記する
+
+新しいIssueが完了した場合は、Version Historyの現在開発中のVersionへそのIssueを追加してください。Codexがmajor／minor versionを独自に変更してはいけません。
+
+- 新Versionへの切り替えは、利用者がVersion番号を指定した場合、または明確なリリース区切りを指示した場合だけ行う
+- Version番号が指定されていない場合は、現在の最新Versionへ追加する
+- Issue HistoryとVersion Historyの内容を整合させる
+
 ## Testing
 
 変更範囲に応じて、外部通信を伴わない検証を優先してください。
