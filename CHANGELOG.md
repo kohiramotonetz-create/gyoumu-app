@@ -56,9 +56,9 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - 影響範囲: gyoumu-app ReactのVersion表示のみ。GAS、API、CSV、権限、student-app変更なし。
 - 確認結果: `npm run build`成功。`npm run lint`は既存76エラー・6警告で失敗したが、今回変更行の新規lintエラーなし。`git diff --check`成功。
 - Git branch: `main`
-- Commit: 未実施
-- Vercelデプロイ状況: 未実施
-- GASデプロイ状況: GAS変更なし
+- Commit: `5bee34c feat: unify version display`
+- Vercelデプロイ状況: Vercel Production連携ブランチ`main`へpush済み。Vercel側の完了状態は未確認。
+- GASデプロイ状況: clasp pushは差分なし。既存運用デプロイをVersion 155へ更新済み。
 
 ### Issue #006 複数担当校舎を全担当校舎へ反映
 
