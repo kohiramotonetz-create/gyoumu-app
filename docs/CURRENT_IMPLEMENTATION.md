@@ -64,7 +64,7 @@ React Routerは使用されていない。すべて基本URL`/`上で、`App`の
 | 画面名 | 表示条件・ロール | 実装ファイル | 主な操作・遷移 | 外部遷移 |
 |---|---|---|---|---|
 | ログイン | 未ログイン | `src/Login.jsx`、`App.handleLogin` | ID・パスワード送信 | なし |
-| 初回パスワード変更 | `isInitial`が真 | `src/App.jsx` | 新パスワード送信 | なし |
+| 初回パスワード変更 | staff（`admin`、`teacher`、`head-teacher`）かつ`isInitial === true` | `src/App.jsx` | 新パスワード送信 | なし |
 | 生徒メニュー | `student` | `src/StudentView.jsx` | 生徒機能切替 | Forms、スキマ君 |
 | 個トレサポート | `student` | `SupportManager` | 質問・丸付け・SOS | なし |
 | 個トレ進捗 | `student` | `JukuProgressManager` | 単元選択・保存 | なし |
@@ -93,7 +93,7 @@ GAS側でロール・担当校舎が再検証されているかは未確認。
 
 - `App.handleLogin`が`login` actionへ`userId`と`password`を送信する（`src/App.jsx:50-90`）。
 - 成功応答の`name`、`role`、`grade`、`school`をReact stateへ保存する。
-- `isInitial`が真の場合、`changePassword` actionを使用する初回変更画面を表示する（`src/App.jsx:93-124`）。
+- `admin`、`teacher`、`head-teacher`で`isInitial === true`の場合、`changePassword` actionを使用する初回変更画面を表示する。`student`は初期パスワードを持つが、初回変更画面の対象外とする（`src/App.jsx`）。
 - 新パスワードは8文字以上で英大文字・英小文字・数字を各1文字以上必要とする。
 - ログイン状態はReact stateのみで保持する。LocalStorage、SessionStorage、Cookieは使用していない。
 - ページ再読み込み後はstateが初期化され、ログイン画面になる構造である。

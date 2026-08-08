@@ -70,7 +70,8 @@ function App() {
       if (response.data.result === "success") {
         const fetchedSchool = response.data.school;
         setUserName(response.data.name);
-        setRole(response.data.role);
+        const currentRole = response.data.role;
+        setRole(currentRole);
         setGrade(response.data.grade);
         setSchool(fetchedSchool);
         setSessionToken(response.data.sessionToken || '');
@@ -79,8 +80,8 @@ function App() {
         const detectedUnit = await getUnitFromCSV(fetchedSchool);
         setUnit(detectedUnit);
 
-        // GASからの isInitial (I列) フラグで分岐
-        if (response.data.isInitial) {
+        // GASの実効isInitialに加え、クライアント側でもstaff roleに限定する。
+        if (response.data.isInitial === true && ['admin', 'teacher', 'head-teacher'].includes(currentRole)) {
           setStep('change-password');
         } else {
           setStep('menu');

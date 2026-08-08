@@ -129,7 +129,10 @@ userId列をスプレッドシートへ書き込む場合は、先頭ゼロが�
 
 - student: `netzs` + userId
 - teacher、head-teacher、admin: `1234`
-- 新規登録時は`isInitial=true`
+- 新規登録時は、teacher、head-teacher、adminのみ`isInitial=true`
+- studentは`isInitial=false`で登録し、既存データが`true`でも初回パスワード変更を要求しない
+
+初回ログイン時のパスワード変更対象はteacher、head-teacher、adminのみです。studentには初期パスワードがありますが、初回パスワード変更の対象外です。
 
 React側で初期パスワードを計算せず、GASを正本としてください。これは平文パスワードを使用する暫定的な既存仕様です。ハッシュ化などのセキュリティ変更は、別途明示されたIssueで扱ってください。
 

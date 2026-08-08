@@ -1650,7 +1650,7 @@ function handleNewAccountAdminAction_(data) {
       const password = action === "createStudentAccount" ? "netzs" + userId : "1234";
       if (action === "createStudentAccount") {
         const input = validateStudentInput_(data);
-        state.accounts.push([userId, password, true, "", "student", true, "", "", now, now, ""]);
+        state.accounts.push([userId, password, false, "", "student", true, "", "", now, now, ""]);
         state.students.push([userId, input.school, input.name, input.nameKana, input.grade, now, now]);
       } else {
         const input = validateStaffInput_(data);
@@ -1766,7 +1766,7 @@ function doPost(e) {
           school: rows[i][0],
           name: rows[i][4],
           grade: rows[i][5],
-          isInitial: rows[i][8],
+          isInitial: ["admin", "teacher", "head-teacher"].includes(currentRole) && isEnabledValue(rows[i][8]),
           role: currentRole,
           assignedSchools: findUserRecord(inputId).assignedSchools
         };
