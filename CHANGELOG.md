@@ -47,6 +47,17 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 
 ## Issue History
 
+### Issue S-006A Gemini採点基盤（GAS診断）
+
+- 日付: 2026-08-09
+- 変更内容: `checkAnswersWithGemini` に、HTTP status、`Retry-After`、JSON解析、応答検証、所要時間を原因別に記録するGAS診断基盤を追加。リクエスト由来またはサーバー生成の`requestId`を診断ログとレスポンスへ付与。
+- 診断分類: `GEMINI_RATE_LIMIT`、`GEMINI_UNAVAILABLE`、`GEMINI_HTTP_ERROR`、`GEMINI_JSON_PARSE_ERROR`、`GEMINI_INVALID_RESPONSE`、`GEMINI_TIMEOUT_OR_DELAY`、`INTERNAL_ERROR`。
+- 影響範囲: GASの`checkAnswersWithGemini`のみ。既存成功レスポンスを維持し、`requestId`と`durationMs`を追加。エラーレスポンスには`code`、`requestId`、安全な`message`、取得できた場合のみ`retryAfter`を追加。
+- 対象外: Retry、timeout変更、APIキー移設、React、student-app、CSV、権限、本番データ。
+- 確認結果: `node --check gas/コード.js`、`git diff --check`、外部通信を使わない純粋関数確認（HTTP 429・503・その他HTTPエラー、JSON、INVALID、requestId、duration、timeout、診断ログ項目）に成功。外部Gemini通信および本番確認は未実施。
+- Git branch: `feature/g-008-gemini-diagnostics`
+- Commit / Git push / clasp push / GASデプロイ / Vercelデプロイ: 未実施。
+
 ### Issue #007 Version表示共通化
 
 - 日付: 2026-08-08

@@ -1715,11 +1715,20 @@ function doPost(e) {
 
   // AI判定は既存アプリ認証キーで保護し、GeminiキーはScript Propertiesから取得する。
   if (data.action === "checkAnswersWithGemini") {
+    const requestId = getGeminiRequestId_(data.requestId);
     try {
-      return responseJSON(checkAnswersWithGemini(data.answers, getRequiredScriptProperty("GEMINI_API_KEY")));
+      return responseJSON(checkAnswersWithGemini(data.answers, getRequiredScriptProperty("GEMINI_API_KEY"), requestId));
     } catch (error) {
-      const code = error && error.code || "GEMINI_UNAVAILABLE";
-      return responseJSON({ result: "error", code, message: getGeminiBatchErrorMessage_(code) });
+      const code = error && error.code || "INTERNAL_ERROR";
+      if (!error || error.geminiDiagnosticLogged !== true) {
+        const fallbackDiagnostic = createGeminiDiagnostic_(requestId, data.answers);
+        fallbackDiagnostic.category = code;
+        logGeminiDiagnostic_(fallbackDiagnostic);
+      }
+      const errorResponse = { result: "error", code, requestId, message: getGeminiBatchErrorMessage_(code) };
+      if (error && error.retryAfter !== null && error.retryAfter !== undefined) errorResponse.retryAfter = error.retryAfter;
+      if (error && Number.isFinite(error.durationMs)) errorResponse.durationMs = error.durationMs;
+      return responseJSON(errorResponse);
     }
   }
 
@@ -2765,9 +2774,11 @@ function checkWithGemini(word, correct, userAns, apiKey) {
   }
 }
 
-function checkAnswersWithGemini(answers, apiKey) {
+function checkAnswersWithGemini(answers, apiKey, requestId) {
+  requestId = getGeminiRequestId_(requestId);
+  const diagnostic = createGeminiDiagnostic_(requestId, answers);
   if (!apiKey || !Array.isArray(answers) || answers.length === 0 || answers.length > 20) {
-    throw createGeminiBatchError_("INVALID_RESPONSE", "Invalid batch request");
+    failGeminiDiagnostic_(diagnostic, "INTERNAL_ERROR", "Invalid batch request");
   }
 
   const seenIndexes = Object.create(null);
@@ -2777,10 +2788,10 @@ function checkAnswersWithGemini(answers, apiKey) {
     const correctAnswer = String(item && item.correctAnswer || "").trim();
     const userAnswer = String(item && item.userAnswer || "").trim();
     if (!Number.isInteger(index) || index < 0 || seenIndexes[index] || !question || !correctAnswer || !userAnswer) {
-      throw createGeminiBatchError_("INVALID_RESPONSE", "Invalid batch item");
+      failGeminiDiagnostic_(diagnostic, "INTERNAL_ERROR", "Invalid batch item");
     }
     if (question.length > 1000 || correctAnswer.length > 1000 || userAnswer.length > 1000) {
-      throw createGeminiBatchError_("INVALID_RESPONSE", "Batch item is too long");
+      failGeminiDiagnostic_(diagnostic, "INTERNAL_ERROR", "Batch item is too long");
     }
     seenIndexes[index] = true;
     return { index, question, correctAnswer, userAnswer };
@@ -2819,19 +2830,39 @@ function checkAnswersWithGemini(answers, apiKey) {
       }
     }
   };
-  const response = fetchGeminiWithRetry_(url, payload);
+  let response;
+  const startedAt = Date.now();
+  try {
+    response = fetchGeminiDiagnostic_(url, payload);
+    diagnostic.durationMs = Date.now() - startedAt;
+  } catch (error) {
+    diagnostic.durationMs = Date.now() - startedAt;
+    failGeminiDiagnostic_(diagnostic, isGeminiTimeoutError_(error) ? "GEMINI_TIMEOUT_OR_DELAY" : "GEMINI_UNAVAILABLE", "Gemini request failed");
+  }
+  diagnostic.httpStatus = response.getResponseCode();
+  const geminiResponseBody = response.getContentText();
+  diagnostic.retryAfter = getGeminiRetryAfter_(response);
+  if (diagnostic.httpStatus < 200 || diagnostic.httpStatus >= 300) {
+    failGeminiDiagnostic_(diagnostic, classifyGeminiHttpStatus_(diagnostic.httpStatus), `Gemini HTTP ${diagnostic.httpStatus}`);
+  }
   let responseBody;
   try {
-    responseBody = JSON.parse(response.getContentText());
+    responseBody = JSON.parse(geminiResponseBody);
   } catch {
-    throw createGeminiBatchError_("INVALID_RESPONSE", "Gemini returned invalid response JSON");
+    failGeminiDiagnostic_(diagnostic, "GEMINI_JSON_PARSE_ERROR", "Gemini returned invalid response JSON");
   }
   const responseText = String(responseBody && responseBody.candidates && responseBody.candidates[0]
     && responseBody.candidates[0].content && responseBody.candidates[0].content.parts
     && responseBody.candidates[0].content.parts[0] && responseBody.candidates[0].content.parts[0].text || "").trim();
-  const parsed = parseGeminiBatchJson_(responseText);
+  let parsed;
+  try {
+    parsed = parseGeminiBatchJson_(responseText);
+    diagnostic.parseSuccess = true;
+  } catch (error) {
+    failGeminiDiagnostic_(diagnostic, "GEMINI_JSON_PARSE_ERROR", "Gemini returned invalid JSON");
+  }
   if (!parsed || !Array.isArray(parsed.results) || parsed.results.length !== safeAnswers.length) {
-    throw createGeminiBatchError_("INVALID_RESPONSE", "Invalid Gemini result count");
+    failGeminiDiagnostic_(diagnostic, "GEMINI_INVALID_RESPONSE", "Invalid Gemini result count");
   }
 
   const expectedIndexes = Object.create(null);
@@ -2840,15 +2871,18 @@ function checkAnswersWithGemini(answers, apiKey) {
   const results = parsed.results.map(item => {
     const index = Number(item && item.index);
     if (!Number.isInteger(index) || !expectedIndexes[index] || returnedIndexes[index] || typeof item.isCorrect !== "boolean") {
-      throw createGeminiBatchError_("INVALID_RESPONSE", "Invalid Gemini result item");
+      failGeminiDiagnostic_(diagnostic, "GEMINI_INVALID_RESPONSE", "Invalid Gemini result item");
     }
     returnedIndexes[index] = true;
     return { index, isCorrect: item.isCorrect };
   });
   safeAnswers.forEach(item => {
-    if (!returnedIndexes[item.index]) throw createGeminiBatchError_("INVALID_RESPONSE", "Missing Gemini result index");
+    if (!returnedIndexes[item.index]) failGeminiDiagnostic_(diagnostic, "GEMINI_INVALID_RESPONSE", "Missing Gemini result index");
   });
-  return { result: "success", results };
+  diagnostic.category = "SUCCESS";
+  diagnostic.validationSuccess = true;
+  logGeminiDiagnostic_(diagnostic);
+  return { result: "success", results, requestId, durationMs: diagnostic.durationMs };
 }
 
 function parseGeminiBatchJson_(text) {
@@ -2868,61 +2902,92 @@ function parseGeminiBatchJson_(text) {
   throw createGeminiBatchError_("INVALID_RESPONSE", "Gemini returned invalid JSON");
 }
 
-function fetchGeminiWithRetry_(url, payload) {
-  const maxRetries = 2;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    let response;
-    try {
-      response = UrlFetchApp.fetch(url, {
-        method: "post",
-        contentType: "application/json",
-        payload: JSON.stringify(payload),
-        muteHttpExceptions: true
-      });
-    } catch {
-      console.log(JSON.stringify({ service: "Gemini", attempt: attempt + 1, status: "NETWORK_ERROR", responseBody: "UrlFetchApp.fetch failed" }));
-      if (attempt === maxRetries) throw createGeminiBatchError_("GEMINI_UNAVAILABLE", "Gemini network request failed");
-      Utilities.sleep(getGeminiRetryDelayMs_(null, attempt));
-      continue;
-    }
-
-    const status = response.getResponseCode();
-    const responseBody = response.getContentText();
-    console.log(JSON.stringify({ service: "Gemini", attempt: attempt + 1, status, responseBody }));
-    if (status >= 200 && status < 300) return response;
-
-    if (status !== 429 && status !== 503) {
-      throw createGeminiBatchError_("GEMINI_UNAVAILABLE", `Gemini HTTP ${status}`);
-    }
-    if (attempt === maxRetries) {
-      throw createGeminiBatchError_(status === 429 ? "RATE_LIMIT" : "GEMINI_UNAVAILABLE", `Gemini HTTP ${status}`);
-    }
-    Utilities.sleep(getGeminiRetryDelayMs_(response, attempt));
-  }
-  throw createGeminiBatchError_("GEMINI_UNAVAILABLE", "Gemini retry exhausted");
+function fetchGeminiDiagnostic_(url, payload) {
+  return UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
 }
 
-function getGeminiRetryDelayMs_(response, attempt) {
+function getGeminiRetryAfter_(response) {
   const headers = response && response.getAllHeaders ? response.getAllHeaders() : {};
   const retryAfter = headers && (headers["Retry-After"] || headers["retry-after"]);
-  if (retryAfter !== undefined && retryAfter !== null && String(retryAfter).trim() !== "") {
-    const seconds = Number(retryAfter);
-    const jitter = Math.floor(Math.random() * 501);
-    if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000 + jitter, 60000);
-    const retryAt = Date.parse(String(retryAfter));
-    if (!Number.isNaN(retryAt)) return Math.min(Math.max(retryAt - Date.now(), 0) + jitter, 60000);
-  }
-  const baseDelay = Math.pow(2, attempt) * 1000;
-  return baseDelay + Math.floor(Math.random() * 1001);
+  return retryAfter === undefined || retryAfter === null || String(retryAfter).trim() === ""
+    ? null
+    : String(retryAfter).trim().slice(0, 100);
 }
 
-function createGeminiBatchError_(code, message) {
+function classifyGeminiHttpStatus_(status) {
+  if (status === 429) return "GEMINI_RATE_LIMIT";
+  if (status === 503) return "GEMINI_UNAVAILABLE";
+  return "GEMINI_HTTP_ERROR";
+}
+
+function isGeminiTimeoutError_(error) {
+  return /timed?\s*out|timeout|deadline|応答時間|時間切れ/i.test(String(error && error.message || error || ""));
+}
+
+function getGeminiRequestId_(requestId) {
+  if (requestId !== undefined && requestId !== null && String(requestId).trim() !== "") {
+    return String(requestId);
+  }
+  return Utilities.getUuid();
+}
+
+function createGeminiDiagnostic_(requestId, answers) {
+  return {
+    requestId,
+    action: "checkAnswersWithGemini",
+    category: "INTERNAL_ERROR",
+    httpStatus: null,
+    durationMs: 0,
+    batchSize: Array.isArray(answers) ? answers.length : 0,
+    retryAfter: null,
+    parseSuccess: false,
+    validationSuccess: false
+  };
+}
+
+function logGeminiDiagnostic_(diagnostic) {
+  console.log(JSON.stringify({
+    requestId: String(diagnostic.requestId || "").replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 128),
+    action: "checkAnswersWithGemini",
+    category: diagnostic.category || "INTERNAL_ERROR",
+    httpStatus: Number.isInteger(diagnostic.httpStatus) ? diagnostic.httpStatus : null,
+    durationMs: Number.isFinite(diagnostic.durationMs) ? diagnostic.durationMs : 0,
+    batchSize: Number.isInteger(diagnostic.batchSize) ? diagnostic.batchSize : 0,
+    retryAfter: diagnostic.retryAfter === null || diagnostic.retryAfter === undefined ? null : String(diagnostic.retryAfter).slice(0, 100),
+    parseSuccess: diagnostic.parseSuccess === true,
+    validationSuccess: diagnostic.validationSuccess === true,
+    timestamp: new Date().toISOString()
+  }));
+}
+
+function failGeminiDiagnostic_(diagnostic, code, message) {
+  diagnostic.category = code;
+  logGeminiDiagnostic_(diagnostic);
+  const error = createGeminiBatchError_(code, message, diagnostic);
+  error.geminiDiagnosticLogged = true;
+  throw error;
+}
+
+function createGeminiBatchError_(code, message, diagnostic) {
   const error = new Error(message);
   error.code = code;
+  if (diagnostic) {
+    error.durationMs = diagnostic.durationMs;
+    error.retryAfter = diagnostic.retryAfter;
+  }
   return error;
 }
 
 function getGeminiBatchErrorMessage_(code) {
+  if (code === "GEMINI_RATE_LIMIT") return "採点リクエストが集中しています。少し待ってから再度お試しください。";
+  if (code === "GEMINI_JSON_PARSE_ERROR" || code === "GEMINI_INVALID_RESPONSE") return "採点結果を正しく取得できませんでした。再度お試しください。";
+  if (code === "GEMINI_TIMEOUT_OR_DELAY") return "採点処理に時間がかかっています。少し待ってから再度お試しください。";
+  if (code === "GEMINI_UNAVAILABLE" || code === "GEMINI_HTTP_ERROR" || code === "INTERNAL_ERROR") return "採点サービスを一時的に利用できません。少し待ってから再度お試しください。";
   if (code === "RATE_LIMIT") return "採点リクエストが集中しています。少し待ってから再度お試しください。";
   if (code === "INVALID_RESPONSE") return "採点結果を正しく取得できませんでした。再度お試しください。";
   return "採点サービスが一時的に利用できません。少し待ってから再度お試しください。";
