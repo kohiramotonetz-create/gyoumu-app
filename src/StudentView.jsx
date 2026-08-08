@@ -8,6 +8,7 @@ import SchoolProgressManager from './components/SchoolProgressTracker.jsx';
 import UnitSelectionModal from './components/UnitSelectionModal.jsx';
 import PastReviewModal from './components/PastReviewModal.jsx';
 import PastReviewView from './components/PastReviewView.jsx';
+import VersionLabel from './components/common/VersionLabel.jsx';
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
@@ -391,6 +392,7 @@ export default function StudentView({ userId, userName, grade, school, unit, han
         </div>
       )}
 
+      <VersionLabel />
     </div>
   );
 }

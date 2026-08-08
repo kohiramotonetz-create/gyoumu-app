@@ -21,6 +21,15 @@ html, body, #root {
   width: 100%;
 }
 
+.app-version-label {
+  position: fixed;
+  right: 12px;
+  bottom: 8px;
+  z-index: 10000;
+  color: #5f6368;
+  font-size: 12px;
+}
+
 
 .counter {
   font-size: 16px;

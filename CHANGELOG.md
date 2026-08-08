@@ -6,6 +6,17 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 
 ## Version History
 
+### v4.2.1 - 2026-08-08
+
+- テーマ: Version表示共通化
+- 含まれるIssue:
+  - Issue #007 Version表示共通化
+- 主な変更: `version.js`をVersion番号の正本とし、共通`VersionLabel`からログイン画面、生徒画面、講師・管理者画面の右下へ`Version 4.2.1`を表示する構造へ統一。
+- Frontend影響: Version表示のみ。既存画面、認証、権限、APIの仕様変更なし。
+- GAS影響: なし。
+- データ／シート影響: なし。
+- student-app影響: なし。Version番号のみstudent-appと同じ`4.2.1`へ統一。
+
 ### v4.1.0 - 2026-08-08
 
 - テーマ: アカウント管理・認証・スキマ君連携改善
@@ -35,6 +46,19 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### Issue #007 Version表示共通化
+
+- 日付: 2026-08-08
+- 背景: ログイン画面と生徒画面にはVersion表示がなく、TeacherViewだけが`3.5.3`を直接保持していた。
+- 原因: 共通Version定数と共通表示部品がなく、画面ごとにVersion表示仕様が分離していた。
+- 変更内容: `src/constants/version.js`と共通`VersionLabel`を追加し、Login、StudentView、TeacherViewで共用。表示形式を`Version x.x.x`、位置を画面右下固定へ統一し、TeacherViewのベタ書きを削除。
+- 影響範囲: gyoumu-app ReactのVersion表示のみ。GAS、API、CSV、権限、student-app変更なし。
+- 確認結果: `npm run build`成功。`npm run lint`は既存76エラー・6警告で失敗したが、今回変更行の新規lintエラーなし。`git diff --check`成功。
+- Git branch: `main`
+- Commit: 未実施
+- Vercelデプロイ状況: 未実施
+- GASデプロイ状況: GAS変更なし
 
 ### Issue #006 複数担当校舎を全担当校舎へ反映
 

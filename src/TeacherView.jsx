@@ -11,11 +11,11 @@ import SchoolProgressTracker from './components/SchoolProgressManager.jsx'
 import KoToreProgressTracker from './components/KoToreProgressTracker.jsx'
 import AppUsageTracker from './components/AppUsageTracker.jsx'
 import SukimakunPermissionManager from './components/SukimakunPermissionManager.jsx'
+import VersionLabel from './components/common/VersionLabel.jsx'
 import { ALL_SCHOOLS } from './constants/organization.js'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
-const APP_VERSION = "3.5.3";
 
 // 【修正箇所】引数に「school」を正しく追加して受け取れるようにする
 export default function TeacherView({ userName, role, unit, school, assignedSchools, sessionToken, handleLogout }) {
@@ -266,8 +266,8 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
           🏠<br/>
           <span style={{fontSize:'10px'}}>HOME</span>
         </div>
-        <div style={styles.version}>Ver.{APP_VERSION}</div>
       </footer>
+      <VersionLabel />
     </div>
   );
 }

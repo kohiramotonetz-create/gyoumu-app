@@ -32,7 +32,6 @@ export const styles = {
   emptyState: { textAlign: 'center', padding: '100px 20px', color: '#999', backgroundColor: '#fff', borderRadius: '12px', border: '1px dashed #ccc' },
   footer: { background: '#27ae60', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', color: '#fff' },
   homeIcon: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
-  version: { position: 'absolute', right: '10px', bottom: '5px', color: '#fff', fontSize: '10px' },
   passwordContainer: { backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px', minWidth: '600px' },
   tableHeaderRow: { backgroundColor: '#f8f9fa' },

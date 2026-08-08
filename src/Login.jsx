@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import VersionLabel from './components/common/VersionLabel.jsx';
 
 export default function Login({ userId, setUserId, password, setPassword, handleLogin }) {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -77,6 +78,7 @@ export default function Login({ userId, setUserId, password, setPassword, handle
           {isProcessing ? "認証中..." : "ログイン"}
         </button>
       </div>
+      <VersionLabel />
     </div>
   );
 }
