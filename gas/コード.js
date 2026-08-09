@@ -26,6 +26,12 @@ const MANAGEMENT_SESSION_SHEET_NAME = "管理セッション";
 const SUKIMAKUN_CONTENT_HEADERS = ["contentId", "displayName", "category", "schoolType", "subject", "enabled", "sortOrder"];
 const SUKIMAKUN_PERMISSION_HEADERS = ["userId", "contentId", "enabled", "updatedAt", "updatedBy"];
 const MANAGEMENT_SESSION_HEADERS = ["sessionToken", "userId", "role", "expiresAt", "createdAt"];
+const CAMP_PARTICIPANT_SHEET_NAME = "合宿参加者";
+const CAMP_TRAINING_SHEET_NAME = "合宿特訓入力";
+const CAMP_PARTICIPANT_HEADERS = ["year", "season", "studentId", "updatedAt", "updatedBy"];
+const CAMP_TRAINING_HEADERS = ["year", "season", "day", "studentId", "japanese", "math", "english", "social", "science", "updatedAt", "updatedBy"];
+const CAMP_SEASONS = ["夏", "冬"];
+const CAMP_SUBJECT_KEYS = ["japanese", "math", "english", "social", "science"];
 const ACCOUNT_MASTER_SHEET_SPECS = [
   { name: "アカウントマスター", headers: ["userId", "password", "isInitial", "passwordUpdatedAt", "role", "enabled", "sukimakunToken", "sukimakunTokenExpire", "createdAt", "updatedAt", "deletedAt"], textColumns: [1, 2, 7], dateColumns: [4, 8, 9, 10, 11] },
   { name: "生徒マスター", headers: ["userId", "school", "name", "nameKana", "grade", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [6, 7] },
@@ -1386,8 +1392,14 @@ function requireAdminSession(sessionToken) {
   return session;
 }
 
+function requireCampViewerSession(sessionToken) {
+  const session = validateManagementSession(sessionToken, true);
+  if (!["admin", "head-teacher"].includes(session.role)) throw new Error("合宿ランキングの閲覧権限が必要です");
+  return session;
+}
+
 function isManagementAuthorizationError(error) {
-  return /管理セッション|管理者権限/.test(String(error && error.message || ""));
+  return /管理セッション|管理者権限|閲覧権限/.test(String(error && error.message || ""));
 }
 
 function deleteManagementSession(sessionToken) {
@@ -1698,6 +1710,247 @@ function handleNewAccountAdminAction_(data) {
   });
 }
 
+function setupCampTrainingSheets() {
+  // eslint-disable-next-line no-undef
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const result = { createdSheets: [], initializedHeaders: [], warnings: [] };
+  [[CAMP_PARTICIPANT_SHEET_NAME, CAMP_PARTICIPANT_HEADERS], [CAMP_TRAINING_SHEET_NAME, CAMP_TRAINING_HEADERS]].forEach(([sheetName, headers]) => {
+    const existing = spreadsheet.getSheetByName(sheetName);
+    if (existing && existing.getLastRow() > 0) assertCampSheetHeaders_(existing, sheetName, headers);
+  });
+  ensureSheetWithHeaders(spreadsheet, CAMP_PARTICIPANT_SHEET_NAME, CAMP_PARTICIPANT_HEADERS, result);
+  ensureSheetWithHeaders(spreadsheet, CAMP_TRAINING_SHEET_NAME, CAMP_TRAINING_HEADERS, result);
+  if (result.warnings.length > 0) throw new Error(result.warnings.join("; "));
+  result.warningCount = result.warnings.length;
+  return result;
+}
+
+// eslint-disable-next-line no-unused-vars
+function runSetupCampTrainingSheetsSummary() {
+  const result = setupCampTrainingSheets();
+  console.log(JSON.stringify(result, null, 2));
+}
+
+function getCampSheet_(sheetName, headers) {
+  const sheet = getRequiredSheet(sheetName);
+  assertCampSheetHeaders_(sheet, sheetName, headers);
+  return sheet;
+}
+
+function assertCampSheetHeaders_(sheet, sheetName, headers) {
+  const width = Math.max(headers.length, sheet.getLastColumn());
+  const actual = sheet.getRange(1, 1, 1, width).getValues()[0].map(value => String(value || "").trim());
+  while (actual.length > 0 && actual[actual.length - 1] === "") actual.pop();
+  if (actual.join("\t") !== headers.join("\t")) throw new Error(`${sheetName}のヘッダーが不正です`);
+}
+
+function validateCampYear_(value) {
+  const year = Number(value);
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) throw new Error("年度が不正です");
+  return year;
+}
+
+function validateCampSeason_(value) {
+  const season = String(value || "").trim();
+  if (!CAMP_SEASONS.includes(season)) throw new Error("季節が不正です");
+  return season;
+}
+
+function validateCampDay_(value) {
+  const day = Number(value);
+  if (![1, 2, 3, 4].includes(day)) throw new Error("何日目かの指定が不正です");
+  return day;
+}
+
+function validateCampCount_(value) {
+  const count = value === "" || value === null || value === undefined ? 0 : Number(value);
+  if (!Number.isInteger(count) || count < 0) throw new Error("問題数は0以上の整数で入力してください");
+  return count;
+}
+
+function getActiveCampStudents_() {
+  const students = getUserAuthContexts_().filter(user => user.role === "student" && user.enabled && !user.deleted)
+    .map(user => ({ studentId: user.userId, name: user.name, nameKana: user.nameKana || "", school: user.school, grade: user.grade }))
+    .sort((left, right) => String(left.school).localeCompare(String(right.school), "ja") || String(left.nameKana).localeCompare(String(right.nameKana), "ja") || left.studentId.localeCompare(right.studentId));
+  if (new Set(students.map(student => student.studentId)).size !== students.length) throw new Error("生徒マスターに重複した生徒コードがあります");
+  return students;
+}
+
+function getCampParticipantIds_(year, season) {
+  const rows = getCampSheet_(CAMP_PARTICIPANT_SHEET_NAME, CAMP_PARTICIPANT_HEADERS).getDataRange().getValues();
+  const ids = new Set();
+  for (let i = 1; i < rows.length; i++) {
+    if (Number(rows[i][0]) !== year || String(rows[i][1]) !== season) continue;
+    const studentId = normalizeUserId(rows[i][2]);
+    if (!studentId || ids.has(studentId)) throw new Error("合宿参加者に重複または不正な行があります");
+    ids.add(studentId);
+  }
+  const activeStudentIds = new Set(getActiveCampStudents_().map(student => student.studentId));
+  ids.forEach(studentId => { if (!activeStudentIds.has(studentId)) throw new Error("合宿参加者に生徒マスター上で有効でない生徒コードがあります"); });
+  return ids;
+}
+
+function getCampTrainingRecords_(year, season) {
+  const rows = getCampSheet_(CAMP_TRAINING_SHEET_NAME, CAMP_TRAINING_HEADERS).getDataRange().getValues();
+  const records = [];
+  const keys = new Set();
+  for (let i = 1; i < rows.length; i++) {
+    if (Number(rows[i][0]) !== year || String(rows[i][1]) !== season) continue;
+    const day = validateCampDay_(rows[i][2]);
+    const studentId = normalizeUserId(rows[i][3]);
+    const key = `${day}::${studentId}`;
+    if (!studentId || keys.has(key)) throw new Error("合宿特訓入力に重複または不正な行があります");
+    keys.add(key);
+    const record = { day, studentId };
+    CAMP_SUBJECT_KEYS.forEach((subject, index) => { record[subject] = validateCampCount_(rows[i][index + 4]); });
+    records.push(record);
+  }
+  return records;
+}
+
+function assignCampRanks_(rows) {
+  let previousTotal = null;
+  let previousRank = 0;
+  return rows.slice().sort((left, right) => right.total - left.total || left.studentId.localeCompare(right.studentId)).map((row, index) => {
+    const rank = row.total === previousTotal ? previousRank : index + 1;
+    previousTotal = row.total;
+    previousRank = rank;
+    return Object.assign({}, row, { rank });
+  });
+}
+
+function buildCampRanking_(year, season, mode) {
+  const participantIds = getCampParticipantIds_(year, season);
+  const students = getActiveCampStudents_().filter(student => participantIds.has(student.studentId));
+  const records = getCampTrainingRecords_(year, season).filter(record => participantIds.has(record.studentId));
+  const requestedDay = mode === "total" ? null : validateCampDay_(mode);
+  const createTotals = days => {
+    const byStudent = Object.create(null);
+    records.filter(record => days.includes(record.day)).forEach(record => {
+      if (!byStudent[record.studentId]) byStudent[record.studentId] = { hasData: false, japanese: 0, math: 0, english: 0, social: 0, science: 0 };
+      byStudent[record.studentId].hasData = true;
+      CAMP_SUBJECT_KEYS.forEach(subject => { byStudent[record.studentId][subject] += record[subject]; });
+    });
+    return byStudent;
+  };
+  const totals = createTotals(requestedDay ? [requestedDay] : [1, 2, 3, 4]);
+  const rows = students.map(student => {
+    const values = totals[student.studentId] || { hasData: false, japanese: 0, math: 0, english: 0, social: 0, science: 0 };
+    const total = CAMP_SUBJECT_KEYS.reduce((sum, subject) => sum + values[subject], 0);
+    return Object.assign({}, student, values, { total });
+  });
+  const ranked = assignCampRanks_(rows);
+  if (!requestedDay || requestedDay === 1) return ranked.map(row => Object.assign({}, row, { rankChange: "―" }));
+  const previousTotals = createTotals([requestedDay - 1]);
+  const previousRanked = assignCampRanks_(students.filter(student => previousTotals[student.studentId] && previousTotals[student.studentId].hasData).map(student => {
+    const values = previousTotals[student.studentId];
+    return { studentId: student.studentId, total: CAMP_SUBJECT_KEYS.reduce((sum, subject) => sum + values[subject], 0) };
+  }));
+  const previousRankById = Object.create(null);
+  previousRanked.forEach(row => { previousRankById[row.studentId] = row.rank; });
+  return ranked.map(row => {
+    const previousRank = previousRankById[row.studentId];
+    if (!previousRank) return Object.assign({}, row, { rankChange: "―" });
+    const difference = previousRank - row.rank;
+    return Object.assign({}, row, { rankChange: difference > 0 ? `↑${difference}` : difference < 0 ? `↓${Math.abs(difference)}` : "―" });
+  });
+}
+
+function replaceCampRows_(sheet, headers, nextRows, snapshotRows) {
+  const previousCount = Math.max(0, snapshotRows.length - 1);
+  const nextCount = nextRows.length;
+  const clearCount = Math.max(previousCount, nextCount);
+  try {
+    if (clearCount) sheet.getRange(2, 1, clearCount, headers.length).clearContent();
+    if (nextCount) sheet.getRange(2, 1, nextCount, headers.length).setValues(nextRows);
+  } catch (error) {
+    try {
+      if (clearCount) sheet.getRange(2, 1, clearCount, headers.length).clearContent();
+      if (previousCount) sheet.getRange(2, 1, previousCount, headers.length).setValues(snapshotRows.slice(1).map(row => row.slice(0, headers.length)));
+    } catch { throw new Error("合宿データの更新と復元に失敗しました"); }
+    throw error;
+  }
+}
+
+function withCampReadLock_(callback) {
+  // eslint-disable-next-line no-undef
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(10000)) throw new Error("別の合宿更新処理が実行中です");
+  try { return callback(); }
+  finally { lock.releaseLock(); }
+}
+
+function handleCampAction_(data) {
+  const year = validateCampYear_(data.year);
+  const season = validateCampSeason_(data.season);
+  if (data.action === "getCampTrainingRanking") {
+    requireCampViewerSession(data.sessionToken);
+    const mode = String(data.mode || "1");
+    if (!["1", "2", "3", "4", "total"].includes(mode)) throw new Error("集計対象が不正です");
+    return withCampReadLock_(() => ({ result: "success", rows: buildCampRanking_(year, season, mode) }));
+  }
+  const admin = requireAdminSession(data.sessionToken);
+  if (data.action === "getCampParticipants") {
+    return withCampReadLock_(() => {
+      const participantIds = getCampParticipantIds_(year, season);
+      return { result: "success", students: getActiveCampStudents_().map(student => Object.assign({}, student, { participating: participantIds.has(student.studentId) })) };
+    });
+  }
+  if (data.action === "getCampTrainingInput") {
+    const day = validateCampDay_(data.day);
+    return withCampReadLock_(() => ({ result: "success", rows: buildCampRanking_(year, season, String(day)) }));
+  }
+  if (data.action === "updateCampParticipants") {
+    if (!Array.isArray(data.participantIds)) throw new Error("参加者の形式が不正です");
+    // eslint-disable-next-line no-undef
+    const lock = LockService.getDocumentLock();
+    if (!lock.tryLock(10000)) throw new Error("別の合宿更新処理が実行中です");
+    try {
+      const validIds = new Set(getActiveCampStudents_().map(student => student.studentId));
+      const normalizedIds = data.participantIds.map(normalizeUserId);
+      const participantIds = Array.from(new Set(normalizedIds));
+      if (participantIds.length !== normalizedIds.length || participantIds.some(studentId => !studentId)) throw new Error("参加者に重複または不正な生徒コードが含まれています");
+      participantIds.forEach(studentId => { if (!validIds.has(studentId)) throw new Error("参加者に存在しない生徒が含まれています"); });
+      const sheet = getCampSheet_(CAMP_PARTICIPANT_SHEET_NAME, CAMP_PARTICIPANT_HEADERS);
+      const snapshot = sheet.getDataRange().getValues();
+      const preserved = snapshot.slice(1).filter(row => Number(row[0]) !== year || String(row[1]) !== season).map(row => row.slice(0, CAMP_PARTICIPANT_HEADERS.length));
+      const now = new Date();
+      const additions = participantIds.map(studentId => [year, season, formatUserIdForSheet(studentId), now, toSafeSheetText(admin.userId)]);
+      replaceCampRows_(sheet, CAMP_PARTICIPANT_HEADERS, preserved.concat(additions), snapshot);
+      return { result: "success", participantCount: additions.length };
+    } finally { lock.releaseLock(); }
+  }
+  if (data.action === "saveCampTrainingInput") {
+    const day = validateCampDay_(data.day);
+    if (!Array.isArray(data.entries)) throw new Error("入力データの形式が不正です");
+    // eslint-disable-next-line no-undef
+    const lock = LockService.getDocumentLock();
+    if (!lock.tryLock(10000)) throw new Error("別の合宿更新処理が実行中です");
+    try {
+      const participantIds = getCampParticipantIds_(year, season);
+      const seen = new Set();
+      const entries = data.entries.map(entry => {
+        const studentId = normalizeUserId(entry && entry.studentId);
+        if (!participantIds.has(studentId) || seen.has(studentId)) throw new Error("参加者以外または重複した生徒が含まれています");
+        seen.add(studentId);
+        const normalized = { studentId };
+        CAMP_SUBJECT_KEYS.forEach(subject => { normalized[subject] = validateCampCount_(entry[subject]); });
+        return normalized;
+      });
+      if (entries.length !== participantIds.size) throw new Error("参加者全員の入力データが必要です");
+      const sheet = getCampSheet_(CAMP_TRAINING_SHEET_NAME, CAMP_TRAINING_HEADERS);
+      const snapshot = sheet.getDataRange().getValues();
+      const submittedIds = new Set(entries.map(entry => entry.studentId));
+      const preserved = snapshot.slice(1).filter(row => Number(row[0]) !== year || String(row[1]) !== season || Number(row[2]) !== day || !submittedIds.has(normalizeUserId(row[3]))).map(row => row.slice(0, CAMP_TRAINING_HEADERS.length));
+      const now = new Date();
+      const additions = entries.map(entry => [year, season, day, formatUserIdForSheet(entry.studentId), ...CAMP_SUBJECT_KEYS.map(subject => entry[subject]), now, toSafeSheetText(admin.userId)]);
+      replaceCampRows_(sheet, CAMP_TRAINING_HEADERS, preserved.concat(additions), snapshot);
+      return { result: "success", updatedCount: additions.length };
+    } finally { lock.releaseLock(); }
+  }
+  throw new Error("Unknown camp action");
+}
+
 function doPost(e) {
   let data;
   try {
@@ -1739,6 +1992,16 @@ function doPost(e) {
     }
   }
 
+  const campActions = ["getCampParticipants", "updateCampParticipants", "getCampTrainingInput", "saveCampTrainingInput", "getCampTrainingRanking"];
+  if (campActions.includes(data.action)) {
+    try {
+      return responseJSON(handleCampAction_(data));
+    } catch (error) {
+      const authorizationError = isManagementAuthorizationError(error);
+      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "この合宿機能を利用する権限がありません" : String(error && error.message || "入力内容が不正です") });
+    }
+  }
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const rows = getLegacyCompatibleUserRows_();
 
@@ -1773,7 +2036,7 @@ function doPost(e) {
           role: currentRole,
           assignedSchools: findUserRecord(inputId).assignedSchools
         };
-        if (currentRole === "admin") {
+        if (["admin", "head-teacher"].includes(currentRole)) {
           try {
             const managementSession = createManagementSession(inputId, currentRole);
             loginResult.sessionToken = managementSession.sessionToken;
@@ -1782,7 +2045,7 @@ function doPost(e) {
             return responseJSON({
               result: "error",
               code: "MANAGEMENT_SESSION_SETUP_ERROR",
-              message: "管理者ログインの設定が完了していません"
+              message: "管理セッションの設定が完了していません"
             });
           }
         }

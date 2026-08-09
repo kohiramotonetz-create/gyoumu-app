@@ -11,6 +11,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - テーマ: Version表示共通化
 - 含まれるIssue:
   - Issue #007 Version表示共通化
+  - Issue #010 合宿参加者設定・合宿特訓データ入力・ランキング
 - 主な変更: `version.js`をVersion番号の正本とし、共通`VersionLabel`からログイン画面、生徒画面、講師・管理者画面の右下へ`Version 4.2.1`を表示する構造へ統一。
 - Frontend影響: Version表示のみ。既存画面、認証、権限、APIの仕様変更なし。
 - GAS影響: なし。
@@ -46,6 +47,20 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### Issue #010 合宿参加者設定・合宿特訓データ入力・ランキング
+
+- 日付: 2026-08-10
+- 状態: React・GAS実装とローカル静的検証を実施。本番シート作成、GAS／Vercelデプロイ、本番確認は未実施。
+- 変更内容: admin・head-teacher向け合宿メニュー、年度・夏冬別のランキング、admin限定の参加者設定と1～4日目の5教科問題数入力を追加。標準競技順位と前日比を実装。年度・季節選択欄は閉じた値、選択肢、フォーカス時、無効時にも判別できる配色へ修正。
+- 権限: head-teacherへroleを維持した管理セッションを発行。ランキングはadmin・head-teacher、参加者と入力の取得・更新はadminだけをGAS側で許可。
+- データ／シート影響: `合宿参加者`と`合宿特訓入力`の手動セットアップ関数を追加。生徒コードだけを保存し、氏名・フリガナ・教室は生徒マスターを参照。本番シートは未作成。
+- API: `getCampParticipants`、`updateCampParticipants`、`getCampTrainingInput`、`saveCampTrainingInput`、`getCampTrainingRanking`を非破壊的に追加。既存actionと既存レスポンスは変更なし。
+- 対象外: スキマ君問題数集計、student-app、LOG GAS、無効回答判定。
+- テスト: `npm test`（19件）、`npm run build`成功。GAS構文と`git diff --check`成功。追加ファイル個別lint成功。年度・季節選択欄はadmin・head-teacherのPC幅／390px幅でローカル画面確認済み。
+- Git branch: `codex/issue-010-camp-training`
+- Commit / Push / clasp push / GASデプロイ / Vercelデプロイ / 本番データ変更: 未実施
+- Version: 変更なし（Version 4.2.1）
 
 ### Issue #007 Version表示共通化
 

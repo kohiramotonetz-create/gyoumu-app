@@ -11,11 +11,13 @@ import SchoolProgressTracker from './components/SchoolProgressManager.jsx'
 import KoToreProgressTracker from './components/KoToreProgressTracker.jsx'
 import AppUsageTracker from './components/AppUsageTracker.jsx'
 import SukimakunPermissionManager from './components/SukimakunPermissionManager.jsx'
+import CampTrainingManager from './components/CampTrainingManager.jsx'
 import VersionLabel from './components/common/VersionLabel.jsx'
 import { ALL_SCHOOLS } from './constants/organization.js'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
+const CAMP_MENU_ITEM = { id: 'camp-training', label: '合宿メニュー', icon: '🏕️' };
 
 // 【修正箇所】引数に「school」を正しく追加して受け取れるようにする
 export default function TeacherView({ userName, role, unit, school, assignedSchools, sessionToken, handleLogout }) {
@@ -116,10 +118,10 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
 
   const menuItems = useMemo(() => {
     if (role === 'admin') {
-      return [...baseMenuItems, ...adminMenuItems];
+      return [...baseMenuItems, CAMP_MENU_ITEM, ...adminMenuItems];
     } else if (role === 'head-teacher') {
       const headTeacherExtensions = adminMenuItems.filter(item => item.id === 'create-account' || item.id === 'test-review-check');
-      return [...baseMenuItems, ...headTeacherExtensions];
+      return [...baseMenuItems, CAMP_MENU_ITEM, ...headTeacherExtensions];
     }
     return baseMenuItems;
   }, [role]);
@@ -206,6 +208,17 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
                 API_KEY={API_KEY}
                 sessionToken={sessionToken}
                 assignedSchools={availableAssignedSchools}
+                styles={styles}
+                onSessionExpired={handleLogout}
+              />
+            )}
+
+            {activeContent === 'camp-training' && (role === 'admin' || role === 'head-teacher') && (
+              <CampTrainingManager
+                GAS_URL={GAS_URL}
+                API_KEY={API_KEY}
+                sessionToken={sessionToken}
+                role={role}
                 styles={styles}
                 onSessionExpired={handleLogout}
               />

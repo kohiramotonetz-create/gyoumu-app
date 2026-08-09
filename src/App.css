@@ -215,3 +215,31 @@ html, body, #root {
     border-right-color: var(--border);
   }
 }
+/* 合宿参加者・入力・ランキング */
+.camp-training-manager { display: grid; gap: 18px; }
+.camp-training-controls, .camp-training-tabs, .camp-training-switches { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.camp-training-controls label { display: grid; gap: 5px; min-width: 150px; font-weight: 700; color: #475569; }
+.camp-training-controls select, .camp-training-controls input { padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; }
+.camp-training-controls select { color: #334155; color-scheme: light; -webkit-text-fill-color: #334155; }
+.camp-training-controls select option { color: #334155; background: #fff; }
+.camp-training-controls select:focus { outline: 2px solid #166534; outline-offset: 2px; }
+.camp-training-controls select:disabled { color: #64748b; background: #f1f5f9; opacity: 1; -webkit-text-fill-color: #64748b; }
+.camp-training-tabs button, .camp-training-switches button { width: auto; padding: 9px 16px; margin: 0; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; }
+.camp-training-tabs button.active, .camp-training-switches button.active { background: #166534; color: #fff; border-color: #166534; }
+.camp-training-table-wrap { overflow: auto; max-height: 65vh; border: 1px solid #dbe2e8; border-radius: 8px; background: #fff; }
+.camp-training-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.camp-training-table th { position: sticky; top: 0; z-index: 2; padding: 10px; white-space: nowrap; background: #f1f5f9; border-bottom: 1px solid #cbd5e1; }
+.camp-training-table td { padding: 8px; text-align: center; white-space: nowrap; border-bottom: 1px solid #e2e8f0; }
+.camp-training-count { width: 72px; box-sizing: border-box; padding: 7px; text-align: right; border: 1px solid #cbd5e1; border-radius: 5px; }
+.camp-participant-list { max-height: 60vh; overflow: auto; background: #fff; border: 1px solid #dbe2e8; border-radius: 8px; }
+.camp-participant-list label { display: grid; grid-template-columns: 36px 90px minmax(120px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr); align-items: center; min-width: 560px; padding: 10px; border-bottom: 1px solid #e2e8f0; cursor: pointer; }
+.camp-participant-list input { width: 18px; height: 18px; }
+.camp-training-message, .camp-training-state { padding: 12px; border-radius: 6px; background: #fff; color: #475569; }
+.camp-training-message.success { background: #f0fdf4; color: #166534; }
+.camp-training-message.error { background: #fef2f2; color: #991b1b; }
+
+@media (max-width: 700px) {
+  .camp-training-controls { align-items: stretch; }
+  .camp-training-controls label { flex: 1 1 140px; }
+  .camp-training-tabs button, .camp-training-switches button { flex: 1 1 auto; }
+}
