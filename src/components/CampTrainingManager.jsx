@@ -3,13 +3,13 @@ import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
 import { CAMP_DAYS, CAMP_SEASONS, CAMP_SUBJECTS, calculateCampTotal, normalizeCampCount } from '../utils/campTraining.js';
-import { compareStudentAccounts } from '../utils/studentAccountOrdering.js';
+import { filterCampParticipants } from '../utils/studentAccountOrdering.js';
 
 const SUBJECT_LABELS = { japanese: '国語', math: '数学', english: '英語', social: '社会', science: '理科' };
 const TABLE_HEADERS = ['順位', '生徒コード', '生徒名', 'フリガナ', '教室', '前日比', '合計', '国語', '数学', '英語', '社会', '理科'];
 const REQUEST_TIMEOUT_MS = 30000;
 
-export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, role, styles, onSessionExpired }) {
+export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, role, assignedSchools = [], styles, onSessionExpired }) {
   const currentYear = new Date().getFullYear();
   const years = useMemo(() => Array.from({ length: 101 }, (_, index) => 2100 - index), []);
   const [year, setYear] = useState(currentYear);
@@ -23,22 +23,20 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
   const [participantSchool, setParticipantSchool] = useState('');
   const [participantGrades, setParticipantGrades] = useState([]);
   const [participantNameQuery, setParticipantNameQuery] = useState('');
+  const [displayedParticipantCondition, setDisplayedParticipantCondition] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [loadFailed, setLoadFailed] = useState(false);
   const requestSequence = useRef(0);
   const activeRequest = useRef(null);
+  const participantSelectionContext = useRef('');
 
-  const filteredParticipants = useMemo(() => {
-    const selectedGrade = participantGrades[0] || '';
-    const query = participantNameQuery.trim().toLocaleLowerCase('ja');
-    return participants
-      .filter(student => !participantSchool || student.school === participantSchool)
-      .filter(student => !selectedGrade || student.grade === selectedGrade)
-      .filter(student => !query || String(student.name || '').toLocaleLowerCase('ja').includes(query))
-      .sort(compareStudentAccounts);
-  }, [participantGrades, participantNameQuery, participantSchool, participants]);
+  const filteredParticipants = useMemo(() => displayedParticipantCondition ? filterCampParticipants(participants, {
+    ...displayedParticipantCondition,
+    assignedSchools,
+    nameQuery: participantNameQuery
+  }) : [], [assignedSchools, displayedParticipantCondition, participantNameQuery, participants]);
 
   const postAction = useCallback(async (action, payload = {}, signal) => {
     const response = await axios.post(GAS_URL, JSON.stringify({ action, apiKey: API_KEY, sessionToken, ...payload }), {
@@ -60,12 +58,8 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
     setLoadFailed(false);
     setMessage({ type: '', text: '' });
     try {
-      if (view === 'participants') {
-        const data = await postAction('getCampParticipants', { year, season }, controller.signal);
-        if (sequence !== requestSequence.current) return;
-        setParticipants(data.students || []);
-        setSelectedIds(new Set((data.students || []).filter(student => student.participating).map(student => student.studentId)));
-      } else if (view === 'input') {
+      if (view === 'participants') return;
+      if (view === 'input') {
         const data = await postAction('getCampTrainingInput', { year, season, day: inputDay }, controller.signal);
         if (sequence !== requestSequence.current) return;
         setRows(data.rows || []);
@@ -78,12 +72,7 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
       if (axios.isCancel(error) || sequence !== requestSequence.current) return;
       setLoadFailed(true);
       setMessage({ type: 'error', text: error.message });
-      if (view === 'participants') {
-        setParticipants([]);
-        setSelectedIds(new Set());
-      } else {
-        setRows([]);
-      }
+      setRows([]);
     } finally {
       if (sequence === requestSequence.current) {
         setLoading(false);
@@ -91,6 +80,64 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
       }
     }
   }, [inputDay, postAction, rankingMode, season, view, year]);
+
+  const resetParticipantDisplay = () => {
+    activeRequest.current?.abort();
+    setParticipants([]);
+    setDisplayedParticipantCondition(null);
+    setMessage({ type: '', text: '' });
+  };
+
+  const changeParticipantSchool = event => {
+    setParticipantSchool(event.target.value);
+    resetParticipantDisplay();
+  };
+
+  const changeParticipantGrades = grades => {
+    setParticipantGrades(grades);
+    resetParticipantDisplay();
+  };
+
+  const changeCampPeriod = update => {
+    update();
+    participantSelectionContext.current = '';
+    setSelectedIds(new Set());
+    resetParticipantDisplay();
+  };
+
+  const displayParticipants = async () => {
+    if (!participantSchool || saving || loading) return;
+    const sequence = ++requestSequence.current;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    setLoading(true);
+    setLoadFailed(false);
+    setMessage({ type: '', text: '' });
+    try {
+      const data = await postAction('getCampParticipants', { year, season }, controller.signal);
+      if (sequence !== requestSequence.current) return;
+      const students = data.students || [];
+      const context = `${year}::${season}`;
+      setParticipants(students);
+      if (participantSelectionContext.current !== context) {
+        setSelectedIds(new Set(students.filter(student => student.participating).map(student => student.studentId)));
+        participantSelectionContext.current = context;
+      }
+      setDisplayedParticipantCondition({ school: participantSchool, grades: [...participantGrades] });
+    } catch (error) {
+      if (axios.isCancel(error) || sequence !== requestSequence.current) return;
+      setLoadFailed(true);
+      setParticipants([]);
+      setDisplayedParticipantCondition(null);
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      if (sequence === requestSequence.current) {
+        setLoading(false);
+        activeRequest.current = null;
+      }
+    }
+  };
 
   useEffect(() => {
     loadCurrentView();
@@ -101,7 +148,6 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
     setSaving(true); setMessage({ type: '', text: '' });
     try {
       await postAction('updateCampParticipants', { year, season, participantIds: [...selectedIds] });
-      await loadCurrentView();
       setMessage({ type: 'success', text: '合宿参加者を保存しました。' });
     } catch (error) { setMessage({ type: 'error', text: error.message }); }
     finally { setSaving(false); }
@@ -135,19 +181,20 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
   return <section className="camp-training-manager">
     <h2 style={styles.contentTitle}>🏕️ 合宿メニュー</h2>
     <div className="camp-training-controls">
-      <label>年度<select value={year} disabled={saving} onChange={event => setYear(Number(event.target.value))}>{years.map(value => <option key={value} value={value}>{value}年度</option>)}</select></label>
-      <label>季節<select value={season} disabled={saving} onChange={event => setSeason(event.target.value)}>{CAMP_SEASONS.map(value => <option key={value}>{value}</option>)}</select></label>
+      <label>年度<select value={year} disabled={saving} onChange={event => changeCampPeriod(() => setYear(Number(event.target.value)))}>{years.map(value => <option key={value} value={value}>{value}年度</option>)}</select></label>
+      <label>季節<select value={season} disabled={saving} onChange={event => changeCampPeriod(() => setSeason(event.target.value))}>{CAMP_SEASONS.map(value => <option key={value}>{value}</option>)}</select></label>
     </div>
     <div className="camp-training-tabs"><button disabled={saving} className={view === 'ranking' ? 'active' : ''} onClick={() => setView('ranking')}>ランキング</button>{role === 'admin' && <button disabled={saving} className={view === 'participants' ? 'active' : ''} onClick={() => setView('participants')}>参加者設定</button>}{role === 'admin' && <button disabled={saving} className={view === 'input' ? 'active' : ''} onClick={() => setView('input')}>データ入力</button>}</div>
     {message.text && <div role={message.type === 'error' ? 'alert' : 'status'} className={`camp-training-message ${message.type}`}>{message.text}</div>}
     {view === 'ranking' && <><div className="camp-training-switches">{[...CAMP_DAYS.map(String), 'total'].map(value => <button key={value} disabled={saving} className={rankingMode === value ? 'active' : ''} onClick={() => setRankingMode(value)}>{value === 'total' ? '総合集計' : `${value}日目`}</button>)}</div>{!loading && rows.length > 0 && renderTable(false)}</>}
-    {view === 'participants' && role === 'admin' && <>{!loading && participants.length > 0 && <><div className="camp-participant-filters">
-      <label>校舎<SchoolSelect value={participantSchool} onChange={event => setParticipantSchool(event.target.value)} disabled={saving} showAssignedOptions={false} /></label>
-      <label>学年<GradeSelect value={participantGrades} onChange={setParticipantGrades} disabled={saving} includeGroups={false} /></label>
-      <label>氏名<input value={participantNameQuery} onChange={event => setParticipantNameQuery(event.target.value)} disabled={saving} placeholder="氏名で検索" /></label>
-    </div>{filteredParticipants.length > 0 ? <div className="camp-participant-list">{filteredParticipants.map(student => <label key={student.studentId}><input type="checkbox" disabled={saving} checked={selectedIds.has(student.studentId)} onChange={() => setSelectedIds(current => { const next = new Set(current); if (next.has(student.studentId)) next.delete(student.studentId); else next.add(student.studentId); return next; })} /><span>{student.studentId}</span><span>{student.name}</span><span>{student.nameKana}</span><span>{student.school}</span><span>{student.grade}</span></label>)}</div> : <div className="camp-training-state">該当する生徒がいません。</div>}</>}<button style={styles.doneBtn} disabled={saving || loading || loadFailed} onClick={saveParticipants}>{saving ? '保存中...' : '参加者を保存'}</button></>}
+    {view === 'participants' && role === 'admin' && <><div className="camp-participant-filters">
+      <label>校舎<SchoolSelect value={participantSchool} onChange={changeParticipantSchool} disabled={saving || loading} assignedSchools={assignedSchools} /></label>
+      <label>学年<GradeSelect value={participantGrades} onChange={changeParticipantGrades} disabled={saving || loading} includeGroups={false} /></label>
+      <label>氏名<input value={participantNameQuery} onChange={event => setParticipantNameQuery(event.target.value)} disabled={saving || !displayedParticipantCondition} placeholder="氏名で検索" /></label>
+      <button type="button" className="camp-participant-display-button" style={{ ...styles.doneBtn, width: 'auto', padding: '9px 18px', border: '1px solid transparent', boxSizing: 'border-box' }} disabled={!participantSchool || saving || loading} onClick={displayParticipants}>{loading ? '読み込み中...' : '表示'}</button>
+    </div>{!loading && displayedParticipantCondition && (filteredParticipants.length > 0 ? <div className="camp-participant-list">{filteredParticipants.map(student => <label key={student.studentId}><input type="checkbox" disabled={saving} checked={selectedIds.has(student.studentId)} onChange={() => setSelectedIds(current => { const next = new Set(current); if (next.has(student.studentId)) next.delete(student.studentId); else next.add(student.studentId); return next; })} /><span>{student.studentId}</span><span>{student.name}</span><span>{student.nameKana}</span><span>{student.school}</span><span>{student.grade}</span></label>)}</div> : <div className="camp-training-state">該当する生徒がいません。</div>)}<button style={styles.doneBtn} disabled={saving || loading || loadFailed || !displayedParticipantCondition} onClick={saveParticipants}>{saving ? '保存中...' : '参加者を保存'}</button></>}
     {view === 'input' && role === 'admin' && <><div className="camp-training-switches">{CAMP_DAYS.map(value => <button key={value} disabled={saving} className={inputDay === value ? 'active' : ''} onClick={() => setInputDay(value)}>{value}日目</button>)}</div>{!loading && rows.length > 0 && renderTable(true)}<button style={styles.doneBtn} disabled={saving || loading || rows.length === 0} onClick={saveInput}>{saving ? '保存中...' : '入力データを保存'}</button></>}
     {loading && <div className="camp-training-state">読み込み中...</div>}
-    {!loading && ((view === 'participants' && participants.length === 0) || (view !== 'participants' && rows.length === 0)) && !message.text && <div className="camp-training-state">対象データがありません。</div>}
+    {!loading && view !== 'participants' && rows.length === 0 && !message.text && <div className="camp-training-state">対象データがありません。</div>}
   </section>;
 }

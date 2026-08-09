@@ -219,6 +219,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
                 API_KEY={API_KEY}
                 sessionToken={sessionToken}
                 role={role}
+                assignedSchools={availableAssignedSchools}
                 styles={styles}
                 onSessionExpired={handleLogout}
               />

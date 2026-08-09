@@ -16,3 +16,14 @@ export function compareStudentAccounts(left, right) {
   if (gradeDifference) return gradeDifference;
   return String(left.name || '').localeCompare(String(right.name || ''), 'ja');
 }
+
+export function filterCampParticipants(students, { school, grades = [], assignedSchools = [], nameQuery = '' }) {
+  const selectedGrade = grades[0] || '';
+  const query = nameQuery.trim().toLocaleLowerCase('ja');
+  const allowedSchools = school === '全担当校舎' ? new Set(assignedSchools) : null;
+  return students
+    .filter(student => allowedSchools ? allowedSchools.has(student.school) : student.school === school)
+    .filter(student => !selectedGrade || student.grade === selectedGrade)
+    .filter(student => !query || String(student.name || '').toLocaleLowerCase('ja').includes(query))
+    .sort(compareStudentAccounts);
+}

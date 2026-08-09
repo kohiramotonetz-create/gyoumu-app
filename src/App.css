@@ -232,10 +232,11 @@ html, body, #root {
 .camp-training-table td { padding: 8px; text-align: center; white-space: nowrap; border-bottom: 1px solid #e2e8f0; }
 .camp-training-count { width: 72px; box-sizing: border-box; padding: 7px; text-align: right; border: 1px solid #cbd5e1; border-radius: 5px; }
 .camp-participant-list { max-height: 60vh; overflow: auto; background: #fff; border: 1px solid #dbe2e8; border-radius: 8px; }
-.camp-participant-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.camp-participant-filters { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)) auto; gap: 12px; align-items: end; margin-bottom: 12px; }
 .camp-participant-filters label { display: grid; gap: 5px; font-weight: 700; color: #475569; }
 .camp-participant-filters select, .camp-participant-filters input { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; background: #fff; }
 .camp-participant-filters option { color: #334155; background: #fff; }
+.camp-participant-display-button { align-self: end; justify-self: start; white-space: nowrap; }
 .camp-participant-list label { display: grid; grid-template-columns: 36px 90px minmax(120px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) 80px; align-items: center; min-width: 640px; padding: 10px; border-bottom: 1px solid #e2e8f0; cursor: pointer; }
 .camp-participant-list input { width: 18px; height: 18px; }
 .camp-training-message, .camp-training-state { padding: 12px; border-radius: 6px; background: #fff; color: #475569; }
@@ -246,4 +247,5 @@ html, body, #root {
   .camp-training-controls { align-items: stretch; }
   .camp-training-controls label { flex: 1 1 140px; }
   .camp-training-tabs button, .camp-training-switches button { flex: 1 1 auto; }
+  .camp-participant-filters { grid-template-columns: 1fr; }
 }

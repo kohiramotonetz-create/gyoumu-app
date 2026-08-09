@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assignCompetitionRanks, calculateCampTotal, formatRankChange, normalizeCampCount } from '../src/utils/campTraining.js';
-import { compareStudentAccounts } from '../src/utils/studentAccountOrdering.js';
+import { compareStudentAccounts, filterCampParticipants } from '../src/utils/studentAccountOrdering.js';
 
 test('空欄は0として扱い、0以上の整数だけを許可する', () => {
   assert.equal(normalizeCampCount(''), 0);
@@ -12,6 +12,19 @@ test('空欄は0として扱い、0以上の整数だけを許可する', () => 
   assert.throws(() => normalizeCampCount('abc'));
   assert.throws(() => normalizeCampCount(Number.NaN));
   assert.throws(() => normalizeCampCount(Number.POSITIVE_INFINITY));
+});
+
+test('参加者を単一校舎・全担当校舎・任意学年・氏名で絞り込む', () => {
+  const students = [
+    { studentId: '1', school: '栗林', grade: '中３', name: '田中一郎', nameKana: 'タナカイチロウ' },
+    { studentId: '2', school: '栗林', grade: '中２', name: '山田花子', nameKana: 'ヤマダハナコ' },
+    { studentId: '3', school: '番町', grade: '中３', name: '佐藤次郎', nameKana: 'サトウジロウ' },
+    { studentId: '4', school: '高松', grade: '中３', name: '田中三郎', nameKana: 'タナカサブロウ' },
+  ];
+  assert.deepEqual(filterCampParticipants(students, { school: '栗林' }).map(row => row.studentId), ['1', '2']);
+  assert.deepEqual(filterCampParticipants(students, { school: '栗林', grades: ['中３'] }).map(row => row.studentId), ['1']);
+  assert.deepEqual(filterCampParticipants(students, { school: '全担当校舎', assignedSchools: ['栗林', '番町'] }).map(row => row.studentId), ['1', '2', '3']);
+  assert.deepEqual(filterCampParticipants(students, { school: '全担当校舎', assignedSchools: ['栗林', '番町'], nameQuery: '田中' }).map(row => row.studentId), ['1']);
 });
 
 test('5教科の問題数を合計する', () => {
