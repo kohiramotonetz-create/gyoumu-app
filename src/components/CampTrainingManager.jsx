@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+import SchoolSelect from './common/SchoolSelect.jsx';
+import GradeSelect from './common/GradeSelect.jsx';
 import { CAMP_DAYS, CAMP_SEASONS, CAMP_SUBJECTS, calculateCampTotal, normalizeCampCount } from '../utils/campTraining.js';
+import { compareStudentAccounts } from '../utils/studentAccountOrdering.js';
 
 const SUBJECT_LABELS = { japanese: '国語', math: '数学', english: '英語', social: '社会', science: '理科' };
 const TABLE_HEADERS = ['順位', '生徒コード', '生徒名', 'フリガナ', '教室', '前日比', '合計', '国語', '数学', '英語', '社会', '理科'];
@@ -17,12 +20,25 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
   const [rows, setRows] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [participantSchool, setParticipantSchool] = useState('');
+  const [participantGrades, setParticipantGrades] = useState([]);
+  const [participantNameQuery, setParticipantNameQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [loadFailed, setLoadFailed] = useState(false);
   const requestSequence = useRef(0);
   const activeRequest = useRef(null);
+
+  const filteredParticipants = useMemo(() => {
+    const selectedGrade = participantGrades[0] || '';
+    const query = participantNameQuery.trim().toLocaleLowerCase('ja');
+    return participants
+      .filter(student => !participantSchool || student.school === participantSchool)
+      .filter(student => !selectedGrade || student.grade === selectedGrade)
+      .filter(student => !query || String(student.name || '').toLocaleLowerCase('ja').includes(query))
+      .sort(compareStudentAccounts);
+  }, [participantGrades, participantNameQuery, participantSchool, participants]);
 
   const postAction = useCallback(async (action, payload = {}, signal) => {
     const response = await axios.post(GAS_URL, JSON.stringify({ action, apiKey: API_KEY, sessionToken, ...payload }), {
@@ -125,7 +141,11 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
     <div className="camp-training-tabs"><button disabled={saving} className={view === 'ranking' ? 'active' : ''} onClick={() => setView('ranking')}>ランキング</button>{role === 'admin' && <button disabled={saving} className={view === 'participants' ? 'active' : ''} onClick={() => setView('participants')}>参加者設定</button>}{role === 'admin' && <button disabled={saving} className={view === 'input' ? 'active' : ''} onClick={() => setView('input')}>データ入力</button>}</div>
     {message.text && <div role={message.type === 'error' ? 'alert' : 'status'} className={`camp-training-message ${message.type}`}>{message.text}</div>}
     {view === 'ranking' && <><div className="camp-training-switches">{[...CAMP_DAYS.map(String), 'total'].map(value => <button key={value} disabled={saving} className={rankingMode === value ? 'active' : ''} onClick={() => setRankingMode(value)}>{value === 'total' ? '総合集計' : `${value}日目`}</button>)}</div>{!loading && rows.length > 0 && renderTable(false)}</>}
-    {view === 'participants' && role === 'admin' && <>{!loading && participants.length > 0 && <div className="camp-participant-list">{participants.map(student => <label key={student.studentId}><input type="checkbox" disabled={saving} checked={selectedIds.has(student.studentId)} onChange={() => setSelectedIds(current => { const next = new Set(current); if (next.has(student.studentId)) next.delete(student.studentId); else next.add(student.studentId); return next; })} /><span>{student.studentId}</span><span>{student.name}</span><span>{student.nameKana}</span><span>{student.school}</span></label>)}</div>}<button style={styles.doneBtn} disabled={saving || loading || loadFailed} onClick={saveParticipants}>{saving ? '保存中...' : '参加者を保存'}</button></>}
+    {view === 'participants' && role === 'admin' && <>{!loading && participants.length > 0 && <><div className="camp-participant-filters">
+      <label>校舎<SchoolSelect value={participantSchool} onChange={event => setParticipantSchool(event.target.value)} disabled={saving} showAssignedOptions={false} /></label>
+      <label>学年<GradeSelect value={participantGrades} onChange={setParticipantGrades} disabled={saving} includeGroups={false} /></label>
+      <label>氏名<input value={participantNameQuery} onChange={event => setParticipantNameQuery(event.target.value)} disabled={saving} placeholder="氏名で検索" /></label>
+    </div>{filteredParticipants.length > 0 ? <div className="camp-participant-list">{filteredParticipants.map(student => <label key={student.studentId}><input type="checkbox" disabled={saving} checked={selectedIds.has(student.studentId)} onChange={() => setSelectedIds(current => { const next = new Set(current); if (next.has(student.studentId)) next.delete(student.studentId); else next.add(student.studentId); return next; })} /><span>{student.studentId}</span><span>{student.name}</span><span>{student.nameKana}</span><span>{student.school}</span><span>{student.grade}</span></label>)}</div> : <div className="camp-training-state">該当する生徒がいません。</div>}</>}<button style={styles.doneBtn} disabled={saving || loading || loadFailed} onClick={saveParticipants}>{saving ? '保存中...' : '参加者を保存'}</button></>}
     {view === 'input' && role === 'admin' && <><div className="camp-training-switches">{CAMP_DAYS.map(value => <button key={value} disabled={saving} className={inputDay === value ? 'active' : ''} onClick={() => setInputDay(value)}>{value}日目</button>)}</div>{!loading && rows.length > 0 && renderTable(true)}<button style={styles.doneBtn} disabled={saving || loading || rows.length === 0} onClick={saveInput}>{saving ? '保存中...' : '入力データを保存'}</button></>}
     {loading && <div className="camp-training-state">読み込み中...</div>}
     {!loading && ((view === 'participants' && participants.length === 0) || (view !== 'participants' && rows.length === 0)) && !message.text && <div className="camp-training-state">対象データがありません。</div>}

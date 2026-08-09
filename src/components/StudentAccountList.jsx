@@ -3,12 +3,9 @@ import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
 import StudentAccountDetail from './StudentAccountDetail.jsx';
-import { ALL_SCHOOLS } from '../constants/organization.js';
+import { compareStudentAccounts } from '../utils/studentAccountOrdering.js';
 
 const REQUEST_TIMEOUT_MS = 15000;
-const GRADE_ORDER = ['小１', '小２', '小３', '小４', '小５', '小６', '中１', '中２', '中３', '高１', '高２', '高３', '大学受験'];
-const SCHOOL_ORDER = new Map(ALL_SCHOOLS.map((school, index) => [school, index]));
-
 const hasDeletedAt = account => account.deletedAt != null && String(account.deletedAt).trim() !== '';
 const getAccountStatus = account => {
   if (hasDeletedAt(account)) return 'deleted';
@@ -70,19 +67,7 @@ export default function StudentAccountList({ GAS_URL, API_KEY, sessionToken, sty
       .filter(account => !selectedGrade || account.grade === selectedGrade)
       .filter(account => !query || String(account.name || '').toLocaleLowerCase('ja').includes(query))
       .filter(account => status === 'all' || getAccountStatus(account) === status)
-      .sort((left, right) => {
-        const schoolDifference = (SCHOOL_ORDER.get(left.school) ?? Number.MAX_SAFE_INTEGER) - (SCHOOL_ORDER.get(right.school) ?? Number.MAX_SAFE_INTEGER);
-        if (schoolDifference) return schoolDifference;
-        const leftKana = String(left.nameKana || '').trim();
-        const rightKana = String(right.nameKana || '').trim();
-        if (!leftKana && rightKana) return 1;
-        if (leftKana && !rightKana) return -1;
-        const kanaDifference = leftKana.localeCompare(rightKana, 'ja');
-        if (kanaDifference) return kanaDifference;
-        const gradeDifference = GRADE_ORDER.indexOf(left.grade) - GRADE_ORDER.indexOf(right.grade);
-        if (gradeDifference) return gradeDifference;
-        return String(left.name || '').localeCompare(String(right.name || ''), 'ja');
-      });
+      .sort(compareStudentAccounts);
   }, [accounts, grades, nameQuery, school, showDeleted, status]);
 
   const fieldStyle = { ...styles.select, width: '100%', boxSizing: 'border-box' };
