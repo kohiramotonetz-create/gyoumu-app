@@ -47,6 +47,18 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 
 ## Issue History
 
+### Issue S-006B Gemini採点基盤（429/503自動復旧）
+
+- 日付: 2026-08-09
+- 背景: 教室で5人同時利用時に2件の`GEMINI_UNAVAILABLE`（Gemini API HTTP 503）を確認した。一方、別環境では3ブラウザ同時採点および10ブラウザ同時採点が全件成功しており、一時的な429/503から安全に自動復旧する必要があった。
+- 変更内容: `checkAnswersWithGemini`のHTTP 429・503だけを対象に、初回を含む最大3 attemptsのtruncated exponential backoffとjitterを追加。数値として安全に解釈できる`Retry-After`を優先し、各待機を最大5秒、Retry開始を処理開始後20秒以内に制限した。
+- 診断: 同じ`requestId`で各attemptの`attempt`、`category`、`httpStatus`、`durationMs`、`retryAfter`、`retryScheduled`、`waitMs`、`totalDurationMs`、`timestamp`を記録。既存`durationMs`は各Gemini attemptの所要時間として維持し、一括処理全体は`totalDurationMs`として追加した。
+- 互換性: Retry後に成功した場合は既存の成功形式と採点結果を返す。全Retry失敗時のみ既存の原因別codeを返す。400系・その他HTTPエラー・JSON解析失敗・応答検証失敗・通信例外はRetryしない。`checkWithGemini`、student-app、timeout、Geminiモデル、APIキー配置、CSV、採点仕様は変更なし。
+- APIキー配置: `GEMINI_API_KEY`は既存どおりGASのScript Propertiesから取得する。今回の変更なし。
+- 確認結果: `node --check gas/コード.js`、`git diff --check`、外部通信なしのモックケースA～M（初回成功、503/429からの復旧・全失敗、非対象エラー、requestId、成功ログ、jitter、最大attempt、Retry-After、duration）に成功。
+- Git branch: `feature/g-009-gemini-retry`
+- Commit / Git push / clasp push / GASデプロイ / Vercel操作 / 本番データ変更: 未実施。
+
 ### Issue S-006A Gemini採点基盤（GAS診断）
 
 - 日付: 2026-08-09

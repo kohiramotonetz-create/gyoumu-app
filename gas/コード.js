@@ -1728,6 +1728,7 @@ function doPost(e) {
       const errorResponse = { result: "error", code, requestId, message: getGeminiBatchErrorMessage_(code) };
       if (error && error.retryAfter !== null && error.retryAfter !== undefined) errorResponse.retryAfter = error.retryAfter;
       if (error && Number.isFinite(error.durationMs)) errorResponse.durationMs = error.durationMs;
+      if (error && Number.isFinite(error.totalDurationMs)) errorResponse.totalDurationMs = error.totalDurationMs;
       return responseJSON(errorResponse);
     }
   }
@@ -2777,6 +2778,8 @@ function checkWithGemini(word, correct, userAns, apiKey) {
 function checkAnswersWithGemini(answers, apiKey, requestId) {
   requestId = getGeminiRequestId_(requestId);
   const diagnostic = createGeminiDiagnostic_(requestId, answers);
+  const totalStartedAt = Date.now();
+  diagnostic.totalStartedAt = totalStartedAt;
   if (!apiKey || !Array.isArray(answers) || answers.length === 0 || answers.length > 20) {
     failGeminiDiagnostic_(diagnostic, "INTERNAL_ERROR", "Invalid batch request");
   }
@@ -2831,19 +2834,42 @@ function checkAnswersWithGemini(answers, apiKey, requestId) {
     }
   };
   let response;
-  const startedAt = Date.now();
-  try {
-    response = fetchGeminiDiagnostic_(url, payload);
-    diagnostic.durationMs = Date.now() - startedAt;
-  } catch (error) {
-    diagnostic.durationMs = Date.now() - startedAt;
-    failGeminiDiagnostic_(diagnostic, isGeminiTimeoutError_(error) ? "GEMINI_TIMEOUT_OR_DELAY" : "GEMINI_UNAVAILABLE", "Gemini request failed");
-  }
-  diagnostic.httpStatus = response.getResponseCode();
-  const geminiResponseBody = response.getContentText();
-  diagnostic.retryAfter = getGeminiRetryAfter_(response);
-  if (diagnostic.httpStatus < 200 || diagnostic.httpStatus >= 300) {
-    failGeminiDiagnostic_(diagnostic, classifyGeminiHttpStatus_(diagnostic.httpStatus), `Gemini HTTP ${diagnostic.httpStatus}`);
+  let geminiResponseBody;
+  for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS_; attempt++) {
+    diagnostic.attempt = attempt;
+    diagnostic.httpStatus = null;
+    diagnostic.retryAfter = null;
+    diagnostic.retryScheduled = false;
+    diagnostic.waitMs = 0;
+    const attemptStartedAt = Date.now();
+    try {
+      response = fetchGeminiDiagnostic_(url, payload);
+      diagnostic.durationMs = Date.now() - attemptStartedAt;
+    } catch (error) {
+      diagnostic.durationMs = Date.now() - attemptStartedAt;
+      failGeminiDiagnostic_(diagnostic, isGeminiTimeoutError_(error) ? "GEMINI_TIMEOUT_OR_DELAY" : "GEMINI_UNAVAILABLE", "Gemini request failed");
+    }
+    diagnostic.httpStatus = response.getResponseCode();
+    geminiResponseBody = response.getContentText();
+    diagnostic.retryAfter = getGeminiRetryAfter_(response);
+    if (diagnostic.httpStatus >= 200 && diagnostic.httpStatus < 300) break;
+
+    const category = classifyGeminiHttpStatus_(diagnostic.httpStatus);
+    if (isGeminiRetryableStatus_(diagnostic.httpStatus) && attempt < GEMINI_MAX_ATTEMPTS_) {
+      const waitMs = getGeminiRetryWaitMs_(diagnostic.retryAfter, attempt);
+      const elapsedMs = Date.now() - totalStartedAt;
+      if (elapsedMs + waitMs > GEMINI_RETRY_START_DEADLINE_MS_) {
+        failGeminiDiagnostic_(diagnostic, category, `Gemini HTTP ${diagnostic.httpStatus}`);
+      }
+      diagnostic.category = category;
+      diagnostic.retryScheduled = true;
+      diagnostic.waitMs = waitMs;
+      diagnostic.totalDurationMs = Date.now() - totalStartedAt;
+      logGeminiDiagnostic_(diagnostic);
+      Utilities.sleep(diagnostic.waitMs);
+      continue;
+    }
+    failGeminiDiagnostic_(diagnostic, category, `Gemini HTTP ${diagnostic.httpStatus}`);
   }
   let responseBody;
   try {
@@ -2881,8 +2907,9 @@ function checkAnswersWithGemini(answers, apiKey, requestId) {
   });
   diagnostic.category = "SUCCESS";
   diagnostic.validationSuccess = true;
+  diagnostic.totalDurationMs = Date.now() - totalStartedAt;
   logGeminiDiagnostic_(diagnostic);
-  return { result: "success", results, requestId, durationMs: diagnostic.durationMs };
+  return { result: "success", results, requestId, durationMs: diagnostic.durationMs, totalDurationMs: diagnostic.totalDurationMs };
 }
 
 function parseGeminiBatchJson_(text) {
@@ -2909,6 +2936,24 @@ function fetchGeminiDiagnostic_(url, payload) {
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
   });
+}
+
+const GEMINI_MAX_ATTEMPTS_ = 3;
+const GEMINI_MAX_RETRY_WAIT_MS_ = 5000;
+const GEMINI_RETRY_JITTER_MAX_MS_ = 500;
+const GEMINI_RETRY_START_DEADLINE_MS_ = 20000;
+
+function isGeminiRetryableStatus_(status) {
+  return status === 429 || status === 503;
+}
+
+function getGeminiRetryWaitMs_(retryAfter, attempt) {
+  const retryAfterSeconds = Number(retryAfter);
+  const hasSafeRetryAfter = retryAfter !== null && retryAfter !== undefined && String(retryAfter).trim() !== ""
+    && Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0;
+  const baseWaitMs = hasSafeRetryAfter ? retryAfterSeconds * 1000 : Math.pow(2, attempt - 1) * 1000;
+  const jitterMs = Math.floor(Math.random() * (GEMINI_RETRY_JITTER_MAX_MS_ + 1));
+  return Math.min(Math.max(Math.floor(baseWaitMs), 0) + jitterMs, GEMINI_MAX_RETRY_WAIT_MS_);
 }
 
 function getGeminiRetryAfter_(response) {
@@ -2943,8 +2988,12 @@ function createGeminiDiagnostic_(requestId, answers) {
     category: "INTERNAL_ERROR",
     httpStatus: null,
     durationMs: 0,
+    totalDurationMs: 0,
     batchSize: Array.isArray(answers) ? answers.length : 0,
     retryAfter: null,
+    attempt: 1,
+    retryScheduled: false,
+    waitMs: 0,
     parseSuccess: false,
     validationSuccess: false
   };
@@ -2957,8 +3006,12 @@ function logGeminiDiagnostic_(diagnostic) {
     category: diagnostic.category || "INTERNAL_ERROR",
     httpStatus: Number.isInteger(diagnostic.httpStatus) ? diagnostic.httpStatus : null,
     durationMs: Number.isFinite(diagnostic.durationMs) ? diagnostic.durationMs : 0,
+    totalDurationMs: Number.isFinite(diagnostic.totalDurationMs) ? diagnostic.totalDurationMs : 0,
     batchSize: Number.isInteger(diagnostic.batchSize) ? diagnostic.batchSize : 0,
     retryAfter: diagnostic.retryAfter === null || diagnostic.retryAfter === undefined ? null : String(diagnostic.retryAfter).slice(0, 100),
+    attempt: Number.isInteger(diagnostic.attempt) ? diagnostic.attempt : 1,
+    retryScheduled: diagnostic.retryScheduled === true,
+    waitMs: Number.isFinite(diagnostic.waitMs) ? diagnostic.waitMs : 0,
     parseSuccess: diagnostic.parseSuccess === true,
     validationSuccess: diagnostic.validationSuccess === true,
     timestamp: new Date().toISOString()
@@ -2967,6 +3020,7 @@ function logGeminiDiagnostic_(diagnostic) {
 
 function failGeminiDiagnostic_(diagnostic, code, message) {
   diagnostic.category = code;
+  if (Number.isFinite(diagnostic.totalStartedAt)) diagnostic.totalDurationMs = Date.now() - diagnostic.totalStartedAt;
   logGeminiDiagnostic_(diagnostic);
   const error = createGeminiBatchError_(code, message, diagnostic);
   error.geminiDiagnosticLogged = true;
@@ -2978,6 +3032,7 @@ function createGeminiBatchError_(code, message, diagnostic) {
   error.code = code;
   if (diagnostic) {
     error.durationMs = diagnostic.durationMs;
+    error.totalDurationMs = diagnostic.totalDurationMs;
     error.retryAfter = diagnostic.retryAfter;
   }
   return error;
