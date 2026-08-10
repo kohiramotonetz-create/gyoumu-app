@@ -52,13 +52,13 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 
 - 日付: 2026-08-10
 - 状態: React・GAS実装、ローカル静的検証、必要シートのセットアップ、GAS Webアプリ反映を実施。本番アカウントでの結合確認は未完了。
-- 変更内容: admin・head-teacher向け合宿メニュー、年度・夏冬別のランキング、admin限定の参加者設定と1～4日目の5教科問題数入力を追加。標準競技順位と前日比を実装。年度・季節選択欄は閉じた値、選択肢、フォーカス時、無効時にも判別できる配色へ修正。参加者設定は既存の`SchoolSelect`・`GradeSelect`を使用し、校舎必須・学年任意の条件を指定して「表示」を押した時だけ取得する方式へ変更。全担当校舎はログイン中adminの`assignedSchools`を正本とし、氏名検索は取得後のクライアント絞り込みとした。アカウント管理と同じ校舎順・フリガナ順・学年順を共通ロジックで使用し、条件変更で一覧をクリアしても選択済み参加者ID全体を保持する。
+- 変更内容: admin・head-teacher向け合宿メニュー、年度・夏冬別のランキング、admin限定の参加者設定と1～4日目の5教科問題数入力を追加。標準競技順位と前日比を実装。年度選択は合宿参加者・合宿特訓入力の履歴に存在する年度と、4月始まりで算出した現在年度を重複排除して降順表示する。年度・季節選択欄は閉じた値、選択肢、フォーカス時、無効時にも判別できる配色へ修正。参加者設定は既存の`SchoolSelect`・`GradeSelect`を使用し、校舎必須・学年任意の条件を指定して「表示」を押した時だけ取得する方式へ変更。全担当校舎はログイン中adminの`assignedSchools`を正本とし、氏名検索は取得後のクライアント絞り込みとした。アカウント管理と同じ校舎順・フリガナ順・学年順を共通ロジックで使用し、条件変更で一覧をクリアしても選択済み参加者ID全体を保持する。
 - 参加者設定改善: 表示ボタン方式、校舎必須・学年任意、全担当校舎対応へ変更。フィルタ欄を「校舎・学年・氏名・表示」の順に統一し、表示ボタンの高さと横幅を入力欄に合わせてレスポンシブ対応した。
 - 権限: head-teacherへroleを維持した管理セッションを発行。ランキングはadmin・head-teacher、参加者と入力の取得・更新はadminだけをGAS側で許可。
 - データ／シート影響: `合宿参加者`と`合宿特訓入力`の手動セットアップ関数を追加。生徒コードだけを保存し、氏名・フリガナ・教室は生徒マスターを参照。2026-08-10にセットアップ関数を実行し、再実行時に作成・ヘッダー初期化・警告が0件であることを確認。
-- API: `getCampParticipants`、`updateCampParticipants`、`getCampTrainingInput`、`saveCampTrainingInput`、`getCampTrainingRanking`を非破壊的に追加。既存actionと既存レスポンスは変更なし。
+- API: `getCampAvailableYears`、`getCampParticipants`、`updateCampParticipants`、`getCampTrainingInput`、`saveCampTrainingInput`、`getCampTrainingRanking`を非破壊的に追加。既存actionと既存レスポンスは変更なし。
 - 対象外: スキマ君問題数集計、student-app、LOG GAS、無効回答判定。
-- テスト: 参加者一覧の既存ソート順と、単一校舎・全担当校舎・任意学年・氏名の絞り込みテストを追加し、`npm test`（21件）、`npm run build`成功。GAS構文、変更対象JS/JSXの個別lint、`git diff --check`成功。年度・季節選択欄はadmin・head-teacherのPC幅／390px幅でローカル画面確認済み。今回変更した表示ボタン方式の実アカウント画面確認は未実施。
+- テスト: 参加者一覧の既存ソート順、単一校舎・全担当校舎・任意学年・氏名の絞り込み、履歴年度と現在年度の重複排除・降順化、4月始まりの年度算出、不正年度の拒否を含む`npm test`（23件）、`npm run build`、GAS構文、変更対象lint、`git diff --check`が成功。年度・季節選択欄はadmin・head-teacher相当の構造で、通常・選択肢・フォーカス・無効状態をPC幅／390px幅でローカル再確認済み。今回変更した年度候補の実GAS・実データ画面確認と、実アカウントでの画面確認は未実施。
 - Git branch: `codex/issue-010-camp-training`
 - Commit / Push: `663f9a1 feat: add camp training management and ranking`を作業ブランチへcommit・push済み。今回の参加者フィルタ改善は未commit・未push。
 - GAS: clasp push済み。既存WebアプリURLをVersion 158（`Issue #010 camp training management and ranking`）へ更新済み。今回の表示ボタン方式と参加者フィルタ改善はGAS API・保存形式の変更なし。

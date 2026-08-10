@@ -1880,7 +1880,25 @@ function withCampReadLock_(callback) {
   finally { lock.releaseLock(); }
 }
 
+function getCampCurrentFiscalYear_(date) {
+  const target = date || new Date();
+  return target.getMonth() < 3 ? target.getFullYear() - 1 : target.getFullYear();
+}
+
+function getCampAvailableYears_(currentDate) {
+  const years = new Set([getCampCurrentFiscalYear_(currentDate)]);
+  [[CAMP_PARTICIPANT_SHEET_NAME, CAMP_PARTICIPANT_HEADERS], [CAMP_TRAINING_SHEET_NAME, CAMP_TRAINING_HEADERS]].forEach(([sheetName, headers]) => {
+    const rows = getCampSheet_(sheetName, headers).getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) years.add(validateCampYear_(rows[i][0]));
+  });
+  return Array.from(years).sort((left, right) => right - left);
+}
+
 function handleCampAction_(data) {
+  if (data.action === "getCampAvailableYears") {
+    requireCampViewerSession(data.sessionToken);
+    return withCampReadLock_(() => ({ result: "success", years: getCampAvailableYears_() }));
+  }
   const year = validateCampYear_(data.year);
   const season = validateCampSeason_(data.season);
   if (data.action === "getCampTrainingRanking") {
@@ -1992,7 +2010,7 @@ function doPost(e) {
     }
   }
 
-  const campActions = ["getCampParticipants", "updateCampParticipants", "getCampTrainingInput", "saveCampTrainingInput", "getCampTrainingRanking"];
+  const campActions = ["getCampAvailableYears", "getCampParticipants", "updateCampParticipants", "getCampTrainingInput", "saveCampTrainingInput", "getCampTrainingRanking"];
   if (campActions.includes(data.action)) {
     try {
       return responseJSON(handleCampAction_(data));

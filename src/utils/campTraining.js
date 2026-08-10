@@ -2,6 +2,10 @@ export const CAMP_SEASONS = Object.freeze(['夏', '冬']);
 export const CAMP_DAYS = Object.freeze([1, 2, 3, 4]);
 export const CAMP_SUBJECTS = Object.freeze(['japanese', 'math', 'english', 'social', 'science']);
 
+export function getCurrentFiscalYear(date = new Date()) {
+  return date.getMonth() < 3 ? date.getFullYear() - 1 : date.getFullYear();
+}
+
 export function normalizeCampCount(value) {
   if (value === '' || value === null || value === undefined) return 0;
   const number = Number(value);

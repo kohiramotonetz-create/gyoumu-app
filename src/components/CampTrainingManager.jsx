@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
-import { CAMP_DAYS, CAMP_SEASONS, CAMP_SUBJECTS, calculateCampTotal, normalizeCampCount } from '../utils/campTraining.js';
+import { CAMP_DAYS, CAMP_SEASONS, CAMP_SUBJECTS, calculateCampTotal, getCurrentFiscalYear, normalizeCampCount } from '../utils/campTraining.js';
 import { filterCampParticipants } from '../utils/studentAccountOrdering.js';
 
 const SUBJECT_LABELS = { japanese: '国語', math: '数学', english: '英語', social: '社会', science: '理科' };
@@ -10,9 +10,10 @@ const TABLE_HEADERS = ['順位', '生徒コード', '生徒名', 'フリガナ',
 const REQUEST_TIMEOUT_MS = 30000;
 
 export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, role, assignedSchools = [], styles, onSessionExpired }) {
-  const currentYear = new Date().getFullYear();
-  const years = useMemo(() => Array.from({ length: 101 }, (_, index) => 2100 - index), []);
-  const [year, setYear] = useState(currentYear);
+  const currentFiscalYear = getCurrentFiscalYear();
+  const [years, setYears] = useState([currentFiscalYear]);
+  const [year, setYear] = useState(currentFiscalYear);
+  const [yearsReady, setYearsReady] = useState(false);
   const [season, setSeason] = useState('夏');
   const [view, setView] = useState('ranking');
   const [rankingMode, setRankingMode] = useState('1');
@@ -49,7 +50,35 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
     return response.data;
   }, [API_KEY, GAS_URL, onSessionExpired, sessionToken]);
 
+  useEffect(() => {
+    const sequence = ++requestSequence.current;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    setLoading(true);
+    setLoadFailed(false);
+    setMessage({ type: '', text: '' });
+    postAction('getCampAvailableYears', {}, controller.signal).then(data => {
+      if (sequence !== requestSequence.current) return;
+      const availableYears = Array.isArray(data.years) && data.years.length > 0 ? data.years : [currentFiscalYear];
+      setYears(availableYears);
+      setYear(availableYears[0]);
+      setYearsReady(true);
+    }).catch(error => {
+      if (axios.isCancel(error) || sequence !== requestSequence.current) return;
+      setLoadFailed(true);
+      setMessage({ type: 'error', text: error.message });
+    }).finally(() => {
+      if (sequence === requestSequence.current) {
+        setLoading(false);
+        activeRequest.current = null;
+      }
+    });
+    return () => controller.abort();
+  }, [currentFiscalYear, postAction]);
+
   const loadCurrentView = useCallback(async () => {
+    if (!yearsReady) return;
     const sequence = ++requestSequence.current;
     activeRequest.current?.abort();
     const controller = new AbortController();
@@ -79,7 +108,7 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
         activeRequest.current = null;
       }
     }
-  }, [inputDay, postAction, rankingMode, season, view, year]);
+  }, [inputDay, postAction, rankingMode, season, view, year, yearsReady]);
 
   const resetParticipantDisplay = () => {
     activeRequest.current?.abort();

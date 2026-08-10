@@ -85,6 +85,23 @@ test('年度・季節・日で入力データを分離し、重複キーを拒�
   assert.throws(() => vm.runInContext('getCampTrainingRecords_(2026, "夏")', context));
 });
 
+test('合宿履歴と現在年度だけを重複排除して降順で返す', () => {
+  const participantHeaders = ['year', 'season', 'studentId', 'updatedAt', 'updatedBy'];
+  const trainingHeaders = ['year', 'season', 'day', 'studentId', 'japanese', 'math', 'english', 'social', 'science', 'updatedAt', 'updatedBy'];
+  const sheets = {
+    '合宿参加者': makeSheet([participantHeaders, [2025, '夏', "'001234"], [2027, '冬', "'001235"]]),
+    '合宿特訓入力': makeSheet([trainingHeaders, [2026, '夏', 1, "'001234", 1, 2, 3, 4, 5], [2025, '夏', 1, "'001234", 1, 2, 3, 4, 5]])
+  };
+  context.getCampSheet_ = name => sheets[name];
+  assert.deepEqual(Array.from(vm.runInContext('getCampAvailableYears_(new Date(2026, 2, 31))', context)), [2027, 2026, 2025]);
+  sheets['合宿参加者'] = makeSheet([participantHeaders]);
+  sheets['合宿特訓入力'] = makeSheet([trainingHeaders]);
+  assert.deepEqual(Array.from(vm.runInContext('getCampAvailableYears_(new Date(2026, 2, 31))', context)), [2025]);
+  assert.deepEqual(Array.from(vm.runInContext('getCampAvailableYears_(new Date(2026, 3, 1))', context)), [2026]);
+  sheets['合宿参加者'].state.rows.push(['不正年度', '夏', "'001234"]);
+  assert.throws(() => vm.runInContext('getCampAvailableYears_(new Date(2026, 3, 1))', context));
+});
+
 test('総合集計・参加解除・同順位を含む前日比を正しく処理する', () => {
   context.getCampParticipantIds_ = () => new Set(['000001', '000002', '000003']);
   context.getActiveCampStudents_ = () => [
