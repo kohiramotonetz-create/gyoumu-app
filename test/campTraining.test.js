@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assignCompetitionRanks, calculateCampTotal, formatRankChange, getCurrentFiscalYear, normalizeCampCount } from '../src/utils/campTraining.js';
+import { assignCompetitionRanks, calculateCampTotal, formatRankChange, getCurrentFiscalYear, normalizeCampCount, shouldAutoLoadCampView } from '../src/utils/campTraining.js';
 import { compareStudentAccounts, filterCampParticipants } from '../src/utils/studentAccountOrdering.js';
 
 test('空欄は0として扱い、0以上の整数だけを許可する', () => {
@@ -17,6 +17,13 @@ test('空欄は0として扱い、0以上の整数だけを許可する', () => 
 test('現在年度は4月始まりで算出する', () => {
   assert.equal(getCurrentFiscalYear(new Date(2026, 2, 31)), 2025);
   assert.equal(getCurrentFiscalYear(new Date(2026, 3, 1)), 2026);
+});
+
+test('合宿画面の自動取得は年度候補取得後のランキングだけに限定する', () => {
+  assert.equal(shouldAutoLoadCampView('ranking', true), true);
+  assert.equal(shouldAutoLoadCampView('input', true), false);
+  assert.equal(shouldAutoLoadCampView('participants', true), false);
+  assert.equal(shouldAutoLoadCampView('ranking', false), false);
 });
 
 test('参加者を単一校舎・全担当校舎・任意学年・氏名で絞り込む', () => {

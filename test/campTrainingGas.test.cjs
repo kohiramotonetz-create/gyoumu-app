@@ -136,6 +136,19 @@ test('前日に0問の保存行があればデータありとして前日比を�
   assert.deepEqual(Array.from(rows, row => [row.studentId, row.rankChange]), [['000001', '↑1'], ['000002', '↓1']]);
 });
 
+test('入力取得APIはadminの年度・季節・日を既存取得処理へ渡す', () => {
+  let received = null;
+  context.requireAdminSession = () => ({ userId: 'admin', role: 'admin' });
+  context.buildCampRanking_ = (year, season, mode) => {
+    received = { year, season, mode };
+    return [{ studentId: '001234' }];
+  };
+  context.LockService = { getDocumentLock: () => ({ tryLock: () => true, releaseLock: () => {} }) };
+  const result = vm.runInContext('handleCampAction_({action:"getCampTrainingInput",year:2027,season:"冬",day:3,sessionToken:"token"})', context);
+  assert.deepEqual(received, { year: 2027, season: '冬', mode: '3' });
+  assert.equal(result.rows[0].studentId, '001234');
+});
+
 test('セットアップは再実行で既存データを書き換えず、不正ヘッダーを拒否する', () => {
   const participantHeaders = ['year', 'season', 'studentId', 'updatedAt', 'updatedBy'];
   const trainingHeaders = ['year', 'season', 'day', 'studentId', 'japanese', 'math', 'english', 'social', 'science', 'updatedAt', 'updatedBy'];

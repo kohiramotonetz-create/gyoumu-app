@@ -6,6 +6,10 @@ export function getCurrentFiscalYear(date = new Date()) {
   return date.getMonth() < 3 ? date.getFullYear() - 1 : date.getFullYear();
 }
 
+export function shouldAutoLoadCampView(view, yearsReady) {
+  return yearsReady && view === 'ranking';
+}
+
 export function normalizeCampCount(value) {
   if (value === '' || value === null || value === undefined) return 0;
   const number = Number(value);

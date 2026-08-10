@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
-import { CAMP_DAYS, CAMP_SEASONS, CAMP_SUBJECTS, calculateCampTotal, getCurrentFiscalYear, normalizeCampCount } from '../utils/campTraining.js';
+import { CAMP_DAYS, CAMP_SEASONS, CAMP_SUBJECTS, calculateCampTotal, getCurrentFiscalYear, normalizeCampCount, shouldAutoLoadCampView } from '../utils/campTraining.js';
 import { filterCampParticipants } from '../utils/studentAccountOrdering.js';
 
 const SUBJECT_LABELS = { japanese: '国語', math: '数学', english: '英語', social: '社会', science: '理科' };
@@ -25,6 +25,7 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
   const [participantGrades, setParticipantGrades] = useState([]);
   const [participantNameQuery, setParticipantNameQuery] = useState('');
   const [displayedParticipantCondition, setDisplayedParticipantCondition] = useState(null);
+  const [displayedInputCondition, setDisplayedInputCondition] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -78,7 +79,7 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
   }, [currentFiscalYear, postAction]);
 
   const loadCurrentView = useCallback(async () => {
-    if (!yearsReady) return;
+    if (!shouldAutoLoadCampView(view, yearsReady)) return;
     const sequence = ++requestSequence.current;
     activeRequest.current?.abort();
     const controller = new AbortController();
@@ -87,16 +88,9 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
     setLoadFailed(false);
     setMessage({ type: '', text: '' });
     try {
-      if (view === 'participants') return;
-      if (view === 'input') {
-        const data = await postAction('getCampTrainingInput', { year, season, day: inputDay }, controller.signal);
-        if (sequence !== requestSequence.current) return;
-        setRows(data.rows || []);
-      } else {
-        const data = await postAction('getCampTrainingRanking', { year, season, mode: rankingMode }, controller.signal);
-        if (sequence !== requestSequence.current) return;
-        setRows(data.rows || []);
-      }
+      const data = await postAction('getCampTrainingRanking', { year, season, mode: rankingMode }, controller.signal);
+      if (sequence !== requestSequence.current) return;
+      setRows(data.rows || []);
     } catch (error) {
       if (axios.isCancel(error) || sequence !== requestSequence.current) return;
       setLoadFailed(true);
@@ -108,12 +102,20 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
         activeRequest.current = null;
       }
     }
-  }, [inputDay, postAction, rankingMode, season, view, year, yearsReady]);
+  }, [postAction, rankingMode, season, view, year, yearsReady]);
 
   const resetParticipantDisplay = () => {
     activeRequest.current?.abort();
     setParticipants([]);
     setDisplayedParticipantCondition(null);
+    setMessage({ type: '', text: '' });
+  };
+
+  const resetInputDisplay = () => {
+    activeRequest.current?.abort();
+    setRows([]);
+    setDisplayedInputCondition(null);
+    setLoadFailed(false);
     setMessage({ type: '', text: '' });
   };
 
@@ -132,6 +134,22 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
     participantSelectionContext.current = '';
     setSelectedIds(new Set());
     resetParticipantDisplay();
+    resetInputDisplay();
+  };
+
+  const changeView = nextView => {
+    if (nextView === view) return;
+    activeRequest.current?.abort();
+    setView(nextView);
+    setRows([]);
+    setDisplayedInputCondition(null);
+    setLoadFailed(false);
+    setMessage({ type: '', text: '' });
+  };
+
+  const changeInputDay = day => {
+    setInputDay(day);
+    resetInputDisplay();
   };
 
   const displayParticipants = async () => {
@@ -168,6 +186,37 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
     }
   };
 
+  const displayInput = async () => {
+    if (!yearsReady || saving || loading) return;
+    const sequence = ++requestSequence.current;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const condition = { year, season, day: inputDay };
+    setLoading(true);
+    setLoadFailed(false);
+    setMessage({ type: '', text: '' });
+    setRows([]);
+    setDisplayedInputCondition(null);
+    try {
+      const data = await postAction('getCampTrainingInput', condition, controller.signal);
+      if (sequence !== requestSequence.current) return;
+      setRows(data.rows || []);
+      setDisplayedInputCondition(condition);
+    } catch (error) {
+      if (axios.isCancel(error) || sequence !== requestSequence.current) return;
+      setLoadFailed(true);
+      setRows([]);
+      setDisplayedInputCondition(null);
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      if (sequence === requestSequence.current) {
+        setLoading(false);
+        activeRequest.current = null;
+      }
+    }
+  };
+
   useEffect(() => {
     loadCurrentView();
     return () => activeRequest.current?.abort();
@@ -193,7 +242,9 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
         return normalized;
       });
       await postAction('saveCampTrainingInput', { year, season, day: inputDay, entries });
-      await loadCurrentView();
+      const data = await postAction('getCampTrainingInput', { year, season, day: inputDay });
+      setRows(data.rows || []);
+      setDisplayedInputCondition({ year, season, day: inputDay });
       setMessage({ type: 'success', text: '合宿特訓データを保存しました。' });
     } catch (error) { setMessage({ type: 'error', text: error.message }); }
     finally { setSaving(false); }
@@ -210,10 +261,11 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
   return <section className="camp-training-manager">
     <h2 style={styles.contentTitle}>🏕️ 合宿メニュー</h2>
     <div className="camp-training-controls">
-      <label>年度<select value={year} disabled={saving} onChange={event => changeCampPeriod(() => setYear(Number(event.target.value)))}>{years.map(value => <option key={value} value={value}>{value}年度</option>)}</select></label>
-      <label>季節<select value={season} disabled={saving} onChange={event => changeCampPeriod(() => setSeason(event.target.value))}>{CAMP_SEASONS.map(value => <option key={value}>{value}</option>)}</select></label>
+      <label>年度<select value={year} disabled={saving || (view === 'input' && loading)} onChange={event => changeCampPeriod(() => setYear(Number(event.target.value)))}>{years.map(value => <option key={value} value={value}>{value}年度</option>)}</select></label>
+      <label>季節<select value={season} disabled={saving || (view === 'input' && loading)} onChange={event => changeCampPeriod(() => setSeason(event.target.value))}>{CAMP_SEASONS.map(value => <option key={value}>{value}</option>)}</select></label>
+      {view === 'input' && role === 'admin' && <button type="button" className="camp-input-display-button" style={{ ...styles.doneBtn, width: 'auto', padding: '9px 18px', border: '1px solid transparent', boxSizing: 'border-box' }} disabled={!yearsReady || saving || loading} onClick={displayInput}>{loading ? '読み込み中...' : '表示'}</button>}
     </div>
-    <div className="camp-training-tabs"><button disabled={saving} className={view === 'ranking' ? 'active' : ''} onClick={() => setView('ranking')}>ランキング</button>{role === 'admin' && <button disabled={saving} className={view === 'participants' ? 'active' : ''} onClick={() => setView('participants')}>参加者設定</button>}{role === 'admin' && <button disabled={saving} className={view === 'input' ? 'active' : ''} onClick={() => setView('input')}>データ入力</button>}</div>
+    <div className="camp-training-tabs"><button disabled={saving} className={view === 'ranking' ? 'active' : ''} onClick={() => changeView('ranking')}>ランキング</button>{role === 'admin' && <button disabled={saving} className={view === 'participants' ? 'active' : ''} onClick={() => changeView('participants')}>参加者設定</button>}{role === 'admin' && <button disabled={saving} className={view === 'input' ? 'active' : ''} onClick={() => changeView('input')}>データ入力</button>}</div>
     {message.text && <div role={message.type === 'error' ? 'alert' : 'status'} className={`camp-training-message ${message.type}`}>{message.text}</div>}
     {view === 'ranking' && <><div className="camp-training-switches">{[...CAMP_DAYS.map(String), 'total'].map(value => <button key={value} disabled={saving} className={rankingMode === value ? 'active' : ''} onClick={() => setRankingMode(value)}>{value === 'total' ? '総合集計' : `${value}日目`}</button>)}</div>{!loading && rows.length > 0 && renderTable(false)}</>}
     {view === 'participants' && role === 'admin' && <><div className="camp-participant-filters">
@@ -222,8 +274,8 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
       <label>氏名<input value={participantNameQuery} onChange={event => setParticipantNameQuery(event.target.value)} disabled={saving || !displayedParticipantCondition} placeholder="氏名で検索" /></label>
       <button type="button" className="camp-participant-display-button" style={{ ...styles.doneBtn, width: 'auto', padding: '9px 18px', border: '1px solid transparent', boxSizing: 'border-box' }} disabled={!participantSchool || saving || loading} onClick={displayParticipants}>{loading ? '読み込み中...' : '表示'}</button>
     </div>{!loading && displayedParticipantCondition && (filteredParticipants.length > 0 ? <div className="camp-participant-list">{filteredParticipants.map(student => <label key={student.studentId}><input type="checkbox" disabled={saving} checked={selectedIds.has(student.studentId)} onChange={() => setSelectedIds(current => { const next = new Set(current); if (next.has(student.studentId)) next.delete(student.studentId); else next.add(student.studentId); return next; })} /><span>{student.studentId}</span><span>{student.name}</span><span>{student.nameKana}</span><span>{student.school}</span><span>{student.grade}</span></label>)}</div> : <div className="camp-training-state">該当する生徒がいません。</div>)}<button style={styles.doneBtn} disabled={saving || loading || loadFailed || !displayedParticipantCondition} onClick={saveParticipants}>{saving ? '保存中...' : '参加者を保存'}</button></>}
-    {view === 'input' && role === 'admin' && <><div className="camp-training-switches">{CAMP_DAYS.map(value => <button key={value} disabled={saving} className={inputDay === value ? 'active' : ''} onClick={() => setInputDay(value)}>{value}日目</button>)}</div>{!loading && rows.length > 0 && renderTable(true)}<button style={styles.doneBtn} disabled={saving || loading || rows.length === 0} onClick={saveInput}>{saving ? '保存中...' : '入力データを保存'}</button></>}
+    {view === 'input' && role === 'admin' && <><div className="camp-training-switches">{CAMP_DAYS.map(value => <button key={value} disabled={saving || loading} className={inputDay === value ? 'active' : ''} onClick={() => changeInputDay(value)}>{value}日目</button>)}</div>{!loading && displayedInputCondition && (rows.length > 0 ? renderTable(true) : <div className="camp-training-state">対象となる参加者がいません。</div>)}{displayedInputCondition && rows.length > 0 && <button style={styles.doneBtn} disabled={saving || loading || loadFailed} onClick={saveInput}>{saving ? '保存中...' : '入力データを保存'}</button>}</>}
     {loading && <div className="camp-training-state">読み込み中...</div>}
-    {!loading && view !== 'participants' && rows.length === 0 && !message.text && <div className="camp-training-state">対象データがありません。</div>}
+    {!loading && view === 'ranking' && rows.length === 0 && !message.text && <div className="camp-training-state">対象データがありません。</div>}
   </section>;
 }
