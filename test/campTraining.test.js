@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assignCompetitionRanks, calculateCampTotal, formatRankChange, getCurrentFiscalYear, normalizeCampCount, shouldAutoLoadCampView } from '../src/utils/campTraining.js';
+import fs from 'node:fs';
+import { assignCompetitionRanks, calculateCampTotal, formatRankChange, getCampErrorMessage, getCampInputSignature, getCurrentFiscalYear, normalizeCampCount, shouldAutoLoadCampView } from '../src/utils/campTraining.js';
 import { compareStudentAccounts, filterCampParticipants } from '../src/utils/studentAccountOrdering.js';
 
 test('空欄は0として扱い、0以上の整数だけを許可する', () => {
@@ -19,11 +20,43 @@ test('現在年度は4月始まりで算出する', () => {
   assert.equal(getCurrentFiscalYear(new Date(2026, 3, 1)), 2026);
 });
 
-test('合宿画面の自動取得は年度候補取得後のランキングだけに限定する', () => {
+test('年度候補取得後はランキングとデータ入力を自動取得する', () => {
   assert.equal(shouldAutoLoadCampView('ranking', true), true);
-  assert.equal(shouldAutoLoadCampView('input', true), false);
+  assert.equal(shouldAutoLoadCampView('input', true), true);
   assert.equal(shouldAutoLoadCampView('participants', true), false);
   assert.equal(shouldAutoLoadCampView('ranking', false), false);
+});
+
+test('シート未セットアップを判別可能な案内に変換する', () => {
+  assert.match(getCampErrorMessage('CAMP_SETUP_REQUIRED', '元のメッセージ'), /合宿管理用シート/);
+  assert.equal(getCampErrorMessage('VALIDATION_ERROR', '元のメッセージ'), '元のメッセージ');
+});
+
+test('入力値を取得時の値へ戻すと未保存判定も元に戻る', () => {
+  const original = [{ studentId: '000001', japanese: 10, math: 0, english: 0, social: 0, science: 0 }];
+  const changed = [{ ...original[0], japanese: 20 }];
+  const restored = [{ ...changed[0], japanese: '10' }];
+  assert.notEqual(getCampInputSignature(changed), getCampInputSignature(original));
+  assert.equal(getCampInputSignature(restored), getCampInputSignature(original));
+  assert.equal(getCampInputSignature([{ ...original[0], math: '' }]), getCampInputSignature(original));
+});
+
+test('データ入力UIは自動取得・再試行・未保存保護・参加者案内を持つ', () => {
+  const source = fs.readFileSync(new URL('../src/components/CampTrainingManager.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, />表示<\/button>/);
+  assert.match(source, /postAction\('getCampTrainingInput', condition, controller\.signal\)/);
+  assert.match(source, /setInputDay\(1\)/);
+  assert.match(source, /再試行/);
+  assert.match(source, /参加者設定へ移動/);
+  assert.match(source, /未保存の入力があります/);
+  assert.match(source, /変更を破棄/);
+  assert.match(source, /window\.confirm\('未保存の入力内容を破棄して/);
+  assert.match(source, /loadCurrentView\(\{ preserveInput: true \}\)/);
+  assert.match(source, /保存は完了しましたが/);
+  assert.match(source, /saveInFlight\.current/);
+  assert.match(source, /disabled=\{saving \|\| inputDirty\}/);
+  assert.match(source, /sequence !== requestSequence\.current/);
+  assert.match(source, /activeRequest\.current\?\.abort\(\)/);
 });
 
 test('参加者を単一校舎・全担当校舎・任意学年・氏名で絞り込む', () => {

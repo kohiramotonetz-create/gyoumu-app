@@ -60,6 +60,9 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - API: `getCampAvailableYears`、`getCampParticipants`、`updateCampParticipants`、`getCampTrainingInput`、`saveCampTrainingInput`、`getCampTrainingRanking`を非破壊的に追加。既存actionと既存レスポンスは変更なし。
 - 対象外: スキマ君問題数集計、student-app、LOG GAS、無効回答判定。
 - テスト: 参加者一覧の既存ソート順、単一校舎・全担当校舎・任意学年・氏名の絞り込み、履歴年度と現在年度の重複排除・降順化、4月始まりの年度算出、不正年度の拒否、入力画面の自動取得停止と入力取得APIへの条件引き渡しを含む`npm test`（25件）、`npm run build`、GAS構文、変更対象lint、`git diff --check`が成功。年度・季節選択欄はadmin・head-teacher相当の構造で、通常・選択肢・フォーカス・無効状態をPC幅／390px幅でローカル再確認済み。入力画面はローカルモックで表示前・取得成功・0件・条件変更・再取得・APIエラーを確認済み。実GAS・実データと実アカウントでの画面確認は未実施。
+- 2026-08-20再開確認: 年度候補取得に限り、合宿参加者・合宿特訓入力シートが未作成の場合を履歴なしとして現在年度を返すよう改善。片方のみ存在、両方空、重複・異なる履歴、不正年度、admin・head-teacherの許可とteacher・不正セッションの拒否を追加検証し、`npm test`は27件成功。存在するシートの不正ヘッダーと不正年度は引き続きエラー停止する。
+- 2026-08-20データ入力UI改善: adminがデータ入力タブを開いた時と年度・季節・日を変更した時に、選択条件の入力データを自動取得する方式へ変更。最後に取得・保存した値と現在値を比較し、未保存入力中は条件・画面切替を無効化。確認付きの「変更を破棄」で保存済みデータを再取得できる。保存API成功後の再取得だけが失敗した場合は、保存済みであることと再試行が必要なことを明示する。参加者0人時の操作案内と参加者設定への移動も追加。GASは合宿管理用シート未作成・不正ヘッダーを`CAMP_SETUP_REQUIRED`で判別可能にし、既存action・成功レスポンス・保存形式は維持。
+- 2026-08-20入力取得性能改善: `getCampTrainingInput`で管理セッション検証時に読み取った新4マスターのユーザー情報を、参加者検証と入力ランキング生成でも同一リクエスト内に限って再利用するよう変更。新4マスターの全件読取を3回から1回へ削減し、永続キャッシュ、API形式、保存形式、ランキング仕様、DocumentLockは変更していない。ローカル検証済み。GAS反映後の実環境性能は未確認。
 - Git branch: `codex/issue-010-camp-training`
 - Commit / Push: `663f9a1 feat: add camp training management and ranking`を作業ブランチへcommit・push済み。今回の参加者フィルタ改善は未commit・未push。
 - GAS: clasp push済み。既存WebアプリURLをVersion 158（`Issue #010 camp training management and ranking`）へ更新済み。今回の表示ボタン方式と参加者フィルタ改善はGAS API・保存形式の変更なし。

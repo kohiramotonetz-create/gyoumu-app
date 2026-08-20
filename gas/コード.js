@@ -1362,7 +1362,7 @@ function createManagementSession(userId, role) {
   return { sessionToken, sessionExpiresAt: expiresAt.toISOString() };
 }
 
-function validateManagementSession(sessionToken, extendExpiration) {
+function validateManagementSession(sessionToken, extendExpiration, includeUserContexts) {
   if (!sessionToken || typeof sessionToken !== "string") throw new Error("管理セッションが必要です");
   const sheet = getRequiredSheet(MANAGEMENT_SESSION_SHEET_NAME);
   const rows = sheet.getDataRange().getValues();
@@ -1374,20 +1374,26 @@ function validateManagementSession(sessionToken, extendExpiration) {
       sheet.deleteRow(i + 1);
       throw new Error("管理セッションが無効または期限切れです");
     }
-    const user = findUserRecord(rows[i][1]);
+    const userContexts = getUserAuthContexts_();
+    const normalizedUserId = normalizeUserId(rows[i][1]);
+    const user = userContexts.find(item => item.userId === normalizedUserId && item.enabled && !item.deleted);
     if (!user) throw new Error("管理セッションの利用者が存在しません");
     if (extendExpiration) {
       const nextExpiresAt = new Date(now.getTime() + MANAGEMENT_SESSION_DURATION_MS);
       sheet.getRange(i + 1, 4).setValue(nextExpiresAt);
-      return { userId: user.userId, role: user.role, sessionExpiresAt: nextExpiresAt.toISOString() };
+      const result = { userId: user.userId, role: user.role, sessionExpiresAt: nextExpiresAt.toISOString() };
+      if (includeUserContexts) result.userContexts = userContexts;
+      return result;
     }
-    return { userId: user.userId, role: user.role, sessionExpiresAt: expiresAt.toISOString() };
+    const result = { userId: user.userId, role: user.role, sessionExpiresAt: expiresAt.toISOString() };
+    if (includeUserContexts) result.userContexts = userContexts;
+    return result;
   }
   throw new Error("管理セッションが無効または期限切れです");
 }
 
-function requireAdminSession(sessionToken) {
-  const session = validateManagementSession(sessionToken, true);
+function requireAdminSession(sessionToken, includeUserContexts) {
+  const session = validateManagementSession(sessionToken, true, includeUserContexts);
   if (session.role !== "admin") throw new Error("管理者権限が必要です");
   return session;
 }
@@ -1400,6 +1406,12 @@ function requireCampViewerSession(sessionToken) {
 
 function isManagementAuthorizationError(error) {
   return /管理セッション|管理者権限|閲覧権限/.test(String(error && error.message || ""));
+}
+
+function getCampApiErrorCode_(error) {
+  if (isManagementAuthorizationError(error)) return "AUTHORIZATION_ERROR";
+  if (error && error.code === "CAMP_SETUP_REQUIRED") return "CAMP_SETUP_REQUIRED";
+  return "VALIDATION_ERROR";
 }
 
 function deleteManagementSession(sessionToken) {
@@ -1732,8 +1744,19 @@ function runSetupCampTrainingSheetsSummary() {
 }
 
 function getCampSheet_(sheetName, headers) {
-  const sheet = getRequiredSheet(sheetName);
-  assertCampSheetHeaders_(sheet, sheetName, headers);
+  // eslint-disable-next-line no-undef
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) {
+    const error = new Error("合宿管理用シートが未セットアップです");
+    error.code = "CAMP_SETUP_REQUIRED";
+    throw error;
+  }
+  try {
+    assertCampSheetHeaders_(sheet, sheetName, headers);
+  } catch (error) {
+    error.code = "CAMP_SETUP_REQUIRED";
+    throw error;
+  }
   return sheet;
 }
 
@@ -1768,15 +1791,15 @@ function validateCampCount_(value) {
   return count;
 }
 
-function getActiveCampStudents_() {
-  const students = getUserAuthContexts_().filter(user => user.role === "student" && user.enabled && !user.deleted)
+function getActiveCampStudents_(userContexts) {
+  const students = (userContexts || getUserAuthContexts_()).filter(user => user.role === "student" && user.enabled && !user.deleted)
     .map(user => ({ studentId: user.userId, name: user.name, nameKana: user.nameKana || "", school: user.school, grade: user.grade }))
     .sort((left, right) => String(left.school).localeCompare(String(right.school), "ja") || String(left.nameKana).localeCompare(String(right.nameKana), "ja") || left.studentId.localeCompare(right.studentId));
   if (new Set(students.map(student => student.studentId)).size !== students.length) throw new Error("生徒マスターに重複した生徒コードがあります");
   return students;
 }
 
-function getCampParticipantIds_(year, season) {
+function getCampParticipantIds_(year, season, activeStudents) {
   const rows = getCampSheet_(CAMP_PARTICIPANT_SHEET_NAME, CAMP_PARTICIPANT_HEADERS).getDataRange().getValues();
   const ids = new Set();
   for (let i = 1; i < rows.length; i++) {
@@ -1785,7 +1808,7 @@ function getCampParticipantIds_(year, season) {
     if (!studentId || ids.has(studentId)) throw new Error("合宿参加者に重複または不正な行があります");
     ids.add(studentId);
   }
-  const activeStudentIds = new Set(getActiveCampStudents_().map(student => student.studentId));
+  const activeStudentIds = new Set((activeStudents || getActiveCampStudents_()).map(student => student.studentId));
   ids.forEach(studentId => { if (!activeStudentIds.has(studentId)) throw new Error("合宿参加者に生徒マスター上で有効でない生徒コードがあります"); });
   return ids;
 }
@@ -1819,9 +1842,10 @@ function assignCampRanks_(rows) {
   });
 }
 
-function buildCampRanking_(year, season, mode) {
-  const participantIds = getCampParticipantIds_(year, season);
-  const students = getActiveCampStudents_().filter(student => participantIds.has(student.studentId));
+function buildCampRanking_(year, season, mode, activeStudents) {
+  const allActiveStudents = activeStudents || getActiveCampStudents_();
+  const participantIds = getCampParticipantIds_(year, season, allActiveStudents);
+  const students = allActiveStudents.filter(student => participantIds.has(student.studentId));
   const records = getCampTrainingRecords_(year, season).filter(record => participantIds.has(record.studentId));
   const requestedDay = mode === "total" ? null : validateCampDay_(mode);
   const createTotals = days => {
@@ -1888,7 +1912,12 @@ function getCampCurrentFiscalYear_(date) {
 function getCampAvailableYears_(currentDate) {
   const years = new Set([getCampCurrentFiscalYear_(currentDate)]);
   [[CAMP_PARTICIPANT_SHEET_NAME, CAMP_PARTICIPANT_HEADERS], [CAMP_TRAINING_SHEET_NAME, CAMP_TRAINING_HEADERS]].forEach(([sheetName, headers]) => {
-    const rows = getCampSheet_(sheetName, headers).getDataRange().getValues();
+    // 年度候補は初回セットアップ前でも現在年度を返す。存在するシートの構造は従来どおり厳密に検証する。
+    // eslint-disable-next-line no-undef
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+    if (!sheet) return;
+    assertCampSheetHeaders_(sheet, sheetName, headers);
+    const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) years.add(validateCampYear_(rows[i][0]));
   });
   return Array.from(years).sort((left, right) => right - left);
@@ -1907,16 +1936,20 @@ function handleCampAction_(data) {
     if (!["1", "2", "3", "4", "total"].includes(mode)) throw new Error("集計対象が不正です");
     return withCampReadLock_(() => ({ result: "success", rows: buildCampRanking_(year, season, mode) }));
   }
+  if (data.action === "getCampTrainingInput") {
+    const day = validateCampDay_(data.day);
+    return withCampReadLock_(() => {
+      const admin = requireAdminSession(data.sessionToken, true);
+      const activeStudents = getActiveCampStudents_(admin.userContexts);
+      return { result: "success", rows: buildCampRanking_(year, season, String(day), activeStudents) };
+    });
+  }
   const admin = requireAdminSession(data.sessionToken);
   if (data.action === "getCampParticipants") {
     return withCampReadLock_(() => {
       const participantIds = getCampParticipantIds_(year, season);
       return { result: "success", students: getActiveCampStudents_().map(student => Object.assign({}, student, { participating: participantIds.has(student.studentId) })) };
     });
-  }
-  if (data.action === "getCampTrainingInput") {
-    const day = validateCampDay_(data.day);
-    return withCampReadLock_(() => ({ result: "success", rows: buildCampRanking_(year, season, String(day)) }));
   }
   if (data.action === "updateCampParticipants") {
     if (!Array.isArray(data.participantIds)) throw new Error("参加者の形式が不正です");
@@ -2015,8 +2048,8 @@ function doPost(e) {
     try {
       return responseJSON(handleCampAction_(data));
     } catch (error) {
-      const authorizationError = isManagementAuthorizationError(error);
-      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "この合宿機能を利用する権限がありません" : String(error && error.message || "入力内容が不正です") });
+      const code = getCampApiErrorCode_(error);
+      return responseJSON({ result: "error", code, message: code === "AUTHORIZATION_ERROR" ? "この合宿機能を利用する権限がありません" : String(error && error.message || "入力内容が不正です") });
     }
   }
 
