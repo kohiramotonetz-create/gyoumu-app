@@ -1888,7 +1888,12 @@ function getCampCurrentFiscalYear_(date) {
 function getCampAvailableYears_(currentDate) {
   const years = new Set([getCampCurrentFiscalYear_(currentDate)]);
   [[CAMP_PARTICIPANT_SHEET_NAME, CAMP_PARTICIPANT_HEADERS], [CAMP_TRAINING_SHEET_NAME, CAMP_TRAINING_HEADERS]].forEach(([sheetName, headers]) => {
-    const rows = getCampSheet_(sheetName, headers).getDataRange().getValues();
+    // 年度候補は初回セットアップ前でも現在年度を返す。存在するシートの構造は従来どおり厳密に検証する。
+    // eslint-disable-next-line no-undef
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+    if (!sheet) return;
+    assertCampSheetHeaders_(sheet, sheetName, headers);
+    const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) years.add(validateCampYear_(rows[i][0]));
   });
   return Array.from(years).sort((left, right) => right - left);

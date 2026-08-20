@@ -85,21 +85,46 @@ test('年度・季節・日で入力データを分離し、重複キーを拒�
   assert.throws(() => vm.runInContext('getCampTrainingRecords_(2026, "夏")', context));
 });
 
-test('合宿履歴と現在年度だけを重複排除して降順で返す', () => {
+test('シートがない場合と空の場合は現在年度を返す', () => {
   const participantHeaders = ['year', 'season', 'studentId', 'updatedAt', 'updatedBy'];
   const trainingHeaders = ['year', 'season', 'day', 'studentId', 'japanese', 'math', 'english', 'social', 'science', 'updatedAt', 'updatedBy'];
-  const sheets = {
-    '合宿参加者': makeSheet([participantHeaders, [2025, '夏', "'001234"], [2027, '冬', "'001235"]]),
-    '合宿特訓入力': makeSheet([trainingHeaders, [2026, '夏', 1, "'001234", 1, 2, 3, 4, 5], [2025, '夏', 1, "'001234", 1, 2, 3, 4, 5]])
-  };
-  context.getCampSheet_ = name => sheets[name];
-  assert.deepEqual(Array.from(vm.runInContext('getCampAvailableYears_(new Date(2026, 2, 31))', context)), [2027, 2026, 2025]);
+  const sheets = {};
+  context.SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: name => sheets[name] || null }) };
+  assert.deepEqual(Array.from(vm.runInContext('getCampAvailableYears_(new Date(2026, 3, 1))', context)), [2026]);
   sheets['合宿参加者'] = makeSheet([participantHeaders]);
   sheets['合宿特訓入力'] = makeSheet([trainingHeaders]);
-  assert.deepEqual(Array.from(vm.runInContext('getCampAvailableYears_(new Date(2026, 2, 31))', context)), [2025]);
   assert.deepEqual(Array.from(vm.runInContext('getCampAvailableYears_(new Date(2026, 3, 1))', context)), [2026]);
+});
+
+test('片方または両方のシートから履歴年度を重複排除して降順で返す', () => {
+  const participantHeaders = ['year', 'season', 'studentId', 'updatedAt', 'updatedBy'];
+  const trainingHeaders = ['year', 'season', 'day', 'studentId', 'japanese', 'math', 'english', 'social', 'science', 'updatedAt', 'updatedBy'];
+  const sheets = {};
+  context.SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: name => sheets[name] || null }) };
+  sheets['合宿参加者'] = makeSheet([participantHeaders, [2025, '夏', "'001234"], [2027, '冬', "'001235"]]);
+  assert.deepEqual(Array.from(vm.runInContext('getCampAvailableYears_(new Date(2026, 3, 1))', context)), [2027, 2026, 2025]);
+  delete sheets['合宿参加者'];
+  sheets['合宿特訓入力'] = makeSheet([trainingHeaders, [2024, '夏', 1, "'001234", 1, 2, 3, 4, 5]]);
+  assert.deepEqual(Array.from(vm.runInContext('getCampAvailableYears_(new Date(2026, 3, 1))', context)), [2026, 2024]);
+  sheets['合宿参加者'] = makeSheet([participantHeaders, [2025, '夏', "'001234"], [2027, '冬', "'001235"]]);
+  sheets['合宿特訓入力'] = makeSheet([trainingHeaders, [2026, '夏', 1, "'001234", 1, 2, 3, 4, 5], [2025, '夏', 1, "'001234", 1, 2, 3, 4, 5]]);
+  assert.deepEqual(Array.from(vm.runInContext('getCampAvailableYears_(new Date(2026, 2, 31))', context)), [2027, 2026, 2025]);
   sheets['合宿参加者'].state.rows.push(['不正年度', '夏', "'001234"]);
   assert.throws(() => vm.runInContext('getCampAvailableYears_(new Date(2026, 3, 1))', context));
+});
+
+test('年度候補APIはadminとhead-teacherを許可しteacherと不正セッションを拒否する', () => {
+  context.SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: () => null }) };
+  context.LockService = { getDocumentLock: () => ({ tryLock: () => true, releaseLock: () => {} }) };
+  for (const role of ['admin', 'head-teacher']) {
+    context.validateManagementSession = () => ({ userId: role, role });
+    const result = vm.runInContext('handleCampAction_({action:"getCampAvailableYears",sessionToken:"token"})', context);
+    assert.equal(result.result, 'success');
+  }
+  context.validateManagementSession = () => ({ userId: 'teacher', role: 'teacher' });
+  assert.throws(() => vm.runInContext('handleCampAction_({action:"getCampAvailableYears",sessionToken:"token"})', context));
+  context.validateManagementSession = () => { throw new Error('管理セッションが無効または期限切れです'); };
+  assert.throws(() => vm.runInContext('handleCampAction_({action:"getCampAvailableYears",sessionToken:"invalid"})', context));
 });
 
 test('総合集計・参加解除・同順位を含む前日比を正しく処理する', () => {
