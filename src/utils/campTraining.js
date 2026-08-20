@@ -7,7 +7,14 @@ export function getCurrentFiscalYear(date = new Date()) {
 }
 
 export function shouldAutoLoadCampView(view, yearsReady) {
-  return yearsReady && view === 'ranking';
+  return yearsReady && (view === 'ranking' || view === 'input');
+}
+
+export function getCampErrorMessage(code, fallbackMessage) {
+  if (code === 'CAMP_SETUP_REQUIRED') {
+    return '合宿管理用シートが未セットアップです。管理者がセットアップ関数を実行する必要があります。';
+  }
+  return fallbackMessage || '処理に失敗しました。';
 }
 
 export function normalizeCampCount(value) {
@@ -19,6 +26,18 @@ export function normalizeCampCount(value) {
 
 export function calculateCampTotal(entry) {
   return CAMP_SUBJECTS.reduce((sum, subject) => sum + normalizeCampCount(entry[subject]), 0);
+}
+
+export function getCampInputSignature(rows) {
+  return JSON.stringify((Array.isArray(rows) ? rows : []).map(row => [
+    String(row.studentId || ''),
+    ...CAMP_SUBJECTS.map(subject => {
+      const value = row[subject];
+      if (value === '' || value === null || value === undefined) return 0;
+      const number = Number(value);
+      return Number.isInteger(number) && number >= 0 ? number : `invalid:${String(value)}`;
+    })
+  ]));
 }
 
 export function assignCompetitionRanks(rows) {

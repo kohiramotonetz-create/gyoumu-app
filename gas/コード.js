@@ -1402,6 +1402,12 @@ function isManagementAuthorizationError(error) {
   return /管理セッション|管理者権限|閲覧権限/.test(String(error && error.message || ""));
 }
 
+function getCampApiErrorCode_(error) {
+  if (isManagementAuthorizationError(error)) return "AUTHORIZATION_ERROR";
+  if (error && error.code === "CAMP_SETUP_REQUIRED") return "CAMP_SETUP_REQUIRED";
+  return "VALIDATION_ERROR";
+}
+
 function deleteManagementSession(sessionToken) {
   if (!sessionToken || typeof sessionToken !== "string") return false;
   const sheet = getRequiredSheet(MANAGEMENT_SESSION_SHEET_NAME);
@@ -1732,8 +1738,19 @@ function runSetupCampTrainingSheetsSummary() {
 }
 
 function getCampSheet_(sheetName, headers) {
-  const sheet = getRequiredSheet(sheetName);
-  assertCampSheetHeaders_(sheet, sheetName, headers);
+  // eslint-disable-next-line no-undef
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) {
+    const error = new Error("合宿管理用シートが未セットアップです");
+    error.code = "CAMP_SETUP_REQUIRED";
+    throw error;
+  }
+  try {
+    assertCampSheetHeaders_(sheet, sheetName, headers);
+  } catch (error) {
+    error.code = "CAMP_SETUP_REQUIRED";
+    throw error;
+  }
   return sheet;
 }
 
@@ -2020,8 +2037,8 @@ function doPost(e) {
     try {
       return responseJSON(handleCampAction_(data));
     } catch (error) {
-      const authorizationError = isManagementAuthorizationError(error);
-      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "この合宿機能を利用する権限がありません" : String(error && error.message || "入力内容が不正です") });
+      const code = getCampApiErrorCode_(error);
+      return responseJSON({ result: "error", code, message: code === "AUTHORIZATION_ERROR" ? "この合宿機能を利用する権限がありません" : String(error && error.message || "入力内容が不正です") });
     }
   }
 

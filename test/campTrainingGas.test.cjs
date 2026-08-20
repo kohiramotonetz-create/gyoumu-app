@@ -9,6 +9,9 @@ const context = vm.createContext({ console });
 vm.runInContext(source, context);
 const originalGetActiveCampStudents = context.getActiveCampStudents_;
 const originalGetCampParticipantIds = context.getCampParticipantIds_;
+const originalRequireAdminSession = context.requireAdminSession;
+const originalGetCampSheet = context.getCampSheet_;
+const originalBuildCampRanking = context.buildCampRanking_;
 
 function makeSheet(initialRows = []) {
   const state = { rows: initialRows.map(row => [...row]), writes: 0 };
@@ -172,6 +175,33 @@ test('入力取得APIはadminの年度・季節・日を既存取得処理へ渡
   const result = vm.runInContext('handleCampAction_({action:"getCampTrainingInput",year:2027,season:"冬",day:3,sessionToken:"token"})', context);
   assert.deepEqual(received, { year: 2027, season: '冬', mode: '3' });
   assert.equal(result.rows[0].studentId, '001234');
+});
+
+test('入力取得APIはhead-teacherを拒否する', () => {
+  context.requireAdminSession = originalRequireAdminSession;
+  context.validateManagementSession = () => ({ userId: 'staff', role: 'head-teacher' });
+  assert.throws(() => vm.runInContext('handleCampAction_({action:"getCampTrainingInput",year:2026,season:"夏",day:1,sessionToken:"token"})', context));
+});
+
+test('合宿シート未作成は専用エラーコードで判別できる', () => {
+  context.getCampSheet_ = originalGetCampSheet;
+  context.SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: () => null }) };
+  assert.throws(
+    () => vm.runInContext('getCampSheet_("合宿参加者", CAMP_PARTICIPANT_HEADERS)', context),
+    error => error.code === 'CAMP_SETUP_REQUIRED'
+  );
+  assert.equal(vm.runInContext('getCampApiErrorCode_(({code:"CAMP_SETUP_REQUIRED",message:"合宿管理用シートが未セットアップです"}))', context), 'CAMP_SETUP_REQUIRED');
+  assert.equal(vm.runInContext('getCampApiErrorCode_(new Error("管理セッションが無効です"))', context), 'AUTHORIZATION_ERROR');
+  assert.equal(vm.runInContext('getCampApiErrorCode_(new Error("年度が不正です"))', context), 'VALIDATION_ERROR');
+});
+
+test('参加者がいれば入力済みデータ0件でも0の入力行を返す', () => {
+  context.buildCampRanking_ = originalBuildCampRanking;
+  context.getCampParticipantIds_ = () => new Set(['000001']);
+  context.getActiveCampStudents_ = () => [{ studentId: '000001', name: 'A' }];
+  context.getCampTrainingRecords_ = () => [];
+  const rows = vm.runInContext('buildCampRanking_(2026, "夏", "1")', context);
+  assert.deepEqual(Array.from(rows, row => [row.studentId, row.total, row.japanese, row.rank]), [['000001', 0, 0, 1]]);
 });
 
 test('セットアップは再実行で既存データを書き換えず、不正ヘッダーを拒否する', () => {
