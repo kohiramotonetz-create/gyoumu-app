@@ -12,6 +12,7 @@ import KoToreProgressTracker from './components/KoToreProgressTracker.jsx'
 import AppUsageTracker from './components/AppUsageTracker.jsx'
 import SukimakunPermissionManager from './components/SukimakunPermissionManager.jsx'
 import CampTrainingManager from './components/CampTrainingManager.jsx'
+import OneToOneProgressManager from './components/OneToOneProgressManager.jsx'
 import VersionLabel from './components/common/VersionLabel.jsx'
 import { ALL_SCHOOLS } from './constants/organization.js'
 
@@ -104,6 +105,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     { id: 'app-usage', label: 'アプリ利用チェック', icon: '📱' },
     { id: 'kotore-progress', label: '個トレ進捗チェック', icon: '🏋️' },
     { id: 'school-progress', label: '学校進捗チェック', icon: '🏫' },
+    { id: 'one-to-one-progress', label: '1対1進捗チェック', icon: '🤝' },
   ];
 
   const adminMenuItems = [
@@ -239,6 +241,18 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
                 GAS_URL={GAS_URL} 
                 API_KEY={API_KEY} 
                 assignedSchools={availableAssignedSchools}
+              />
+            )}
+
+            {activeContent === 'one-to-one-progress' && (
+              <OneToOneProgressManager
+                GAS_URL={GAS_URL}
+                API_KEY={API_KEY}
+                sessionToken={sessionToken}
+                role={role}
+                assignedSchools={availableAssignedSchools}
+                styles={styles}
+                onSessionExpired={handleLogout}
               />
             )}
 

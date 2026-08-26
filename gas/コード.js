@@ -1,3 +1,4 @@
+/* global SCHOOL_UNIT_MASTER_GENERATED */
 /**
  * 業務アプリ・生徒用アプリ 統合バックエンド (最終確定バグ修正版)
  */
@@ -37,6 +38,10 @@ const CAMP_SUBJECT_KEYS = ["japanese", "math", "english", "social", "science"];
 const ONE_TO_ONE_SUBJECT_SHEET_NAME = "1対1受講科目";
 const ONE_TO_ONE_SUBJECT_HEADERS = ["userId", "subjectId", "enabled", "createdAt", "updatedAt", "updatedBy"];
 const ONE_TO_ONE_SUBJECT_IDS = ["english", "math", "japanese", "science", "social"];
+const ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME = "1対1進捗イベント";
+const ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME = "1対1進捗単元";
+const ONE_TO_ONE_PROGRESS_EVENT_HEADERS = ["eventId", "userId", "subjectId", "progressType", "lessonDate", "recordedAt", "recordedBy", "status", "correctedAt", "correctedBy", "correctionReason", "replacementEventId", "requestId"];
+const ONE_TO_ONE_PROGRESS_UNIT_HEADERS = ["eventId", "unitId", "unitOrder", "textNameSnapshot", "chapterSnapshot", "sectionSnapshot", "unitNameSnapshot", "pageSnapshot"];
 const ACCOUNT_MASTER_SHEET_SPECS = [
   { name: "アカウントマスター", headers: ["userId", "password", "isInitial", "passwordUpdatedAt", "role", "enabled", "sukimakunToken", "sukimakunTokenExpire", "createdAt", "updatedAt", "deletedAt"], textColumns: [1, 2, 7], dateColumns: [4, 8, 9, 10, 11] },
   { name: "生徒マスター", headers: ["userId", "school", "name", "nameKana", "grade", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [6, 7] },
@@ -1662,6 +1667,253 @@ function runInspectOneToOneSubjectDataSummary() {
   console.log(JSON.stringify(result, null, 2));
 }
 
+function getOneToOneSchoolUnitAxis_(grade, subjectId) {
+  const normalizedGrade = normalizeGrade(grade);
+  if (!ONE_TO_ONE_SUBJECT_IDS.includes(subjectId)) throw new Error("科目が不正です");
+  const rows = SCHOOL_UNIT_MASTER_GENERATED.filter(row => normalizeGrade(row[1]).includes(normalizedGrade) && row[2] === subjectId);
+  if (!rows.length) throw new Error("対象の単元が登録されていません");
+  return rows.map((row, index) => ({ unitId: row[0], grade: row[1], subjectId: row[2], textName: row[3], chapter: row[4], section: row[5], unitName: row[6], page: row[7], unitOrder: index + 1 }));
+}
+
+function assertOneToOneProgressSheets_() {
+  // eslint-disable-next-line no-undef
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const result = {};
+  [[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME, ONE_TO_ONE_PROGRESS_EVENT_HEADERS], [ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME, ONE_TO_ONE_PROGRESS_UNIT_HEADERS]].forEach(([name, headers]) => {
+    const sheet = spreadsheet.getSheetByName(name);
+    if (!sheet || sheet.getLastRow() < 1 || sheet.getLastColumn() !== headers.length) throw new Error("1対1進捗シートが未セットアップです");
+    const actual = sheet.getRange(1, 1, 1, headers.length).getValues()[0].map(String);
+    if (actual.join("\t") !== headers.join("\t")) throw new Error(`${name}シートのヘッダーが不正です`);
+    result[name] = sheet;
+  });
+  return result;
+}
+
+// eslint-disable-next-line no-unused-vars
+function setupOneToOneProgressSheets() {
+  // eslint-disable-next-line no-undef
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const setupResult = { createdSheets: [], initializedHeaders: [], warnings: [] };
+  [[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME, ONE_TO_ONE_PROGRESS_EVENT_HEADERS], [ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME, ONE_TO_ONE_PROGRESS_UNIT_HEADERS]].forEach(([name, headers]) => {
+    const existing = spreadsheet.getSheetByName(name);
+    if (!existing || existing.getLastRow() < 1) return;
+    if (existing.getLastColumn() !== headers.length) throw new Error(`${name}シートのヘッダーが不正です`);
+    const actual = existing.getRange(1, 1, 1, headers.length).getValues()[0].map(String);
+    if (actual.join("\t") !== headers.join("\t")) throw new Error(`${name}シートのヘッダーが不正です`);
+  });
+  const eventSheet = ensureSheetWithHeaders(spreadsheet, ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME, ONE_TO_ONE_PROGRESS_EVENT_HEADERS, setupResult);
+  const unitSheet = ensureSheetWithHeaders(spreadsheet, ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME, ONE_TO_ONE_PROGRESS_UNIT_HEADERS, setupResult);
+  eventSheet.getRange(1, 1, eventSheet.getMaxRows(), 2).setNumberFormat("@");
+  eventSheet.getRange(1, 13, eventSheet.getMaxRows(), 1).setNumberFormat("@");
+  if (eventSheet.getMaxRows() > 1) {
+    eventSheet.getRange(2, 5, eventSheet.getMaxRows() - 1, 1).setNumberFormat("yyyy/MM/dd");
+    eventSheet.getRange(2, 6, eventSheet.getMaxRows() - 1, 1).setNumberFormat("yyyy/MM/dd HH:mm:ss");
+    eventSheet.getRange(2, 9, eventSheet.getMaxRows() - 1, 1).setNumberFormat("yyyy/MM/dd HH:mm:ss");
+  }
+  unitSheet.getRange(1, 1, unitSheet.getMaxRows(), 2).setNumberFormat("@");
+  return { createdSheets: setupResult.createdSheets };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runSetupOneToOneProgressSheetsSummary() {
+  console.log(JSON.stringify(setupOneToOneProgressSheets(), null, 2));
+}
+
+function requireOneToOneProgressSession_(sessionToken, includeUserContexts) {
+  const session = validateManagementSession(sessionToken, true, includeUserContexts);
+  if (!["admin", "head-teacher", "teacher"].includes(session.role)) throw new Error("1対1進捗の利用権限がありません");
+  return session;
+}
+
+function assertOneToOneProgressStudentAccess_(session, student, writeAccess) {
+  if (!student || student.role !== "student" || !student.enabled || student.deleted) throw new Error("対象生徒が見つかりません");
+  if (session.role === "admin") return;
+  const actor = (session.userContexts || getUserAuthContexts_()).find(user => user.userId === session.userId);
+  if (!actor || !actor.assignedSchools.includes(student.school)) throw new Error(writeAccess ? "担当外校舎の生徒には登録できません" : "担当外校舎の生徒は閲覧できません");
+}
+
+function normalizeLessonDate_(value) {
+  const text = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw new Error("授業日が不正です");
+  const date = new Date(`${text}T00:00:00+09:00`);
+  if (isNaN(date.getTime())) throw new Error("授業日が不正です");
+  return date;
+}
+
+function readOneToOneProgressState_(userId, subjectId, grade, sheets) {
+  const axis = getOneToOneSchoolUnitAxis_(grade, subjectId);
+  const axisById = Object.create(null);
+  axis.forEach(unit => { axisById[unit.unitId] = unit; });
+  const eventRows = sheets[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME].getDataRange().getValues();
+  const unitRows = sheets[ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME].getDataRange().getValues();
+  const events = eventRows.slice(1).filter(row => normalizeUserId(row[1]) === userId && String(row[2]) === subjectId).map(row => ({ eventId: String(row[0]), progressType: String(row[3]), lessonDate: row[4], recordedAt: row[5], recordedBy: String(row[6]), status: String(row[7]), correctedAt: row[8], correctedBy: String(row[9] || ""), correctionReason: String(row[10] || ""), replacementEventId: String(row[11] || ""), requestId: String(row[12] || "") }));
+  const eventIds = new Set(events.map(event => event.eventId));
+  const details = unitRows.slice(1).filter(row => eventIds.has(String(row[0]))).map(row => ({ eventId: String(row[0]), unitId: String(row[1]), unitOrder: Number(row[2]), textName: String(row[3] || ""), chapter: String(row[4] || ""), section: String(row[5] || ""), unitName: String(row[6] || ""), page: String(row[7] || "") }));
+  events.forEach(event => { event.units = details.filter(unit => unit.eventId === event.eventId).sort((a, b) => a.unitOrder - b.unitOrder); });
+  const current = type => {
+    const orders = events.filter(event => event.status === "ACTIVE" && event.progressType === type).flatMap(event => event.units.map(unit => axisById[unit.unitId] ? axisById[unit.unitId].unitOrder : unit.unitOrder));
+    if (!orders.length) return null;
+    const order = Math.max(...orders);
+    return axis.find(unit => unit.unitOrder === order) || { unitId: null, unitOrder: order };
+  };
+  return { axis, axisById, events: events.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt)), schoolCurrent: current("school"), netzCurrent: current("netz") };
+}
+
+function getOneToOneProgressState_(userId, subjectId) {
+  const target = findOneToOneSubjectStudent_(userId);
+  if (!target) throw new Error("対象生徒が見つかりません");
+  if (!getOneToOneSubjects(target.userId).subjectIds.includes(subjectId)) throw new Error("未受講の科目です");
+  return readOneToOneProgressState_(target.userId, subjectId, target.grade, assertOneToOneProgressSheets_());
+}
+
+function selectOneToOneSchoolProgressUnits_(axis, currentOrder, toUnitId, correctionUnitIds) {
+  const byId = Object.create(null);
+  axis.forEach(unit => { byId[unit.unitId] = unit; });
+  if (Array.isArray(correctionUnitIds)) {
+    if (!correctionUnitIds.length || new Set(correctionUnitIds).size !== correctionUnitIds.length) throw new Error("訂正単元が不正です");
+    const selected = correctionUnitIds.map(unitId => byId[String(unitId)]).filter(Boolean).sort((a, b) => a.unitOrder - b.unitOrder);
+    if (selected.length !== correctionUnitIds.length) throw new Error("訂正単元が不正です");
+    return selected;
+  }
+  const targetUnit = byId[String(toUnitId || "")];
+  if (!targetUnit) throw new Error("到達単元が不正です");
+  if (targetUnit.unitOrder <= currentOrder) throw new Error("学校進捗は現在位置より先を指定してください");
+  return axis.filter(unit => unit.unitOrder > currentOrder && unit.unitOrder <= targetUnit.unitOrder);
+}
+
+function selectOneToOneNetzProgressUnits_(axis, unitIds) {
+  if (!Array.isArray(unitIds) || !unitIds.length || new Set(unitIds).size !== unitIds.length) throw new Error("実施単元を正しく選択してください");
+  const byId = Object.create(null);
+  axis.forEach(unit => { byId[unit.unitId] = unit; });
+  const selected = unitIds.map(unitId => byId[String(unitId)]).filter(Boolean).sort((a, b) => a.unitOrder - b.unitOrder);
+  if (selected.length !== unitIds.length) throw new Error("実施単元が不正です");
+  return selected;
+}
+
+function appendOneToOneProgressEvent_(data, session, progressType, lockAlreadyHeld) {
+  const userId = normalizeUserId(data.userId);
+  const subjectId = String(data.subjectId || "").trim();
+  const requestId = String(data.requestId || "").trim();
+  if (!requestId || requestId.length > 100) throw new Error("requestIdが不正です");
+  const target = findOneToOneSubjectStudent_(userId);
+  assertOneToOneProgressStudentAccess_(session, target, true);
+  if (!getOneToOneSubjects(userId).subjectIds.includes(subjectId)) throw new Error("未受講の科目です");
+  const lessonDate = normalizeLessonDate_(data.lessonDate);
+  // eslint-disable-next-line no-undef
+  const lock = LockService.getDocumentLock();
+  if (!lockAlreadyHeld && !lock.tryLock(10000)) throw new Error("別の進捗更新処理が実行中です");
+  try {
+    const sheets = assertOneToOneProgressSheets_();
+    const state = readOneToOneProgressState_(userId, subjectId, target.grade, sheets);
+    const duplicate = state.events.find(event => event.requestId === requestId);
+    if (duplicate) return { duplicate: true, eventId: duplicate.eventId };
+    let selected;
+    if (progressType === "school") {
+      const currentOrder = state.schoolCurrent ? state.schoolCurrent.unitOrder : 0;
+      selected = selectOneToOneSchoolProgressUnits_(state.axis, currentOrder, data.toUnitId, data.isCorrection === true ? data.unitIds : undefined);
+    } else {
+      selected = selectOneToOneNetzProgressUnits_(state.axis, data.unitIds);
+    }
+    // eslint-disable-next-line no-undef
+    const eventId = Utilities.getUuid();
+    const now = new Date();
+    const eventSheet = sheets[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME];
+    const unitSheet = sheets[ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME];
+    const eventRow = [eventId, formatUserIdForSheet(userId), subjectId, progressType, lessonDate, now, toSafeSheetText(session.userId), "ACTIVE", "", "", "", "", requestId];
+    const unitRows = selected.map(unit => [eventId, unit.unitId, unit.unitOrder, unit.textName, unit.chapter, unit.section, unit.unitName, unit.page]);
+    const eventRowIndex = eventSheet.getLastRow() + 1;
+    const unitRowIndex = unitSheet.getLastRow() + 1;
+    try {
+      eventSheet.getRange(eventRowIndex, 1, 1, eventRow.length).setValues([eventRow]);
+      unitSheet.getRange(unitRowIndex, 1, unitRows.length, ONE_TO_ONE_PROGRESS_UNIT_HEADERS.length).setValues(unitRows);
+    } catch (error) {
+      try {
+        eventSheet.getRange(eventRowIndex, 1, 1, eventRow.length).clearContent();
+        unitSheet.getRange(unitRowIndex, 1, unitRows.length, ONE_TO_ONE_PROGRESS_UNIT_HEADERS.length).clearContent();
+      } catch { throw new Error("進捗登録と復元に失敗しました"); }
+      throw error;
+    }
+    return { duplicate: false, eventId };
+  } finally { if (!lockAlreadyHeld && lock.hasLock()) lock.releaseLock(); }
+}
+
+function voidOneToOneProgressEvent_(data, session, replacementEventId, lockAlreadyHeld) {
+  if (session.role !== "admin") throw new Error("管理者権限が必要です");
+  const eventId = String(data.eventId || "").trim();
+  const reason = String(data.correctionReason || "").trim();
+  if (!eventId || !reason || reason.length > 500) throw new Error("訂正理由を入力してください");
+  // eslint-disable-next-line no-undef
+  const lock = LockService.getDocumentLock();
+  if (!lockAlreadyHeld && !lock.tryLock(10000)) throw new Error("別の進捗更新処理が実行中です");
+  try {
+    const sheet = assertOneToOneProgressSheets_()[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME];
+    const rows = sheet.getDataRange().getValues();
+    const index = rows.findIndex((row, rowIndex) => rowIndex > 0 && String(row[0]) === eventId);
+    if (index < 1 || String(rows[index][7]) !== "ACTIVE") throw new Error("有効な履歴が見つかりません");
+    sheet.getRange(index + 1, 8, 1, 5).setValues([["VOID", new Date(), toSafeSheetText(session.userId), reason, replacementEventId || ""]]);
+    return { eventId, replacementEventId: replacementEventId || "" };
+  } finally { if (!lockAlreadyHeld && lock.hasLock()) lock.releaseLock(); }
+}
+
+function serializeOneToOneProgressState_(state) {
+  const serializeDate = value => value instanceof Date && !isNaN(value.getTime()) ? value.toISOString() : value || "";
+  const history = type => state.events.filter(event => event.progressType === type).map(event => Object.assign({}, event, { lessonDate: serializeDate(event.lessonDate), recordedAt: serializeDate(event.recordedAt), correctedAt: serializeDate(event.correctedAt) }));
+  return { axis: state.axis, schoolCurrentUnitId: state.schoolCurrent && state.schoolCurrent.unitId || null, netzCurrentUnitId: state.netzCurrent && state.netzCurrent.unitId || null, schoolHistory: history("school"), netzHistory: history("netz") };
+}
+
+function handleOneToOneProgressAction_(data) {
+  const session = requireOneToOneProgressSession_(data.sessionToken, true);
+  if (data.action === "getOneToOneProgressMatrix") {
+    const school = String(data.school || "").trim();
+    const grade = normalizeGrade(data.grade);
+    const subjectId = String(data.subjectId || "").trim();
+    if (session.role !== "admin") {
+      const actor = session.userContexts.find(user => user.userId === session.userId);
+      if (!actor || !actor.assignedSchools.includes(school)) throw new Error("担当外校舎は閲覧できません");
+    }
+    const subjectState = buildOneToOneSubjectStateMap_(assertOneToOneSubjectSheet_().getDataRange().getValues()).states;
+    const sheets = assertOneToOneProgressSheets_();
+    const students = session.userContexts.filter(user => user.role === "student" && user.enabled && !user.deleted && user.school === school && normalizeGrade(user.grade) === grade && (subjectState[user.userId] || []).includes(subjectId)).map(user => {
+      const state = readOneToOneProgressState_(user.userId, subjectId, user.grade, sheets);
+      return { userId: user.userId, name: user.name, nameKana: user.nameKana, school: user.school, grade: user.grade, schoolCurrentUnitId: state.schoolCurrent && state.schoolCurrent.unitId || null, netzCurrentUnitId: state.netzCurrent && state.netzCurrent.unitId || null };
+    }).sort(compareStudentsByKana_);
+    return { result: "success", axis: getOneToOneSchoolUnitAxis_(grade, subjectId), students, sessionExpiresAt: session.sessionExpiresAt };
+  }
+  const userId = normalizeUserId(data.userId);
+  const subjectId = String(data.subjectId || "").trim();
+  const target = findOneToOneSubjectStudent_(userId);
+  assertOneToOneProgressStudentAccess_(session, target, data.action !== "getOneToOneProgressDetail");
+  if (data.action === "getOneToOneProgressDetail") return Object.assign({ result: "success", userId, subjectId, sessionExpiresAt: session.sessionExpiresAt }, serializeOneToOneProgressState_(getOneToOneProgressState_(userId, subjectId)));
+  if (data.action === "addOneToOneSchoolProgress") return Object.assign({ result: "success" }, appendOneToOneProgressEvent_(data, session, "school"));
+  if (data.action === "addOneToOneNetzProgress") return Object.assign({ result: "success" }, appendOneToOneProgressEvent_(data, session, "netz"));
+  if (data.action === "voidOneToOneProgressEvent") return Object.assign({ result: "success" }, voidOneToOneProgressEvent_(data, session, ""));
+  if (data.action === "correctOneToOneProgressEvent") {
+    if (session.role !== "admin") throw new Error("管理者権限が必要です");
+    // eslint-disable-next-line no-undef
+    const lock = LockService.getDocumentLock();
+    if (!lock.tryLock(10000)) throw new Error("別の進捗更新処理が実行中です");
+    try {
+      const sheet = assertOneToOneProgressSheets_()[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME];
+      const rows = sheet.getDataRange().getValues();
+      const rowIndex = rows.findIndex((row, index) => index > 0 && String(row[0]) === String(data.eventId || "") && String(row[7]) === "ACTIVE");
+      const reason = String(data.correctionReason || "").trim();
+      if (rowIndex < 1 || !reason) throw new Error("有効な履歴と訂正理由を指定してください");
+      const previous = rows[rowIndex].slice(7, 12);
+      sheet.getRange(rowIndex + 1, 8, 1, 5).setValues([["VOID", new Date(), toSafeSheetText(session.userId), reason, ""]]);
+      try {
+        const replacementData = Object.assign({}, data.replacement || {}, { userId: normalizeUserId(rows[rowIndex][1]), subjectId: String(rows[rowIndex][2]) });
+        const replacement = appendOneToOneProgressEvent_(replacementData, session, String(rows[rowIndex][3]), true);
+        sheet.getRange(rowIndex + 1, 12).setValue(replacement.eventId);
+        return { result: "success", eventId: String(data.eventId), replacementEventId: replacement.eventId };
+      } catch (error) {
+        sheet.getRange(rowIndex + 1, 8, 1, 5).setValues([previous]);
+        throw error;
+      }
+    } finally { if (lock.hasLock()) lock.releaseLock(); }
+  }
+  throw new Error("actionが不正です");
+}
+
 function normalizeKana_(value) {
   return String(value || "").normalize("NFKC").trim().replace(/\s+/g, "\u3000")
     .replace(/[ぁ-ゖ]/g, character => String.fromCharCode(character.charCodeAt(0) + 0x60));
@@ -2223,6 +2475,16 @@ function doPost(e) {
     }
   }
 
+  const oneToOneProgressActions = ["getOneToOneProgressMatrix", "getOneToOneProgressDetail", "addOneToOneSchoolProgress", "addOneToOneNetzProgress", "correctOneToOneProgressEvent", "voidOneToOneProgressEvent"];
+  if (oneToOneProgressActions.includes(data.action)) {
+    try {
+      return responseJSON(handleOneToOneProgressAction_(data));
+    } catch (error) {
+      const authorizationError = isManagementAuthorizationError(error) || /担当外|利用権限/.test(String(error && error.message || ""));
+      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "この1対1進捗を利用する権限がありません" : String(error && error.message || "入力内容が不正です") });
+    }
+  }
+
   const campActions = ["getCampAvailableYears", "getCampParticipants", "updateCampParticipants", "getCampTrainingInput", "saveCampTrainingInput", "getCampTrainingRanking"];
   if (campActions.includes(data.action)) {
     try {
@@ -2267,7 +2529,7 @@ function doPost(e) {
           role: currentRole,
           assignedSchools: findUserRecord(inputId).assignedSchools
         };
-        if (["admin", "head-teacher"].includes(currentRole)) {
+        if (["admin", "head-teacher", "teacher"].includes(currentRole)) {
           try {
             const managementSession = createManagementSession(inputId, currentRole);
             loginResult.sessionToken = managementSession.sessionToken;
