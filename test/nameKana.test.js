@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { isValidNameKana, normalizeNameKana } from '../src/utils/nameKana.js';
-import { compareStudentAccounts } from '../src/utils/studentAccountOrdering.js';
+import { compareStudentAccounts, compareStudentsByKana } from '../src/utils/studentAccountOrdering.js';
 
 const cases = [
   ['ヤマダ タロウ', 'ヤマダ　タロウ'],
@@ -55,5 +55,46 @@ test('既存半角スペースと新しい全角スペースはフリガナ順�
   ), 0);
 
   const gasSource = fs.readFileSync(new URL('../gas/コード.js', import.meta.url), 'utf8');
-  assert.match(gasSource, /normalizeKana_\(left\.nameKana\)\.localeCompare\(normalizeKana_\(right\.nameKana\), "ja"\)/);
+  assert.match(gasSource, /function compareStudentsByKana_[\s\S]*?normalizeKana_\(left\.nameKana\)[\s\S]*?normalizeKana_\(right\.nameKana\)/);
+});
+
+test('生徒は新旧スペース形式を正規化してカナ五十音順になる', () => {
+  const students = [
+    { userId: '0004', name: '山田太郎', nameKana: 'ヤマダ　タロウ' },
+    { userId: '0001', name: '青木太郎', nameKana: 'アオキ タロウ' },
+    { userId: '0003', name: '佐藤次郎', nameKana: 'サトウ　ジロウ' },
+    { userId: '0002', name: '伊藤花子', nameKana: 'イトウ ハナコ' }
+  ];
+  assert.deepEqual(students.sort(compareStudentsByKana).map(student => student.userId), ['0001', '0002', '0003', '0004']);
+});
+
+test('カナ未登録は後方へ置き、同一カナは氏名とuserIdで安定ソートする', () => {
+  const students = [
+    { userId: '0003', name: '未登録A', nameKana: '' },
+    { userId: '0002', name: '佐藤花子', nameKana: 'サトウ　ハナコ' },
+    { userId: '0001', name: '佐藤花子', nameKana: 'サトウ ハナコ' },
+    { userId: '0004', name: '未登録B', nameKana: null }
+  ];
+  assert.deepEqual(students.sort(compareStudentsByKana).map(student => student.userId), ['0001', '0002', '0003', '0004']);
+});
+
+test('校舎グループを維持した生徒一覧はグループ内でカナ順になる', () => {
+  const students = [
+    { userId: '0002', school: '栗林', grade: '中１', name: '山田', nameKana: 'ヤマダ' },
+    { userId: '0003', school: '木太南', grade: '中１', name: '伊藤', nameKana: 'イトウ' },
+    { userId: '0001', school: '栗林', grade: '中１', name: '青木', nameKana: 'アオキ' }
+  ];
+  assert.deepEqual(students.sort(compareStudentAccounts).map(student => student.userId), ['0001', '0002', '0003']);
+});
+
+test('対象GASレスポンスはnameKanaを返し、業務グループ内で共通比較する', () => {
+  const source = fs.readFileSync(new URL('../gas/コード.js', import.meta.url), 'utf8');
+  assert.match(source, /function compareStudentsByKana_/);
+  assert.match(source, /function compareStudentsBySchoolGradeAndKana_/);
+  assert.match(source, /getSukimakunPermissionMatrix[\s\S]*?nameKana:[\s\S]*?sort\(compareStudentsByKana_\)/);
+  for (const action of ['getTestReviewMatrix', 'getSchoolProgressMatrix', 'getKoToreProgressMatrix', 'getAppUsageMatrix']) {
+    const actionSource = source.slice(source.indexOf(`data.action === "${action}"`));
+    assert.match(actionSource, /nameKana:/, `${action} must return nameKana`);
+    assert.match(actionSource, /sort\(compareStudentsBy/, `${action} must sort students`);
+  }
 });

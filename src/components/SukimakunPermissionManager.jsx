@@ -3,6 +3,7 @@ import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
 import { getSukimakunPresetContentIds, replaceStudentContentIds } from '../utils/sukimakunPermissions.js';
+import { compareStudentsByKana } from '../utils/studentAccountOrdering.js';
 
 const READ_API_TIMEOUT_MS = 30000;
 const WRITE_API_TIMEOUT_MS = 15000;
@@ -44,11 +45,11 @@ export default function SukimakunPermissionManager({
 
   const filteredStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return students;
-    return students.filter(student =>
+    const matches = !normalizedQuery ? students : students.filter(student =>
       String(student.name || '').toLowerCase().includes(normalizedQuery) ||
       String(student.userId || '').toLowerCase().includes(normalizedQuery)
     );
+    return [...matches].sort(compareStudentsByKana);
   }, [students, query]);
 
   const postAction = async (action, payload = {}, timeout = WRITE_API_TIMEOUT_MS) => {

@@ -1305,7 +1305,7 @@ function getUserAuthContexts_() {
     return rows.slice(1).map((row, index) => ({
       rowIndex: index + 2, userId: normalizeUserId(row[1]), password: row[9], isInitial: row[8],
       passwordUpdatedAt: row[7], role: String(row[10] || "").trim(), enabled: true, deleted: false,
-      token: row[11], tokenExpire: row[12], school: row[0], name: row[4], grade: row[5], assignedSchools: row[0] ? [row[0]] : []
+      token: row[11], tokenExpire: row[12], school: row[0], name: row[4], nameKana: row[2], grade: row[5], assignedSchools: row[0] ? [row[0]] : []
     }));
   }
 }
@@ -1313,7 +1313,7 @@ function getUserAuthContexts_() {
 function getLegacyCompatibleUserRows_() {
   return [Array(13).fill("")].concat(getUserAuthContexts_().filter(user => user.enabled && !user.deleted).map(user => {
     const row = Array(13).fill("");
-    row[0] = user.school; row[1] = user.userId; row[4] = user.name; row[5] = user.grade;
+    row[0] = user.school; row[1] = user.userId; row[2] = user.nameKana || ""; row[4] = user.name; row[5] = user.grade;
     row[7] = user.passwordUpdatedAt; row[8] = user.isInitial; row[9] = user.password;
     row[10] = user.role; row[11] = user.token; row[12] = user.tokenExpire;
     return row;
@@ -1534,6 +1534,26 @@ function initializeExistingStudentSukimakunPermissions() {
 function normalizeKana_(value) {
   return String(value || "").normalize("NFKC").trim().replace(/\s+/g, "\u3000")
     .replace(/[ぁ-ゖ]/g, character => String.fromCharCode(character.charCodeAt(0) + 0x60));
+}
+
+function compareStudentsByKana_(left, right) {
+  const leftKana = normalizeKana_(left.nameKana);
+  const rightKana = normalizeKana_(right.nameKana);
+  if (!leftKana && rightKana) return 1;
+  if (leftKana && !rightKana) return -1;
+  return leftKana.localeCompare(rightKana, "ja")
+    || String(left.name || "").localeCompare(String(right.name || ""), "ja")
+    || normalizeUserId(left.userId || left.studentId).localeCompare(normalizeUserId(right.userId || right.studentId));
+}
+
+function compareStudentsBySchoolAndKana_(left, right) {
+  return String(left.school || "").localeCompare(String(right.school || ""), "ja") || compareStudentsByKana_(left, right);
+}
+
+function compareStudentsBySchoolGradeAndKana_(left, right) {
+  return String(left.school || "").localeCompare(String(right.school || ""), "ja")
+    || normalizeGrade(left.grade).localeCompare(normalizeGrade(right.grade), "ja")
+    || compareStudentsByKana_(left, right);
 }
 
 function validateName_(value, label) {
@@ -1809,7 +1829,7 @@ function validateCampCount_(value) {
 function getActiveCampStudents_(userContexts) {
   const students = (userContexts || getUserAuthContexts_()).filter(user => user.role === "student" && user.enabled && !user.deleted)
     .map(user => ({ studentId: user.userId, name: user.name, nameKana: user.nameKana || "", school: user.school, grade: user.grade }))
-    .sort((left, right) => String(left.school).localeCompare(String(right.school), "ja") || normalizeKana_(left.nameKana).localeCompare(normalizeKana_(right.nameKana), "ja") || left.studentId.localeCompare(right.studentId));
+    .sort(compareStudentsBySchoolAndKana_);
   if (new Set(students.map(student => student.studentId)).size !== students.length) throw new Error("生徒マスターに重複した生徒コードがあります");
   return students;
 }
@@ -2177,13 +2197,14 @@ function doPost(e) {
           return {
             userId,
             name: String(row[4] || "").trim(),
+            nameKana: String(row[2] || "").trim(),
             school: String(row[0] || "").trim(),
             grade: String(row[5] || "").trim(),
             allowedContentIds: permissionState.allowedContentIds,
             permissionsInitialized: permissionState.permissionsInitialized,
             permissionWarnings: permissionState.warnings
           };
-        });
+        }).sort(compareStudentsByKana_);
 
       return responseJSON({
         result: "success",
@@ -2451,8 +2472,9 @@ function doPost(e) {
         school: String(row[0] || "").trim(),
         userId: String(row[1] || "").replace(/^'/, "").trim(), 
         name: String(row[4] || "").trim(),                     
+        nameKana: String(row[2] || "").trim(),
         grade: String(row[5] || "").trim()                     
-      }));
+      })).sort(compareStudentsBySchoolGradeAndKana_);
 
       const idxID = reviewHeaders.indexOf("生徒番号を入力してください");
       const idxTest = reviewHeaders.indexOf("テストを選んでください");
@@ -2498,6 +2520,7 @@ function doPost(e) {
         const resultData = {
           school: student.school,
           name: student.name,
+          nameKana: student.nameKana,
           userId: student.userId,
           grade: student.grade,
           isSubmitted: studentReviews.length > 0, 
@@ -2675,8 +2698,9 @@ function doPost(e) {
       }).map(row => ({
         school: String(row[0] || "").trim(), 
         userId: String(row[1] || "").trim(), 
-        name: String(row[4] || "").trim()    
-      }));
+        name: String(row[4] || "").trim(),
+        nameKana: String(row[2] || "").trim()
+      })).sort(compareStudentsBySchoolAndKana_);
 
       const matrix = studentList.map(student => {
         const studentHistoryText = progressRows.slice(1)
@@ -2729,8 +2753,9 @@ function doPost(e) {
       }).map(row => ({ 
         school: String(row[0] || "").trim(),
         userId: String(row[1] || "").replace(/^'/, "").trim(),
-        name: String(row[4] || "").trim()
-      }));
+        name: String(row[4] || "").trim(),
+        nameKana: String(row[2] || "").trim()
+      })).sort(compareStudentsBySchoolAndKana_);
 
       const filteredProgress = progressRows.slice(1).filter(p => {
         const pSchool  = String(p[1] || "").trim(); 
@@ -2751,6 +2776,7 @@ function doPost(e) {
         return {
           school: student.school,
           name: student.name,
+          nameKana: student.nameKana,
           userId: student.userId,
           completions: unitPages.map(pageStr => {
             if (!pageStr) return false;
@@ -2782,11 +2808,14 @@ function doPost(e) {
         const sGrade = String(row[5]).trim();
         const sRole = String(row[10]).trim().toLowerCase();
         const sName = String(row[4]).trim();
+        const sUserId = normalizeUserId(row[1]);
 
         if (sSchool === targetSchool && targetGrades.includes(sGrade) && sRole === "student") {
           studentMap[sName] = {
             school: sSchool,
+            userId: sUserId,
             name: sName,
+            nameKana: String(row[2] || "").trim(),
             grade: sGrade,
             usageData: {} 
           };
@@ -2837,7 +2866,7 @@ function doPost(e) {
       return responseJSON({
         result: "success",
         apps: appNames,
-        students: Object.values(studentMap)
+        students: Object.values(studentMap).sort(compareStudentsBySchoolGradeAndKana_)
       });
     } catch (e) {
       return responseJSON({ result: "error", message: "GASエラー: " + e.toString() });
@@ -2883,8 +2912,9 @@ function doPost(e) {
         school: String(row[0] || "").trim(),
         userId: String(row[1] || "").replace(/^'/, "").trim(), 
         name: String(row[4] || "").trim(),                     
+        nameKana: String(row[2] || "").trim(),
         grade: String(row[5] || "").trim()                     
-      }));
+      })).sort(compareStudentsBySchoolGradeAndKana_);
 
       return responseJSON({ result: "success", accounts: accounts });
     } catch (e) {
