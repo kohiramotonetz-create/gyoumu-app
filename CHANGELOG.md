@@ -12,6 +12,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - 含まれるIssue:
   - Issue #007 Version表示共通化
   - Issue #010 合宿参加者設定・合宿特訓データ入力・ランキング
+  - Issue #011 前置詞テストのコンテンツ権限追加
 - 主な変更: `version.js`をVersion番号の正本とし、共通`VersionLabel`からログイン画面、生徒画面、講師・管理者画面の右下へ`Version 4.2.1`を表示する構造へ統一。
 - Frontend影響: Version表示のみ。既存画面、認証、権限、APIの仕様変更なし。
 - GAS影響: なし。
@@ -47,6 +48,17 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### Issue #011 前置詞テストのコンテンツ権限追加
+
+- 日付: 2026-08-26
+- 状態: GASコード修正、ローカル静的検証、ログイン・権限GASへのclasp pushを実施。セットアップ関数実行、Webアプリ再デプロイ、本番確認は未実施。
+- 原因: `student-app`には`preposition_test`が追加済みだが、gyoumu-app GASの初期登録・不足コンテンツ同期用`DEFAULT_SUKIMAKUN_CONTENTS`が既存24件のままで、`setupSukimakunPermissionSheets`を再実行しても追加対象にならなかった。
+- 変更内容: `preposition_test`（表示名`前置詞テスト`、category=`general`、schoolType=`all`、subject=`english`、enabled=`true`、sortOrder=`25`）をGAS初期定義へ非破壊的に追加。既存API、権限保存形式、既存コンテンツ行は変更しない。
+- データ／シート影響: 対象GASをclasp pushした後、`student-app-db`に紐づくGASエディタで`setupSukimakunPermissionSheets`を手動実行すると、「スキマ君コンテンツ」へ不足行だけが追記される。既存生徒の初期化済み権限へは自動追加されず、管理画面から生徒ごとに許可を保存する必要がある。
+- student-app影響: Version 4.3.0で実装・main反映・本番デプロイ済みとの利用者報告。student-appコード自体は今回未変更。
+- GAS: 2026-08-26に`gas/.clasp.json`で指定された既存プロジェクトへclasp push成功。Webアプリ再デプロイは未実施（手動セットアップ関数の実行には不要）。
+- Version: gyoumu-appのVersion表示は変更なし（Version 4.2.1）。
 
 ### Issue #010 合宿参加者設定・合宿特訓データ入力・ランキング
 

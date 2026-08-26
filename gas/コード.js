@@ -78,7 +78,8 @@ const DEFAULT_SUKIMAKUN_CONTENTS = [
   ["chemistry_formulas", "化学式・イオン式", "general", "all", "science", true, 21],
   ["camp_kagawa_kanji", "香川県 覚えるべき漢字", "camp", "all", "japanese", true, 22],
   ["camp_science_qa", "理科 一問一答", "camp", "all", "science", true, 23],
-  ["camp_social_qa", "社会 一問一答", "camp", "all", "social", true, 24]
+  ["camp_social_qa", "社会 一問一答", "camp", "all", "social", true, 24],
+  ["preposition_test", "前置詞テスト", "general", "all", "english", true, 25]
 ];
 
 function normalizeUserId(value) {
