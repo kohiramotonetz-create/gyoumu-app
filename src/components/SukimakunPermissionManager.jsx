@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
+import { getSukimakunPresetContentIds, replaceStudentContentIds } from '../utils/sukimakunPermissions.js';
 
 const READ_API_TIMEOUT_MS = 30000;
 const WRITE_API_TIMEOUT_MS = 15000;
@@ -183,6 +184,15 @@ export default function SukimakunPermissionManager({
     setRowStatusByStudentId(current => ({ ...current, [studentId]: { type: '', message: '' } }));
   };
 
+  const applyModePreset = (studentId, modeKey, modeLabel) => {
+    const presetContentIds = getSukimakunPresetContentIds(activeContents, modeKey);
+    setEditingByStudentId(current => replaceStudentContentIds(current, studentId, presetContentIds));
+    setRowStatusByStudentId(current => ({
+      ...current,
+      [studentId]: { type: 'preset', message: `${modeLabel}を適用しました。内容を確認して「保存」を押してください。` }
+    }));
+  };
+
   const savePermissions = async student => {
     const studentId = student.userId;
     const editingContentIds = editingByStudentId[studentId] || [];
@@ -272,6 +282,7 @@ export default function SukimakunPermissionManager({
                 <tr>
                   <th style={{ ...headerCellStyle, left: 0, zIndex: 30, minWidth: `${NAME_COLUMN_WIDTH}px`, width: `${NAME_COLUMN_WIDTH}px`, textAlign: 'left' }}>生徒名</th>
                   <th style={{ ...headerCellStyle, left: `${NAME_COLUMN_WIDTH}px`, zIndex: 30, minWidth: `${ID_COLUMN_WIDTH}px`, width: `${ID_COLUMN_WIDTH}px` }}>生徒ID</th>
+                  <th style={{ ...headerCellStyle, minWidth: '190px' }}>モード一括設定</th>
                   {activeContents.map(content => (
                     <th key={content.contentId} title={content.displayName} style={headerCellStyle}>{content.displayName}</th>
                   ))}
@@ -295,6 +306,13 @@ export default function SukimakunPermissionManager({
                       <td style={{ position: 'sticky', left: `${NAME_COLUMN_WIDTH}px`, zIndex: 5, width: `${ID_COLUMN_WIDTH}px`, minWidth: `${ID_COLUMN_WIDTH}px`, padding: '8px', borderRight: '1px solid #d1d5db', borderBottom: '1px solid #e5e7eb', background: rowBackground, color: '#64748b', fontSize: '12px', textAlign: 'center', boxSizing: 'border-box' }}>
                         {student.userId}
                       </td>
+                      <td style={{ minWidth: '190px', padding: '7px 8px', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                          <button type="button" onClick={() => applyModePreset(student.userId, 'juniorHighMode', '中学生モード')} disabled={isSaving || sessionExpired} style={{ ...styles.doneBtn, padding: '6px 9px', fontSize: '12px' }}>中学生モード</button>
+                          <button type="button" onClick={() => applyModePreset(student.userId, 'highSchoolMode', '高校生モード')} disabled={isSaving || sessionExpired} style={{ ...styles.doneBtn, padding: '6px 9px', fontSize: '12px' }}>高校生モード</button>
+                        </div>
+                        {rowStatus.type === 'preset' && <div role="status" style={{ marginTop: '4px', color: '#b45309', fontSize: '11px', lineHeight: 1.35 }}>{rowStatus.message}</div>}
+                      </td>
                       {activeContents.map(content => (
                         <td key={content.contentId} style={{ minWidth: '132px', padding: '8px', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
                           <input
@@ -312,7 +330,7 @@ export default function SukimakunPermissionManager({
                           {isSaving ? '保存中...' : '保存'}
                         </button>
                         {isDirty && !isSaving && <div style={{ marginTop: '3px', color: '#b45309', fontSize: '11px', fontWeight: 'bold' }}>未保存の変更</div>}
-                        {rowStatus.message && !isDirty && (
+                        {rowStatus.message && rowStatus.type !== 'preset' && !isDirty && (
                           <div role="status" style={{ marginTop: '3px', color: rowStatus.type === 'error' ? '#b91c1c' : rowStatus.type === 'success' ? '#166534' : '#475569', fontSize: '11px' }}>
                             {rowStatus.message}
                           </div>

@@ -23,7 +23,9 @@ const MANAGEMENT_SESSION_DURATION_MS = 15 * 60 * 1000;
 const SUKIMAKUN_CONTENT_SHEET_NAME = "スキマ君コンテンツ";
 const SUKIMAKUN_PERMISSION_SHEET_NAME = "スキマ君利用権限";
 const MANAGEMENT_SESSION_SHEET_NAME = "管理セッション";
-const SUKIMAKUN_CONTENT_HEADERS = ["contentId", "displayName", "category", "schoolType", "subject", "enabled", "sortOrder"];
+const LEGACY_SUKIMAKUN_CONTENT_HEADERS = ["contentId", "displayName", "enabled", "sortOrder"];
+const SEVEN_COLUMN_SUKIMAKUN_CONTENT_HEADERS = ["contentId", "displayName", "category", "schoolType", "subject", "enabled", "sortOrder"];
+const SUKIMAKUN_CONTENT_HEADERS = SEVEN_COLUMN_SUKIMAKUN_CONTENT_HEADERS.concat(["中学生モード", "高校生モード"]);
 const SUKIMAKUN_PERMISSION_HEADERS = ["userId", "contentId", "enabled", "updatedAt", "updatedBy"];
 const MANAGEMENT_SESSION_HEADERS = ["sessionToken", "userId", "role", "expiresAt", "createdAt"];
 const CAMP_PARTICIPANT_SHEET_NAME = "合宿参加者";
@@ -80,7 +82,7 @@ const DEFAULT_SUKIMAKUN_CONTENTS = [
   ["camp_science_qa", "理科 一問一答", "camp", "all", "science", true, 23],
   ["camp_social_qa", "社会 一問一答", "camp", "all", "social", true, 24],
   ["preposition_test", "前置詞テスト", "general", "all", "english", true, 25]
-];
+].map(row => row.concat([false, false]));
 
 function normalizeUserId(value) {
   const normalized = String(value || "").replace(/^'/, "").trim();
@@ -1049,36 +1051,44 @@ function ensureSheetWithHeaders(spreadsheet, sheetName, headers, result) {
   return sheet;
 }
 
-function migrateLegacySukimakunContentSheet(spreadsheet, result) {
+function migrateSukimakunContentSheet(spreadsheet, result) {
   const sheet = spreadsheet.getSheetByName(SUKIMAKUN_CONTENT_SHEET_NAME);
   if (!sheet || sheet.getLastRow() === 0) return;
-  const legacyHeaders = ["contentId", "displayName", "enabled", "sortOrder"];
-  const actualHeaders = sheet.getRange(1, 1, 1, legacyHeaders.length).getValues()[0].map(String);
-  if (actualHeaders.join("\t") !== legacyHeaders.join("\t")) return;
-  if (sheet.getLastColumn() > legacyHeaders.length) {
-    result.warnings.push("Legacy content sheet has unexpected extra columns; migration was skipped");
+
+  const columnCount = sheet.getLastColumn();
+  const actualHeaders = sheet.getRange(1, 1, 1, columnCount).getValues()[0].map(String);
+  if (columnCount === SUKIMAKUN_CONTENT_HEADERS.length && actualHeaders.join("\t") === SUKIMAKUN_CONTENT_HEADERS.join("\t")) return;
+
+  if (columnCount === SEVEN_COLUMN_SUKIMAKUN_CONTENT_HEADERS.length && actualHeaders.join("\t") === SEVEN_COLUMN_SUKIMAKUN_CONTENT_HEADERS.join("\t")) {
+    sheet.getRange(1, 8, 1, 2).setValues([["中学生モード", "高校生モード"]]);
+    result.expandedSevenColumnContentSheet = true;
     return;
   }
 
-  const legacyRows = sheet.getRange(1, 1, sheet.getLastRow(), legacyHeaders.length).getValues();
-  const migratedRows = [SUKIMAKUN_CONTENT_HEADERS].concat(legacyRows.slice(1).map(row => [
-    row[0], row[1], "general", "all", "other", row[2], row[3]
-  ]));
-  sheet.getRange(1, 1, migratedRows.length, SUKIMAKUN_CONTENT_HEADERS.length).setValues(migratedRows);
-  result.migratedLegacyContentSheet = true;
+  if (columnCount === LEGACY_SUKIMAKUN_CONTENT_HEADERS.length && actualHeaders.join("\t") === LEGACY_SUKIMAKUN_CONTENT_HEADERS.join("\t")) {
+    const legacyRows = sheet.getRange(1, 1, sheet.getLastRow(), LEGACY_SUKIMAKUN_CONTENT_HEADERS.length).getValues();
+    const migratedRows = [SUKIMAKUN_CONTENT_HEADERS].concat(legacyRows.slice(1).map(row => [
+      row[0], row[1], "general", "all", "other", row[2], row[3], false, false
+    ]));
+    sheet.getRange(1, 1, migratedRows.length, SUKIMAKUN_CONTENT_HEADERS.length).setValues(migratedRows);
+    result.migratedLegacyContentSheet = true;
+    return;
+  }
+
+  result.warnings.push("Unsupported content sheet headers; migration was skipped");
 }
 
 function setupSukimakunPermissionSheets() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const result = { createdSheets: [], initializedHeaders: [], migratedLegacyContentSheet: false, addedContents: 0, skippedContents: 0, warnings: [] };
-  migrateLegacySukimakunContentSheet(spreadsheet, result);
+  const result = { createdSheets: [], initializedHeaders: [], migratedLegacyContentSheet: false, expandedSevenColumnContentSheet: false, addedContents: 0, skippedContents: 0, warnings: [] };
+  migrateSukimakunContentSheet(spreadsheet, result);
   const contentSheet = ensureSheetWithHeaders(spreadsheet, SUKIMAKUN_CONTENT_SHEET_NAME, SUKIMAKUN_CONTENT_HEADERS, result);
   ensureSheetWithHeaders(spreadsheet, SUKIMAKUN_PERMISSION_SHEET_NAME, SUKIMAKUN_PERMISSION_HEADERS, result);
   ensureSheetWithHeaders(spreadsheet, MANAGEMENT_SESSION_SHEET_NAME, MANAGEMENT_SESSION_HEADERS, result);
 
   const rows = contentSheet.getDataRange().getValues();
-  const actualContentHeaders = rows.length > 0 ? rows[0].slice(0, SUKIMAKUN_CONTENT_HEADERS.length).map(String) : [];
-  if (actualContentHeaders.join("\t") !== SUKIMAKUN_CONTENT_HEADERS.join("\t")) {
+  const actualContentHeaders = rows.length > 0 ? rows[0].map(String) : [];
+  if (contentSheet.getLastColumn() !== SUKIMAKUN_CONTENT_HEADERS.length || actualContentHeaders.join("\t") !== SUKIMAKUN_CONTENT_HEADERS.join("\t")) {
     result.warnings.push("Content initialization was skipped because the header could not be safely migrated");
     result.createdCount = result.createdSheets.length;
     result.warningCount = result.warnings.length;
@@ -1121,8 +1131,8 @@ function setupSukimakunPermissionSheets() {
 function getSukimakunContentMaster() {
   const sheet = getRequiredSheet(SUKIMAKUN_CONTENT_SHEET_NAME);
   const rows = sheet.getDataRange().getValues();
-  const headers = rows.length > 0 ? rows[0].slice(0, SUKIMAKUN_CONTENT_HEADERS.length).map(String) : [];
-  if (headers.join("\t") !== SUKIMAKUN_CONTENT_HEADERS.join("\t")) {
+  const headers = rows.length > 0 ? rows[0].map(String) : [];
+  if (sheet.getLastColumn() !== SUKIMAKUN_CONTENT_HEADERS.length || headers.join("\t") !== SUKIMAKUN_CONTENT_HEADERS.join("\t")) {
     throw new Error("スキマ君コンテンツのヘッダーが不正です");
   }
   const contentMap = Object.create(null);
@@ -1145,6 +1155,8 @@ function getSukimakunContentMaster() {
       subject: String(rows[i][4] || "").trim(),
       enabled: isEnabledValue(rows[i][5]),
       sortOrder: Number(rawSortOrder),
+      juniorHighMode: isEnabledValue(rows[i][7]),
+      highSchoolMode: isEnabledValue(rows[i][8]),
       sourceRowIndex: i
     };
     contentMap[contentId] = content;
@@ -1158,7 +1170,9 @@ function getSukimakunContentMaster() {
     schoolType: content.schoolType,
     subject: content.subject,
     enabled: content.enabled,
-    sortOrder: content.sortOrder
+    sortOrder: content.sortOrder,
+    juniorHighMode: content.juniorHighMode,
+    highSchoolMode: content.highSchoolMode
   }));
   const publicContentMap = Object.create(null);
   publicContents.forEach(content => { publicContentMap[content.contentId] = content; });

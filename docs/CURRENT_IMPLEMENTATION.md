@@ -215,9 +215,9 @@ Googleスプレッドシートの実カラム、型、制約、追記・更新�
 ## 18. Issue-001 スキマ君利用コンテンツ制御
 
 - GASに、初回セットアップ・不足コンテンツ同期専用の25件の初期コンテンツ定義が1か所ある。通常のAPI応答・権限判定には使用しない。
-- 「スキマ君コンテンツ」は`contentId`、`displayName`、`category`、`schoolType`、`subject`、`enabled`、`sortOrder`の7列を持ち、実行時の唯一のコンテンツ情報源である。
+- 「スキマ君コンテンツ」は`contentId`、`displayName`、`category`、`schoolType`、`subject`、`enabled`、`sortOrder`、`中学生モード`、`高校生モード`の9列を持ち、実行時の唯一のコンテンツ情報源である。APIでは末尾2列を`juniorHighMode`、`highSchoolMode`として返す。
 - 共通読取処理は空の`contentId`、重複`contentId`、数値化できない`sortOrder`をエラーとし、`enabled`をboolean化して`sortOrder`とシート行順で安定ソートする。
-- 手動実行用の`setupSukimakunPermissionSheets`が、「スキマ君コンテンツ」「スキマ君利用権限」「管理セッション」の3シートを初期化し、初期定義にだけ存在するcontentIdを追加する。旧4列コンテンツシートは既存の有効状態と表示順を新しい列へ移して7列化する。自動実行はされない。
+- 手動実行用の`setupSukimakunPermissionSheets`が、「スキマ君コンテンツ」「スキマ君利用権限」「管理セッション」の3シートを初期化し、初期定義にだけ存在するcontentIdを追加する。正常な7列シートは既存値を維持して末尾2列を追加し、旧4列シートは既存の有効状態と表示順を維持して9列化する。既存9列のモード値は同期で上書きしない。自動実行はされない。
 - 手動移行用の`initializeExistingStudentSukimakunPermissions`が、既存studentへ有効な全コンテンツを初期許可する。
 - ユーザーマスター上の現在roleがadminの場合だけ、`login`成功応答に15分有効の`sessionToken`と`sessionExpiresAt`を追加し、管理action利用時に期限を延長する。admin以外は管理セッションシートへ依存しない。
 - `getSukimakunPermissionMatrix`と`updateSukimakunPermissions`は、GAS側で現在のroleがadminであることを再確認する。
@@ -226,5 +226,5 @@ Googleスプレッドシートの実カラム、型、制約、追記・更新�
 - `login`もstudentの認証成功時に`allowedContentIds`と`permissionsInitialized`を追加し、スキマ君の直接ログインでも同じ権限情報を返す。
 - 新規student作成時は全有効コンテンツを初期許可し、権限初期化に失敗した場合は作成したユーザー行を削除してエラーを返す。
 - Reactは管理セッションをメモリstateだけに保持し、logout時にGASへ失効要求を送る。
-- admin専用の「スキマ君利用設定」画面で、校舎・学年別の生徒取得と1名ずつの権限更新ができる。チェックボックスはAPIがマスターから返す`contents`を使って動的生成する。
+- admin専用の「スキマ君利用設定」画面で、校舎・学年別の生徒取得と1名ずつの権限更新ができる。チェックボックスはAPIがマスターから返す`contents`を使って動的生成する。生徒行の中学生・高校生モードはマスターのモード値から編集stateを置き換える未保存プリセットで、最終保存は従来どおり`allowedContentIds`を使う。
 - スキマ君本体側の権限強制は本リポジトリの実装対象外であり、未実装・未確認である。

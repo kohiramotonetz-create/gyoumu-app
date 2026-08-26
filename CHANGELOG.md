@@ -13,6 +13,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - Issue #007 Version表示共通化
   - Issue #010 合宿参加者設定・合宿特訓データ入力・ランキング
   - Issue #011 前置詞テストのコンテンツ権限追加
+  - Issue #012 スキマ君利用設定 中学生・高校生モード一括変更
 - 主な変更: `version.js`をVersion番号の正本とし、共通`VersionLabel`からログイン画面、生徒画面、講師・管理者画面の右下へ`Version 4.2.1`を表示する構造へ統一。
 - Frontend影響: Version表示のみ。既存画面、認証、権限、APIの仕様変更なし。
 - GAS影響: なし。
@@ -48,6 +49,18 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### Issue #012 スキマ君利用設定 中学生・高校生モード一括変更
+
+- 日付: 2026-08-26
+- 状態: React・GAS実装、ローカル検証、対象GASプロジェクトへのclasp pushを実施。GASセットアップ関数実行、Webアプリ再デプロイ、本番シート確認、本番動作確認は未実施。
+- 変更内容: 「スキマ君コンテンツ」を既存7列の末尾へ`中学生モード`、`高校生モード`を加えた9列構成へ拡張し、管理画面の各生徒行へ2つの未保存プリセットボタンを追加。プリセット適用後も個別チェックを変更でき、既存`updateSukimakunPermissions`へ`allowedContentIds`として保存する。
+- 移行・同期: 正常7列は既存値と行順を維持して末尾ヘッダーだけを追加し、旧4列は既存値を維持して9列化する。正常9列は変更せず、既存モード値を保持する。想定外ヘッダーや余分な列は警告してコンテンツ同期を停止する。新規コンテンツの両モード初期値はFALSE。
+- API: `getSukimakunPermissionMatrix`の既存`contents`要素へ`juniorHighMode`、`highSchoolMode`を非破壊的に追加。既存action、リクエスト、権限保存レスポンス、`permissionsInitialized`は変更なし。
+- 影響範囲: gyoumu-appのスキマ君利用設定、GASのコンテンツマスターセットアップ・読込、student-app-dbの「スキマ君コンテンツ」列構成。student-appコード、login、SSO、権限保存シートは変更なし。
+- テスト: `npm test` 48件、`npm run build`、変更対象lint、GAS構文、`git diff --check`が成功。実GAS API、実アカウント、student-app-db、本番student-appとの結合確認は未実施。
+- GAS: `gas/.clasp.json`で指定された既存プロジェクトへclasp push済み。Webアプリ再デプロイは未実施。
+- Version: 変更なし（Version 4.2.1）。
 
 ### Issue #011 前置詞テストのコンテンツ権限追加
 

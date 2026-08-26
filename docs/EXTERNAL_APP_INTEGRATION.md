@@ -96,6 +96,7 @@ Google Apps Scriptを利用し、
 - GASの`validateToken`は個トレアプリ経由のトークン認証成功時に、`login`はスキマ君での通常ログイン成功時に、生徒の`allowedContentIds`と`permissionsInitialized`を返す。
 - 起動方法にかかわらず同じコンテンツマスターと生徒別権限を使用し、同じ利用制御を適用する。
 - `allowedContentIds`は、実行時に「スキマ君コンテンツ」マスターと生徒別権限から生成する。初期登録・不足コンテンツ同期用の25件を実行時の正本にはしない。
+- 「スキマ君コンテンツ」の`中学生モード`、`高校生モード`はgyoumu-app管理画面の未保存プリセット定義であり、APIでは`juniorHighMode`、`highSchoolMode`としてコンテンツ情報へ追加する。生徒権限やstudent-app連携へ新しいモード値は保存せず、確定後も`allowedContentIds`だけを使用する。
 - 表示名と固定内部識別子を分離し、スキマ君側との権限連携には`contentId`を使用する。
 - 利用権限値を起動URLへ直接含めない。
 - スキマ君側は`allowedContentIds`を利用し、未許可コンテンツのメニュー表示、直接URLアクセス、教材取得、小テスト開始および結果保存を拒否する責任を持つ。
