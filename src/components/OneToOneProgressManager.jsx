@@ -23,7 +23,7 @@ function ProgressLine({ axis, currentUnitId, label, onUnitClick }) {
         <div style={{ position: 'relative', height: 66, padding: '30px 8px 0' }} aria-label={`${label}の進捗`}>
           {chapterSegments.map(segment => {
             const width = ((segment.endIndex - segment.startIndex + 1) / Math.max(1, axis.length)) * 100;
-            return <span key={`${segment.chapter}:${segment.startOrder}`} title={segment.chapter} style={{ position: 'absolute', left: position(segment.startOrder), top: 0, width: `${width}%`, minWidth: 72, padding: '2px 5px 5px', borderLeft: '2px solid #64748b', color: '#334155', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{segment.chapter}</span>;
+            return <span key={`${segment.chapter}:${segment.startOrder}`} title={segment.chapter} style={{ position: 'absolute', left: position(segment.startOrder), top: 0, width: `${width}%`, minWidth: 72, padding: '2px 5px 5px', borderLeft: '2px solid #94a3b8', color: '#64748b', fontSize: 10, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{segment.chapter}</span>;
           })}
           <div style={{ position: 'absolute', left: 8, right: 8, top: 39, height: 8, borderRadius: 5, background: '#e2e8f0' }} />
           <div style={{ position: 'absolute', left: 8, top: 39, height: 8, borderRadius: 5, width: `${axis.length ? ((Math.max(1, currentOrder) - 1) / Math.max(1, axis.length - 1)) * 100 : 0}%`, maxWidth: 'calc(100% - 16px)', background: currentOrder ? color : 'transparent' }} />
@@ -32,9 +32,9 @@ function ProgressLine({ axis, currentUnitId, label, onUnitClick }) {
             <button key={unit.unitId} type="button" onClick={() => onUnitClick?.(unit)} title={`単元${unit.unitOrder} ${formatSchoolUnit(unit)}`} aria-label={`単元${unit.unitOrder} ${formatSchoolUnit(unit)}`} style={{ position: 'absolute', left: position(unit.unitOrder), top: unit.unitOrder === currentOrder ? 33 : 36, width: unit.unitOrder === currentOrder ? 20 : 10, height: unit.unitOrder === currentOrder ? 20 : 10, padding: 0, borderRadius: '50%', border: unit.unitOrder === currentOrder ? '3px solid #fff' : '1px solid #fff', boxShadow: unit.unitOrder === currentOrder ? `0 0 0 2px ${color}` : 'none', background: unit.unitOrder === currentOrder ? color : unit.unitOrder <= currentOrder ? `${color}80` : '#cbd5e1', transform: 'translateX(-50%)', cursor: 'pointer' }} />
         ))}
         </div>
-        <div style={{ minHeight: 39, padding: '3px 8px 0', color: currentOrder ? '#1e293b' : '#64748b' }}>
-          <span style={{ fontSize: 11 }}>{currentOrder ? `単元${currentOrder}` : '未登録'}</span>
-          {currentUnit && <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.35 }}>{currentUnit.unitName}</div>}
+        <div style={{ minHeight: 24, padding: '3px 8px 0', color: currentOrder ? '#1e293b' : '#64748b', display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', fontSize: 13, lineHeight: 1.35 }}>
+          <strong>現在：</strong>
+          {currentUnit ? <><span>単元{currentOrder}</span><strong>{currentUnit.unitName}</strong></> : <span>未登録</span>}
         </div>
       </div>
     </div>
@@ -164,7 +164,7 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
               <button type="button" onClick={() => openStudent(student, 'history', subjectId === 'social' ? 'history' : '')} style={{ border: 0, background: 'none', color: '#0f4c81', fontWeight: 700, cursor: 'pointer', padding: 4 }}>{student.name} / {student.grade}</button>
               {subjectId !== 'social' && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" onClick={() => openStudent(student, 'school')}>学校進捗入力</button><button type="button" onClick={() => openStudent(student, 'netz')}>ネッツ進捗入力</button><button type="button" onClick={() => openStudent(student, 'history')}>履歴</button></div>}
             </div>
-            {subjectId !== 'social' && <div aria-label="学校とネッツの共通単元軸" style={{ overflowX: 'auto', scrollbarWidth: 'thin' }}><ProgressLine axis={data.axis} currentUnitId={student.schoolCurrentUnitId} label="学校" onUnitClick={unit => setNotice(`単元${unit.unitOrder}: ${formatSchoolUnit(unit)}`)} /><ProgressLine axis={data.axis} currentUnitId={student.netzCurrentUnitId} label="ネッツ" onUnitClick={unit => setNotice(`単元${unit.unitOrder}: ${formatSchoolUnit(unit)}`)} /></div>}
+            {subjectId !== 'social' && <div aria-label="学校とネッツの共通単元軸" style={{ overflowX: 'auto', scrollbarWidth: 'thin' }}><ProgressLine axis={data.axis} currentUnitId={student.schoolCurrentUnitId} label="学校" /><ProgressLine axis={data.axis} currentUnitId={student.netzCurrentUnitId} label="ネッツ" /></div>}
             {subjectId === 'social' && <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>{socialFieldAxes.map(field => {
               const key = `${student.userId}:${field.fieldId}`;
               const expanded = Boolean(expandedGroups[key]);
@@ -173,7 +173,7 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
               const netzOrder = getOrder(field.axis, progress.netzCurrentUnitId);
               return <div key={field.fieldId} style={{ border: '1px solid #cbd5e1', borderRadius: 7, overflow: 'hidden' }}>
                 <button type="button" aria-expanded={expanded} onClick={() => toggleGroup(student.userId, field.fieldId)} style={{ width: '100%', border: 0, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', gap: 8, background: '#f8fafc', textAlign: 'left', cursor: 'pointer' }}><strong>{expanded ? '▼' : '▶'} {field.label}</strong><span style={{ fontSize: 12, color: '#475569' }}>{schoolOrder || netzOrder ? `学校：${schoolOrder ? `単元${schoolOrder}` : '未登録'} / ネッツ：${netzOrder ? `単元${netzOrder}` : '未登録'}` : '未登録'}</span></button>
-                {expanded && <div style={{ padding: 10 }}><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}><button type="button" onClick={() => openStudent(student, 'school', field.fieldId)}>学校進捗入力</button><button type="button" onClick={() => openStudent(student, 'netz', field.fieldId)}>ネッツ進捗入力</button><button type="button" onClick={() => openStudent(student, 'history', field.fieldId)}>履歴</button></div><div aria-label={`${field.label}の学校とネッツの共通単元軸`} style={{ overflowX: 'auto', scrollbarWidth: 'thin' }}><ProgressLine axis={field.axis} currentUnitId={progress.schoolCurrentUnitId} label="学校" onUnitClick={unit => setNotice(`${field.label} 単元${unit.unitOrder}: ${formatSchoolUnit(unit)}`)} /><ProgressLine axis={field.axis} currentUnitId={progress.netzCurrentUnitId} label="ネッツ" onUnitClick={unit => setNotice(`${field.label} 単元${unit.unitOrder}: ${formatSchoolUnit(unit)}`)} /></div></div>}
+                {expanded && <div style={{ padding: 10 }}><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}><button type="button" onClick={() => openStudent(student, 'school', field.fieldId)}>学校進捗入力</button><button type="button" onClick={() => openStudent(student, 'netz', field.fieldId)}>ネッツ進捗入力</button><button type="button" onClick={() => openStudent(student, 'history', field.fieldId)}>履歴</button></div><div aria-label={`${field.label}の学校とネッツの共通単元軸`} style={{ overflowX: 'auto', scrollbarWidth: 'thin' }}><ProgressLine axis={field.axis} currentUnitId={progress.schoolCurrentUnitId} label="学校" /><ProgressLine axis={field.axis} currentUnitId={progress.netzCurrentUnitId} label="ネッツ" /></div></div>}
               </div>;
             })}</div>}
           </section>

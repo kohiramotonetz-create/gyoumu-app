@@ -62,6 +62,9 @@ test('一覧は1生徒ブロックに学校・ネッツ2行と分離入力・履
   assert.match(source, /SOCIAL_FIELDS\.map/);
   assert.match(source, /学校とネッツの共通単元軸/);
   assert.match(source, /currentUnit\.unitName/);
+  assert.match(source, /<strong>現在：<\/strong>/);
+  assert.match(source, /<span>未登録<\/span>/);
+  assert.doesNotMatch(source, /onUnitClick=\{unit => setNotice/);
   assert.match(source, /無効化済み/);
   assert.doesNotMatch(source, /\{event\.status\}<\/strong>/);
 });
