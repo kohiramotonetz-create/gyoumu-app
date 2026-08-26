@@ -1,6 +1,16 @@
 import Papa from 'papaparse';
 
 const SUBJECT_LABEL_TO_ID = Object.freeze({ '英語': 'english', '数学': 'math', '国語': 'japanese', '理科': 'science', '社会': 'social' });
+const SOCIAL_TEXT_TO_FIELD = Object.freeze({
+  '中学生の歴史【帝国書籍】': 'history',
+  '中学生の地理【帝国書籍】': 'geography',
+  '中学生の公民【帝国書籍】': 'civics'
+});
+export const SOCIAL_FIELDS = Object.freeze([
+  Object.freeze({ fieldId: 'history', label: '歴史' }),
+  Object.freeze({ fieldId: 'geography', label: '地理' }),
+  Object.freeze({ fieldId: 'civics', label: '公民' })
+]);
 
 export function parseSchoolUnitsCsv(text) {
   const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: header => header.trim() });
@@ -12,12 +22,17 @@ export function parseSchoolUnitsCsv(text) {
     const unitId = String(row.unitId || '').trim();
     if (!unitId || seen.has(unitId)) throw new Error('school_units.csvのunitIdが空欄または重複しています');
     seen.add(unitId);
+    const subjectId = SUBJECT_LABEL_TO_ID[String(row.科目 || '').trim()] || '';
+    const textName = String(row.テキスト名 || '').trim();
+    const fieldId = subjectId === 'social' ? SOCIAL_TEXT_TO_FIELD[textName] : '';
+    if (subjectId === 'social' && !fieldId) throw new Error(`社会のテキスト名に対応する分野がありません: ${textName}`);
     return {
       unitId,
       grade: String(row.学年 || '').trim(),
-      subjectId: SUBJECT_LABEL_TO_ID[String(row.科目 || '').trim()] || '',
+      subjectId,
       subjectLabel: String(row.科目 || '').trim(),
-      textName: String(row.テキスト名 || '').trim(),
+      textName,
+      fieldId,
       chapter: String(row.章 || '').trim(),
       section: String(row.節 || '').trim(),
       unitName: String(row.単元 || '').trim(),
@@ -27,8 +42,8 @@ export function parseSchoolUnitsCsv(text) {
   });
 }
 
-export function selectSchoolUnitAxis(units, grade, subjectId) {
-  return units.filter(unit => unit.grade.includes(grade) && unit.subjectId === subjectId)
+export function selectSchoolUnitAxis(units, grade, subjectId, fieldId = '') {
+  return units.filter(unit => unit.grade.includes(grade) && unit.subjectId === subjectId && (subjectId !== 'social' || unit.fieldId === fieldId))
     .map((unit, index) => ({ ...unit, unitOrder: index + 1 }));
 }
 

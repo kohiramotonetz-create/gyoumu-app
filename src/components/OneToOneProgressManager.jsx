@@ -4,7 +4,7 @@ import FilterButtonGroup from './FilterButtonGroup.jsx';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
 import { ONE_TO_ONE_SUBJECTS } from '../utils/oneToOneSubjects.js';
-import { formatSchoolUnit } from '../utils/schoolUnits.js';
+import { formatSchoolUnit, SOCIAL_FIELDS } from '../utils/schoolUnits.js';
 
 const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
 const makeRequestId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -47,6 +47,8 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
   const [correctionEvent, setCorrectionEvent] = useState(null);
+  const [selectedFieldId, setSelectedFieldId] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState({});
   const subjectLabels = useMemo(() => ONE_TO_ONE_SUBJECTS.map(subject => subject.label), []);
 
   const request = async (action, payload = {}) => {
@@ -64,10 +66,12 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
     finally { setLoading(false); }
   };
 
-  const openStudent = async (student, nextMode) => {
+  const openStudent = async (student, nextMode, fieldId = '') => {
+    const effectiveFieldId = subjectId === 'social' ? (fieldId || 'history') : '';
     setSelected(student); setMode(nextMode); setLessonDate(today()); setSchoolTarget(''); setNetzUnits([]); setRangeStart(''); setRangeEnd(''); setNotice(''); setCorrectionEvent(null);
+    setSelectedFieldId(effectiveFieldId);
     try {
-      const result = await request('getOneToOneProgressDetail', { userId: student.userId, subjectId });
+      const result = await request('getOneToOneProgressDetail', { userId: student.userId, subjectId, fieldId: effectiveFieldId });
       setDetail(result);
       if (nextMode === 'school') {
         const currentOrder = result.axis.find(unit => unit.unitId === result.schoolCurrentUnitId)?.unitOrder || 0;
@@ -87,12 +91,12 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
       if (correctionEvent) {
         const correctionReason = window.prompt('訂正理由を入力してください。');
         if (!correctionReason) return;
-        await request('correctOneToOneProgressEvent', { userId: selected.userId, subjectId, eventId: correctionEvent.eventId, correctionReason, replacement });
-      } else if (mode === 'school') await request('addOneToOneSchoolProgress', { userId: selected.userId, subjectId, ...replacement });
-      else await request('addOneToOneNetzProgress', { userId: selected.userId, subjectId, ...replacement });
+        await request('correctOneToOneProgressEvent', { userId: selected.userId, subjectId, fieldId: selectedFieldId, eventId: correctionEvent.eventId, correctionReason, replacement: { ...replacement, fieldId: selectedFieldId } });
+      } else if (mode === 'school') await request('addOneToOneSchoolProgress', { userId: selected.userId, subjectId, fieldId: selectedFieldId, ...replacement });
+      else await request('addOneToOneNetzProgress', { userId: selected.userId, subjectId, fieldId: selectedFieldId, ...replacement });
       setNotice('進捗を登録しました。');
       await fetchMatrix();
-      await openStudent(selected, 'history');
+      await openStudent(selected, 'history', selectedFieldId);
     } catch (error) { setNotice(error.message); }
     finally { setSaving(false); }
   };
@@ -108,7 +112,7 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
   const voidEvent = async event => {
     const correctionReason = window.prompt('無効化理由を入力してください。');
     if (!correctionReason) return;
-    try { await request('voidOneToOneProgressEvent', { userId: selected.userId, subjectId, eventId: event.eventId, correctionReason }); await openStudent(selected, 'history'); await fetchMatrix(); }
+    try { await request('voidOneToOneProgressEvent', { userId: selected.userId, subjectId, fieldId: selectedFieldId, eventId: event.eventId, correctionReason }); await openStudent(selected, 'history', selectedFieldId); await fetchMatrix(); }
     catch (error) { setNotice(error.message); }
   };
 
@@ -116,6 +120,9 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
   const schoolTargetOrder = detail?.axis.find(unit => unit.unitId === schoolTarget)?.unitOrder || 0;
   const selectedNetz = detail?.axis.filter(unit => netzUnits.includes(unit.unitId)) || [];
   const history = detail ? [...detail.schoolHistory, ...detail.netzHistory].sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt)) : [];
+  const socialFieldAxes = subjectId === 'social' ? SOCIAL_FIELDS.map(field => data.fieldAxes?.find(item => item.fieldId === field.fieldId)).filter(Boolean) : [];
+  const getOrder = (axis, unitId) => axis.find(unit => unit.unitId === unitId)?.unitOrder || 0;
+  const toggleGroup = (studentId, fieldId) => setExpandedGroups(current => ({ ...current, [`${studentId}:${fieldId}`]: !current[`${studentId}:${fieldId}`] }));
 
   return (
     <div style={{ padding: 10 }}>
@@ -133,18 +140,30 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
         {data.students.map(student => (
           <section key={student.userId} style={{ background: '#fff', border: '1px solid #dbe3ea', borderRadius: 10, padding: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" onClick={() => openStudent(student, 'history')} style={{ border: 0, background: 'none', color: '#0f4c81', fontWeight: 700, cursor: 'pointer', padding: 4 }}>{student.name} / {student.grade}</button>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" onClick={() => openStudent(student, 'school')}>学校進捗入力</button><button type="button" onClick={() => openStudent(student, 'netz')}>ネッツ進捗入力</button><button type="button" onClick={() => openStudent(student, 'history')}>履歴</button></div>
+              <button type="button" onClick={() => openStudent(student, 'history', subjectId === 'social' ? 'history' : '')} style={{ border: 0, background: 'none', color: '#0f4c81', fontWeight: 700, cursor: 'pointer', padding: 4 }}>{student.name} / {student.grade}</button>
+              {subjectId !== 'social' && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" onClick={() => openStudent(student, 'school')}>学校進捗入力</button><button type="button" onClick={() => openStudent(student, 'netz')}>ネッツ進捗入力</button><button type="button" onClick={() => openStudent(student, 'history')}>履歴</button></div>}
             </div>
-            <div style={{ overflowX: 'auto' }}><ProgressLine axis={data.axis} currentUnitId={student.schoolCurrentUnitId} label="学校" onUnitClick={unit => setNotice(`単元${unit.unitOrder}: ${formatSchoolUnit(unit)}`)} /><ProgressLine axis={data.axis} currentUnitId={student.netzCurrentUnitId} label="ネッツ" onUnitClick={unit => setNotice(`単元${unit.unitOrder}: ${formatSchoolUnit(unit)}`)} /></div>
+            {subjectId !== 'social' && <div style={{ overflowX: 'auto' }}><ProgressLine axis={data.axis} currentUnitId={student.schoolCurrentUnitId} label="学校" onUnitClick={unit => setNotice(`単元${unit.unitOrder}: ${formatSchoolUnit(unit)}`)} /><ProgressLine axis={data.axis} currentUnitId={student.netzCurrentUnitId} label="ネッツ" onUnitClick={unit => setNotice(`単元${unit.unitOrder}: ${formatSchoolUnit(unit)}`)} /></div>}
+            {subjectId === 'social' && <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>{socialFieldAxes.map(field => {
+              const key = `${student.userId}:${field.fieldId}`;
+              const expanded = Boolean(expandedGroups[key]);
+              const progress = student.progressByField?.[field.fieldId] || {};
+              const schoolOrder = getOrder(field.axis, progress.schoolCurrentUnitId);
+              const netzOrder = getOrder(field.axis, progress.netzCurrentUnitId);
+              return <div key={field.fieldId} style={{ border: '1px solid #cbd5e1', borderRadius: 7, overflow: 'hidden' }}>
+                <button type="button" aria-expanded={expanded} onClick={() => toggleGroup(student.userId, field.fieldId)} style={{ width: '100%', border: 0, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', gap: 8, background: '#f8fafc', textAlign: 'left', cursor: 'pointer' }}><strong>{expanded ? '▼' : '▶'} {field.label}</strong><span style={{ fontSize: 12, color: '#475569' }}>{schoolOrder || netzOrder ? `学校：${schoolOrder ? `単元${schoolOrder}` : '未登録'} / ネッツ：${netzOrder ? `単元${netzOrder}` : '未登録'}` : '未登録'}</span></button>
+                {expanded && <div style={{ padding: 10 }}><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}><button type="button" onClick={() => openStudent(student, 'school', field.fieldId)}>学校進捗入力</button><button type="button" onClick={() => openStudent(student, 'netz', field.fieldId)}>ネッツ進捗入力</button><button type="button" onClick={() => openStudent(student, 'history', field.fieldId)}>履歴</button></div><div style={{ overflowX: 'auto' }}><ProgressLine axis={field.axis} currentUnitId={progress.schoolCurrentUnitId} label="学校" onUnitClick={unit => setNotice(`${field.label} 単元${unit.unitOrder}: ${formatSchoolUnit(unit)}`)} /><ProgressLine axis={field.axis} currentUnitId={progress.netzCurrentUnitId} label="ネッツ" onUnitClick={unit => setNotice(`${field.label} 単元${unit.unitOrder}: ${formatSchoolUnit(unit)}`)} /></div></div>}
+              </div>;
+            })}</div>}
           </section>
         ))}
-        {!loading && data.axis.length > 0 && data.students.length === 0 && <p>この条件で1対1受講科目が登録された生徒はいません。</p>}
+        {!loading && (data.axis.length > 0 || socialFieldAxes.length > 0) && data.students.length === 0 && <p>この条件で1対1受講科目が登録された生徒はいません。</p>}
       </div>
       {selected && detail && (
         <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#0008', display: 'grid', placeItems: 'center', padding: 12 }} onClick={() => setSelected(null)}>
           <div style={{ background: '#fff', width: 'min(900px, 100%)', maxHeight: '92vh', overflow: 'auto', borderRadius: 12, padding: 18 }} onClick={event => event.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><h3>{selected.name} / {selected.grade}</h3><button type="button" onClick={() => setSelected(null)}>閉じる</button></div>
+            {subjectId === 'social' && <FilterButtonGroup label="社会分野" options={SOCIAL_FIELDS.map(field => field.label)} selected={SOCIAL_FIELDS.find(field => field.fieldId === selectedFieldId)?.label || ''} onSelect={label => openStudent(selected, mode, SOCIAL_FIELDS.find(field => field.label === label)?.fieldId || 'history')} isMultiple={false} />}
             {correctionEvent && <p style={{ color: '#b45309' }}>履歴を訂正中です。登録時に元履歴をVOID化します。</p>}
             {mode !== 'history' && <label>授業日 <input type="date" value={lessonDate} onChange={event => setLessonDate(event.target.value)} /></label>}
             {mode === 'school' && <div style={{ display: 'grid', gap: 12, marginTop: 14 }}><p>現在：{currentSchoolOrder ? `単元${currentSchoolOrder}` : '未登録'}</p><label>今回の最終到達位置<select value={schoolTarget} onChange={event => setSchoolTarget(event.target.value)}><option value="">選択</option>{detail.axis.filter(unit => correctionEvent || unit.unitOrder > currentSchoolOrder).map(unit => <option key={unit.unitId} value={unit.unitId}>{unit.unitOrder}. {formatSchoolUnit(unit)}</option>)}</select></label><p>今回追加：{correctionEvent ? `訂正後：単元${schoolTargetOrder || '-'}` : schoolTargetOrder > currentSchoolOrder ? `単元${currentSchoolOrder + 1}～単元${schoolTargetOrder}` : '未選択'}</p><button type="button" onClick={save} disabled={!schoolTarget || saving}>{saving ? '登録中...' : '登録'}</button></div>}

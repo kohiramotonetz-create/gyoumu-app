@@ -40,8 +40,9 @@ const ONE_TO_ONE_SUBJECT_HEADERS = ["userId", "subjectId", "enabled", "createdAt
 const ONE_TO_ONE_SUBJECT_IDS = ["english", "math", "japanese", "science", "social"];
 const ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME = "1対1進捗イベント";
 const ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME = "1対1進捗単元";
-const ONE_TO_ONE_PROGRESS_EVENT_HEADERS = ["eventId", "userId", "subjectId", "progressType", "lessonDate", "recordedAt", "recordedBy", "status", "correctedAt", "correctedBy", "correctionReason", "replacementEventId", "requestId"];
+const ONE_TO_ONE_PROGRESS_EVENT_HEADERS = ["eventId", "userId", "subjectId", "progressType", "lessonDate", "recordedAt", "recordedBy", "status", "correctedAt", "correctedBy", "correctionReason", "replacementEventId", "requestId", "fieldId"];
 const ONE_TO_ONE_PROGRESS_UNIT_HEADERS = ["eventId", "unitId", "unitOrder", "textNameSnapshot", "chapterSnapshot", "sectionSnapshot", "unitNameSnapshot", "pageSnapshot"];
+const ONE_TO_ONE_SOCIAL_FIELDS = [{ fieldId: "history", label: "歴史" }, { fieldId: "geography", label: "地理" }, { fieldId: "civics", label: "公民" }];
 const ACCOUNT_MASTER_SHEET_SPECS = [
   { name: "アカウントマスター", headers: ["userId", "password", "isInitial", "passwordUpdatedAt", "role", "enabled", "sukimakunToken", "sukimakunTokenExpire", "createdAt", "updatedAt", "deletedAt"], textColumns: [1, 2, 7], dateColumns: [4, 8, 9, 10, 11] },
   { name: "生徒マスター", headers: ["userId", "school", "name", "nameKana", "grade", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [6, 7] },
@@ -1667,12 +1668,15 @@ function runInspectOneToOneSubjectDataSummary() {
   console.log(JSON.stringify(result, null, 2));
 }
 
-function getOneToOneSchoolUnitAxis_(grade, subjectId) {
+function getOneToOneSchoolUnitAxis_(grade, subjectId, fieldId) {
   const normalizedGrade = normalizeGrade(grade);
   if (!ONE_TO_ONE_SUBJECT_IDS.includes(subjectId)) throw new Error("科目が不正です");
-  const rows = SCHOOL_UNIT_MASTER_GENERATED.filter(row => normalizeGrade(row[1]).includes(normalizedGrade) && row[2] === subjectId);
+  const normalizedFieldId = String(fieldId || "").trim();
+  if (subjectId === "social" && !ONE_TO_ONE_SOCIAL_FIELDS.some(field => field.fieldId === normalizedFieldId)) throw new Error("社会の分野が不正です");
+  if (subjectId !== "social" && normalizedFieldId) throw new Error("この科目に分野は指定できません");
+  const rows = SCHOOL_UNIT_MASTER_GENERATED.filter(row => normalizeGrade(row[1]).includes(normalizedGrade) && row[2] === subjectId && (subjectId !== "social" || row[9] === normalizedFieldId));
   if (!rows.length) throw new Error("対象の単元が登録されていません");
-  return rows.map((row, index) => ({ unitId: row[0], grade: row[1], subjectId: row[2], textName: row[3], chapter: row[4], section: row[5], unitName: row[6], page: row[7], unitOrder: index + 1 }));
+  return rows.map((row, index) => ({ unitId: row[0], grade: row[1], subjectId: row[2], textName: row[3], chapter: row[4], section: row[5], unitName: row[6], page: row[7], unitOrder: index + 1, fieldId: row[9] || "" }));
 }
 
 function assertOneToOneProgressSheets_() {
@@ -1704,7 +1708,7 @@ function setupOneToOneProgressSheets() {
   const eventSheet = ensureSheetWithHeaders(spreadsheet, ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME, ONE_TO_ONE_PROGRESS_EVENT_HEADERS, setupResult);
   const unitSheet = ensureSheetWithHeaders(spreadsheet, ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME, ONE_TO_ONE_PROGRESS_UNIT_HEADERS, setupResult);
   eventSheet.getRange(1, 1, eventSheet.getMaxRows(), 2).setNumberFormat("@");
-  eventSheet.getRange(1, 13, eventSheet.getMaxRows(), 1).setNumberFormat("@");
+  eventSheet.getRange(1, 13, eventSheet.getMaxRows(), 2).setNumberFormat("@");
   if (eventSheet.getMaxRows() > 1) {
     eventSheet.getRange(2, 5, eventSheet.getMaxRows() - 1, 1).setNumberFormat("yyyy/MM/dd");
     eventSheet.getRange(2, 6, eventSheet.getMaxRows() - 1, 1).setNumberFormat("yyyy/MM/dd HH:mm:ss");
@@ -1740,13 +1744,14 @@ function normalizeLessonDate_(value) {
   return date;
 }
 
-function readOneToOneProgressState_(userId, subjectId, grade, sheets) {
-  const axis = getOneToOneSchoolUnitAxis_(grade, subjectId);
+function readOneToOneProgressState_(userId, subjectId, grade, sheets, fieldId) {
+  const normalizedFieldId = String(fieldId || "").trim();
+  const axis = getOneToOneSchoolUnitAxis_(grade, subjectId, normalizedFieldId);
   const axisById = Object.create(null);
   axis.forEach(unit => { axisById[unit.unitId] = unit; });
   const eventRows = sheets[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME].getDataRange().getValues();
   const unitRows = sheets[ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME].getDataRange().getValues();
-  const events = eventRows.slice(1).filter(row => normalizeUserId(row[1]) === userId && String(row[2]) === subjectId).map(row => ({ eventId: String(row[0]), progressType: String(row[3]), lessonDate: row[4], recordedAt: row[5], recordedBy: String(row[6]), status: String(row[7]), correctedAt: row[8], correctedBy: String(row[9] || ""), correctionReason: String(row[10] || ""), replacementEventId: String(row[11] || ""), requestId: String(row[12] || "") }));
+  const events = eventRows.slice(1).filter(row => normalizeUserId(row[1]) === userId && String(row[2]) === subjectId && String(row[13] || "") === normalizedFieldId).map(row => ({ eventId: String(row[0]), progressType: String(row[3]), lessonDate: row[4], recordedAt: row[5], recordedBy: String(row[6]), status: String(row[7]), correctedAt: row[8], correctedBy: String(row[9] || ""), correctionReason: String(row[10] || ""), replacementEventId: String(row[11] || ""), requestId: String(row[12] || ""), fieldId: String(row[13] || "") }));
   const eventIds = new Set(events.map(event => event.eventId));
   const details = unitRows.slice(1).filter(row => eventIds.has(String(row[0]))).map(row => ({ eventId: String(row[0]), unitId: String(row[1]), unitOrder: Number(row[2]), textName: String(row[3] || ""), chapter: String(row[4] || ""), section: String(row[5] || ""), unitName: String(row[6] || ""), page: String(row[7] || "") }));
   events.forEach(event => { event.units = details.filter(unit => unit.eventId === event.eventId).sort((a, b) => a.unitOrder - b.unitOrder); });
@@ -1756,14 +1761,20 @@ function readOneToOneProgressState_(userId, subjectId, grade, sheets) {
     const order = Math.max(...orders);
     return axis.find(unit => unit.unitOrder === order) || { unitId: null, unitOrder: order };
   };
-  return { axis, axisById, events: events.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt)), schoolCurrent: current("school"), netzCurrent: current("netz") };
+  return { axis, axisById, fieldId: normalizedFieldId, events: events.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt)), schoolCurrent: current("school"), netzCurrent: current("netz") };
 }
 
-function getOneToOneProgressState_(userId, subjectId) {
+function getOneToOneProgressState_(userId, subjectId, fieldId) {
   const target = findOneToOneSubjectStudent_(userId);
   if (!target) throw new Error("対象生徒が見つかりません");
   if (!getOneToOneSubjects(target.userId).subjectIds.includes(subjectId)) throw new Error("未受講の科目です");
-  return readOneToOneProgressState_(target.userId, subjectId, target.grade, assertOneToOneProgressSheets_());
+  const sheets = assertOneToOneProgressSheets_();
+  if (subjectId === "social" && !fieldId) {
+    const fields = Object.create(null);
+    ONE_TO_ONE_SOCIAL_FIELDS.forEach(field => { fields[field.fieldId] = readOneToOneProgressState_(target.userId, subjectId, target.grade, sheets, field.fieldId); });
+    return { userId: target.userId, subjectId, fields };
+  }
+  return readOneToOneProgressState_(target.userId, subjectId, target.grade, sheets, fieldId);
 }
 
 function selectOneToOneSchoolProgressUnits_(axis, currentOrder, toUnitId, correctionUnitIds) {
@@ -1793,6 +1804,7 @@ function selectOneToOneNetzProgressUnits_(axis, unitIds) {
 function appendOneToOneProgressEvent_(data, session, progressType, lockAlreadyHeld) {
   const userId = normalizeUserId(data.userId);
   const subjectId = String(data.subjectId || "").trim();
+  const fieldId = String(data.fieldId || "").trim();
   const requestId = String(data.requestId || "").trim();
   if (!requestId || requestId.length > 100) throw new Error("requestIdが不正です");
   const target = findOneToOneSubjectStudent_(userId);
@@ -1804,7 +1816,7 @@ function appendOneToOneProgressEvent_(data, session, progressType, lockAlreadyHe
   if (!lockAlreadyHeld && !lock.tryLock(10000)) throw new Error("別の進捗更新処理が実行中です");
   try {
     const sheets = assertOneToOneProgressSheets_();
-    const state = readOneToOneProgressState_(userId, subjectId, target.grade, sheets);
+    const state = readOneToOneProgressState_(userId, subjectId, target.grade, sheets, fieldId);
     const duplicate = state.events.find(event => event.requestId === requestId);
     if (duplicate) return { duplicate: true, eventId: duplicate.eventId };
     let selected;
@@ -1819,7 +1831,7 @@ function appendOneToOneProgressEvent_(data, session, progressType, lockAlreadyHe
     const now = new Date();
     const eventSheet = sheets[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME];
     const unitSheet = sheets[ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME];
-    const eventRow = [eventId, formatUserIdForSheet(userId), subjectId, progressType, lessonDate, now, toSafeSheetText(session.userId), "ACTIVE", "", "", "", "", requestId];
+    const eventRow = [eventId, formatUserIdForSheet(userId), subjectId, progressType, lessonDate, now, toSafeSheetText(session.userId), "ACTIVE", "", "", "", "", requestId, fieldId];
     const unitRows = selected.map(unit => [eventId, unit.unitId, unit.unitOrder, unit.textName, unit.chapter, unit.section, unit.unitName, unit.page]);
     const eventRowIndex = eventSheet.getLastRow() + 1;
     const unitRowIndex = unitSheet.getLastRow() + 1;
@@ -1858,7 +1870,7 @@ function voidOneToOneProgressEvent_(data, session, replacementEventId, lockAlrea
 function serializeOneToOneProgressState_(state) {
   const serializeDate = value => value instanceof Date && !isNaN(value.getTime()) ? value.toISOString() : value || "";
   const history = type => state.events.filter(event => event.progressType === type).map(event => Object.assign({}, event, { lessonDate: serializeDate(event.lessonDate), recordedAt: serializeDate(event.recordedAt), correctedAt: serializeDate(event.correctedAt) }));
-  return { axis: state.axis, schoolCurrentUnitId: state.schoolCurrent && state.schoolCurrent.unitId || null, netzCurrentUnitId: state.netzCurrent && state.netzCurrent.unitId || null, schoolHistory: history("school"), netzHistory: history("netz") };
+  return { fieldId: state.fieldId || "", axis: state.axis, schoolCurrentUnitId: state.schoolCurrent && state.schoolCurrent.unitId || null, netzCurrentUnitId: state.netzCurrent && state.netzCurrent.unitId || null, schoolHistory: history("school"), netzHistory: history("netz") };
 }
 
 function handleOneToOneProgressAction_(data) {
@@ -1873,17 +1885,25 @@ function handleOneToOneProgressAction_(data) {
     }
     const subjectState = buildOneToOneSubjectStateMap_(assertOneToOneSubjectSheet_().getDataRange().getValues()).states;
     const sheets = assertOneToOneProgressSheets_();
+    const fields = subjectId === "social" ? ONE_TO_ONE_SOCIAL_FIELDS : [{ fieldId: "", label: "" }];
+    const fieldAxes = fields.map(field => ({ fieldId: field.fieldId, label: field.label, axis: getOneToOneSchoolUnitAxis_(grade, subjectId, field.fieldId) }));
     const students = session.userContexts.filter(user => user.role === "student" && user.enabled && !user.deleted && user.school === school && normalizeGrade(user.grade) === grade && (subjectState[user.userId] || []).includes(subjectId)).map(user => {
-      const state = readOneToOneProgressState_(user.userId, subjectId, user.grade, sheets);
-      return { userId: user.userId, name: user.name, nameKana: user.nameKana, school: user.school, grade: user.grade, schoolCurrentUnitId: state.schoolCurrent && state.schoolCurrent.unitId || null, netzCurrentUnitId: state.netzCurrent && state.netzCurrent.unitId || null };
+      const progressByField = Object.create(null);
+      fields.forEach(field => {
+        const state = readOneToOneProgressState_(user.userId, subjectId, user.grade, sheets, field.fieldId);
+        progressByField[field.fieldId || "default"] = { schoolCurrentUnitId: state.schoolCurrent && state.schoolCurrent.unitId || null, netzCurrentUnitId: state.netzCurrent && state.netzCurrent.unitId || null };
+      });
+      const normal = progressByField.default || {};
+      return { userId: user.userId, name: user.name, nameKana: user.nameKana, school: user.school, grade: user.grade, schoolCurrentUnitId: normal.schoolCurrentUnitId || null, netzCurrentUnitId: normal.netzCurrentUnitId || null, progressByField };
     }).sort(compareStudentsByKana_);
-    return { result: "success", axis: getOneToOneSchoolUnitAxis_(grade, subjectId), students, sessionExpiresAt: session.sessionExpiresAt };
+    return { result: "success", axis: subjectId === "social" ? [] : fieldAxes[0].axis, fieldAxes, students, sessionExpiresAt: session.sessionExpiresAt };
   }
   const userId = normalizeUserId(data.userId);
   const subjectId = String(data.subjectId || "").trim();
+  const fieldId = String(data.fieldId || "").trim();
   const target = findOneToOneSubjectStudent_(userId);
   assertOneToOneProgressStudentAccess_(session, target, data.action !== "getOneToOneProgressDetail");
-  if (data.action === "getOneToOneProgressDetail") return Object.assign({ result: "success", userId, subjectId, sessionExpiresAt: session.sessionExpiresAt }, serializeOneToOneProgressState_(getOneToOneProgressState_(userId, subjectId)));
+  if (data.action === "getOneToOneProgressDetail") return Object.assign({ result: "success", userId, subjectId, sessionExpiresAt: session.sessionExpiresAt }, serializeOneToOneProgressState_(getOneToOneProgressState_(userId, subjectId, fieldId)));
   if (data.action === "addOneToOneSchoolProgress") return Object.assign({ result: "success" }, appendOneToOneProgressEvent_(data, session, "school"));
   if (data.action === "addOneToOneNetzProgress") return Object.assign({ result: "success" }, appendOneToOneProgressEvent_(data, session, "netz"));
   if (data.action === "voidOneToOneProgressEvent") return Object.assign({ result: "success" }, voidOneToOneProgressEvent_(data, session, ""));
@@ -1901,7 +1921,7 @@ function handleOneToOneProgressAction_(data) {
       const previous = rows[rowIndex].slice(7, 12);
       sheet.getRange(rowIndex + 1, 8, 1, 5).setValues([["VOID", new Date(), toSafeSheetText(session.userId), reason, ""]]);
       try {
-        const replacementData = Object.assign({}, data.replacement || {}, { userId: normalizeUserId(rows[rowIndex][1]), subjectId: String(rows[rowIndex][2]) });
+        const replacementData = Object.assign({}, data.replacement || {}, { userId: normalizeUserId(rows[rowIndex][1]), subjectId: String(rows[rowIndex][2]), fieldId: String(rows[rowIndex][13] || "") });
         const replacement = appendOneToOneProgressEvent_(replacementData, session, String(rows[rowIndex][3]), true);
         sheet.getRange(rowIndex + 1, 12).setValue(replacement.eventId);
         return { result: "success", eventId: String(data.eventId), replacementEventId: replacement.eventId };

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { parseSchoolUnitsCsv, selectSchoolUnitAxis } from '../src/utils/schoolUnits.js';
+import { parseSchoolUnitsCsv, selectSchoolUnitAxis, SOCIAL_FIELDS } from '../src/utils/schoolUnits.js';
 
 const csv = fs.readFileSync(new URL('../public/school_units.csv', import.meta.url), 'utf8');
 
@@ -19,10 +19,16 @@ test('学年・科目で抽出しCSV順をunitOrderとして維持する', () =>
   assert.ok(axis.every(unit => unit.subjectId === 'math' && unit.grade.includes('中２')));
 });
 
-test('社会の複数学年共通テキストを同一科目軸に含める', () => {
-  const axis = selectSchoolUnitAxis(parseSchoolUnitsCsv(csv), '中１', 'social');
-  assert.ok(axis.some(unit => unit.grade === '中１中２中３'));
-  assert.deepEqual(Array.from(new Set(axis.map(unit => unit.textName))), ['中学生の歴史【帝国書籍】', '中学生の公民【帝国書籍】', '中学生の地理【帝国書籍】']);
+test('社会を完全一致で歴史・地理・公民に判定し業務順で扱う', () => {
+  const units = parseSchoolUnitsCsv(csv);
+  assert.deepEqual(SOCIAL_FIELDS.map(field => field.fieldId), ['history', 'geography', 'civics']);
+  assert.deepEqual(SOCIAL_FIELDS.map(field => field.label), ['歴史', '地理', '公民']);
+  const expectations = [['history', '中学生の歴史【帝国書籍】'], ['geography', '中学生の地理【帝国書籍】'], ['civics', '中学生の公民【帝国書籍】']];
+  expectations.forEach(([fieldId, textName]) => {
+    const axis = selectSchoolUnitAxis(units, '中１', 'social', fieldId);
+    assert.ok(axis.length > 0);
+    assert.ok(axis.every(unit => unit.grade === '中１中２中３' && unit.fieldId === fieldId && unit.textName === textName));
+  });
 });
 
 test('末尾unitId追加後も既存7列を位置参照できる', () => {
@@ -50,4 +56,7 @@ test('一覧は1生徒ブロックに学校・ネッツ2行と分離入力・履
   assert.match(source, /ネッツ進捗入力/);
   assert.match(source, /履歴/);
   assert.match(source, /overflowX: 'auto'/);
+  assert.match(source, /aria-expanded=\{expanded\}/);
+  assert.match(source, /学校：.*ネッツ：/s);
+  assert.match(source, /SOCIAL_FIELDS\.map/);
 });

@@ -7,6 +7,11 @@ const csvPath = path.join(root, 'public', 'school_units.csv');
 const gasPath = path.join(root, 'gas', 'schoolUnits.generated.js');
 const subjectIds = { '英語': 'english', '数学': 'math', '国語': 'japanese', '理科': 'science', '社会': 'social' };
 const gradeCodes = { '中１': 'j1', '中２': 'j2', '中３': 'j3', '中１中２中３': 'j123' };
+const socialFieldIds = {
+  '中学生の歴史【帝国書籍】': 'history',
+  '中学生の地理【帝国書籍】': 'geography',
+  '中学生の公民【帝国書籍】': 'civics'
+};
 
 const lines = fs.readFileSync(csvPath, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
 const headers = lines.shift().split(',').map(value => value.trim());
@@ -33,6 +38,10 @@ const generated = lines.map((line, index) => {
 });
 
 fs.writeFileSync(csvPath, `${expected.concat('unitId').join(',')}\r\n${generated.map(row => row.join(',')).join('\r\n')}\r\n`, 'utf8');
-const compact = generated.map((row, index) => [row[7], row[0], subjectIds[row[1]], row[2], row[3], row[4], row[5], row[6], index + 1]);
+const compact = generated.map((row, index) => {
+  const fieldId = row[1] === '社会' ? socialFieldIds[row[2]] : '';
+  if (row[1] === '社会' && !fieldId) throw new Error(`社会のテキスト名に対応するfieldIdがありません: ${row[2]}`);
+  return [row[7], row[0], subjectIds[row[1]], row[2], row[3], row[4], row[5], row[6], index + 1, fieldId];
+});
 fs.writeFileSync(gasPath, `// public/school_units.csv から自動生成。直接編集しないこと。\nvar SCHOOL_UNIT_MASTER_GENERATED = ${JSON.stringify(compact)};\n`, 'utf8');
 console.log(`school_units.csv: ${generated.length} units`);

@@ -64,3 +64,37 @@ test('ネッツは飛び飛び・過去復習を順序化し、同じ単元の�
   const repeatedLesson = vm.runInContext('selectOneToOneNetzProgressUnits_(__axis, [__ids[1]])', context);
   assert.equal(repeatedLesson[0].unitOrder, 3);
 });
+
+test('社会は歴史・地理・公民順の独立軸を持ち他分野unitIdを拒否する', () => {
+  const fields = vm.runInContext('ONE_TO_ONE_SOCIAL_FIELDS', context);
+  assert.deepEqual(Array.from(fields, field => field.fieldId), ['history', 'geography', 'civics']);
+  const history = vm.runInContext('getOneToOneSchoolUnitAxis_("中３", "social", "history")', context);
+  const geography = vm.runInContext('getOneToOneSchoolUnitAxis_("中３", "social", "geography")', context);
+  const civics = vm.runInContext('getOneToOneSchoolUnitAxis_("中３", "social", "civics")', context);
+  assert.ok(history.every(unit => unit.fieldId === 'history' && unit.grade === '中１中２中３'));
+  assert.ok(geography.every(unit => unit.fieldId === 'geography'));
+  assert.ok(civics.every(unit => unit.fieldId === 'civics'));
+  context.__history = history;
+  context.__foreignId = geography[0].unitId;
+  assert.throws(() => vm.runInContext('selectOneToOneNetzProgressUnits_(__history, [__foreignId])', context), /不正/);
+});
+
+test('社会の現在位置とVOID再計算は分野間で相互干渉しない', () => {
+  const history = vm.runInContext('getOneToOneSchoolUnitAxis_("中３", "social", "history")', context);
+  const geography = vm.runInContext('getOneToOneSchoolUnitAxis_("中３", "social", "geography")', context);
+  const civics = vm.runInContext('getOneToOneSchoolUnitAxis_("中３", "social", "civics")', context);
+  const eventHeaders = ['eventId','userId','subjectId','progressType','lessonDate','recordedAt','recordedBy','status','correctedAt','correctedBy','correctionReason','replacementEventId','requestId','fieldId'];
+  const unitHeaders = ['eventId','unitId','unitOrder','textNameSnapshot','chapterSnapshot','sectionSnapshot','unitNameSnapshot','pageSnapshot'];
+  const events = [eventHeaders, ['h1','001200','social','school','',new Date(),'t','ACTIVE','','','','','r1','history'], ['h2','001200','social','netz','',new Date(),'t','VOID','','','','','r2','history'], ['g1','001200','social','school','',new Date(),'t','ACTIVE','','','','','r3','geography'], ['c1','001200','social','netz','',new Date(),'t','ACTIVE','','','','','r4','civics']];
+  const units = [unitHeaders, ['h1',history[7].unitId,8,'','','','',''], ['h2',history[11].unitId,12,'','','','',''], ['g1',geography[4].unitId,5,'','','','',''], ['c1',civics[2].unitId,3,'','','','','']];
+  context.__socialSheets = { '1対1進捗イベント': { getDataRange: () => ({ getValues: () => events }) }, '1対1進捗単元': { getDataRange: () => ({ getValues: () => units }) } };
+  context.__h = vm.runInContext('readOneToOneProgressState_("001200", "social", "中３", __socialSheets, "history")', context);
+  context.__g = vm.runInContext('readOneToOneProgressState_("001200", "social", "中３", __socialSheets, "geography")', context);
+  context.__c = vm.runInContext('readOneToOneProgressState_("001200", "social", "中３", __socialSheets, "civics")', context);
+  assert.equal(context.__h.schoolCurrent.unitOrder, 8);
+  assert.equal(context.__h.netzCurrent, null);
+  assert.equal(context.__g.schoolCurrent.unitOrder, 5);
+  assert.equal(context.__g.netzCurrent, null);
+  assert.equal(context.__c.schoolCurrent, null);
+  assert.equal(context.__c.netzCurrent.unitOrder, 3);
+});
