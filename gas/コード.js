@@ -1532,7 +1532,7 @@ function initializeExistingStudentSukimakunPermissions() {
 }
 
 function normalizeKana_(value) {
-  return String(value || "").normalize("NFKC").trim().replace(/\s+/g, " ")
+  return String(value || "").normalize("NFKC").trim().replace(/\s+/g, "\u3000")
     .replace(/[ぁ-ゖ]/g, character => String.fromCharCode(character.charCodeAt(0) + 0x60));
 }
 
@@ -1568,7 +1568,7 @@ function validateRole_(value, allowedRoles) {
 
 function validateKana_(value) {
   const kana = normalizeKana_(value);
-  if (!kana || kana.length > 100 || !/^[ァ-ヶー・ ]+$/.test(kana)) throw new Error("Name kana is invalid");
+  if (!kana || kana.length > 100 || !/^[ァ-ヶー・\u3000]+$/.test(kana)) throw new Error("Name kana is invalid");
   return kana;
 }
 
@@ -1809,7 +1809,7 @@ function validateCampCount_(value) {
 function getActiveCampStudents_(userContexts) {
   const students = (userContexts || getUserAuthContexts_()).filter(user => user.role === "student" && user.enabled && !user.deleted)
     .map(user => ({ studentId: user.userId, name: user.name, nameKana: user.nameKana || "", school: user.school, grade: user.grade }))
-    .sort((left, right) => String(left.school).localeCompare(String(right.school), "ja") || String(left.nameKana).localeCompare(String(right.nameKana), "ja") || left.studentId.localeCompare(right.studentId));
+    .sort((left, right) => String(left.school).localeCompare(String(right.school), "ja") || normalizeKana_(left.nameKana).localeCompare(normalizeKana_(right.nameKana), "ja") || left.studentId.localeCompare(right.studentId));
   if (new Set(students.map(student => student.studentId)).size !== students.length) throw new Error("生徒マスターに重複した生徒コードがあります");
   return students;
 }

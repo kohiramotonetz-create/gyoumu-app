@@ -1,10 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
+import { isValidNameKana, normalizeNameKana } from '../utils/nameKana.js';
 
 const REQUEST_TIMEOUT_MS = 15000;
-const normalizeKanaInput = value => String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').replace(/[ぁ-ゖ]/g, character => String.fromCharCode(character.charCodeAt(0) + 0x60));
-const isValidKanaInput = value => /^[ァ-ヶー・ ]+$/.test(normalizeKanaInput(value));
 const isDeleted = account => account.deletedAt != null && String(account.deletedAt).trim() !== '';
 const formatDate = value => {
   if (value == null || String(value).trim() === '') return '－';
@@ -46,10 +45,10 @@ export default function StaffAccountDetail({ account, GAS_URL, API_KEY, sessionT
     event.preventDefault();
     if (savingRef.current || readOnly || !dirty) return;
     const normalizedName = form.name.trim();
-    const normalizedKana = normalizeKanaInput(form.nameKana);
+    const normalizedKana = normalizeNameKana(form.nameKana);
     const errors = {};
     if (!normalizedName) errors.name = '氏名を入力してください。';
-    if (!normalizedKana || !isValidKanaInput(normalizedKana)) errors.nameKana = 'フリガナを全角カタカナで入力してください。';
+    if (!normalizedKana || !isValidNameKana(normalizedKana)) errors.nameKana = 'フリガナを全角カタカナで入力してください。';
     if (!['teacher', 'head-teacher', 'admin'].includes(form.role)) errors.role = 'roleが不正です。';
     if (form.assignedSchools.length === 0 || form.assignedSchools.filter(item => item.isPrimary).length !== 1) errors.assignedSchools = '担当校舎を1校以上設定し、主担当を1校選択してください。';
     setFieldErrors(errors);
@@ -84,7 +83,7 @@ export default function StaffAccountDetail({ account, GAS_URL, API_KEY, sessionT
     <form onSubmit={save} style={{ display: 'grid', gap: 16, maxWidth: 700 }}>
       <div><strong>ID</strong><div style={{ padding: '10px 0' }}>{account.userId}</div></div>
       <label>氏名<input value={form.name} disabled={readOnly} onChange={event => { setForm(value => ({ ...value, name: event.target.value })); setFieldErrors(value => ({ ...value, name: '' })); }} style={fieldStyle} />{fieldErrors.name && <div style={{ color: '#b91c1c' }}>{fieldErrors.name}</div>}</label>
-      <label>フリガナ<input value={form.nameKana} disabled={readOnly} onChange={event => { setForm(value => ({ ...value, nameKana: event.target.value })); setFieldErrors(value => ({ ...value, nameKana: '' })); }} onBlur={() => setForm(value => ({ ...value, nameKana: normalizeKanaInput(value.nameKana) }))} style={fieldStyle} />{fieldErrors.nameKana && <div style={{ color: '#b91c1c' }}>{fieldErrors.nameKana}</div>}</label>
+      <label>フリガナ<input value={form.nameKana} disabled={readOnly} onChange={event => { setForm(value => ({ ...value, nameKana: event.target.value })); setFieldErrors(value => ({ ...value, nameKana: '' })); }} onBlur={() => setForm(value => ({ ...value, nameKana: normalizeNameKana(value.nameKana) }))} style={fieldStyle} />{fieldErrors.nameKana && <div style={{ color: '#b91c1c' }}>{fieldErrors.nameKana}</div>}</label>
       <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0 }}><legend>role</legend>{['teacher', 'head-teacher', 'admin'].map(item => <label key={item} style={{ marginRight: 20 }}><input type="radio" checked={form.role === item} onChange={() => setForm(value => ({ ...value, role: item }))} /> {item}</label>)}{fieldErrors.role && <div style={{ color: '#b91c1c' }}>{fieldErrors.role}</div>}</fieldset>
       <div><strong>担当校舎</strong>{!readOnly && <div style={{ display: 'flex', gap: 8, marginTop: 8 }}><SchoolSelect value={schoolToAdd} onChange={event => setSchoolToAdd(event.target.value)} showAssignedOptions={false} style={fieldStyle} /><button type="button" onClick={addSchool}>追加</button></div>}{form.assignedSchools.map(item => <div key={item.school} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 8, borderBottom: '1px solid #e5e7eb' }}><span style={{ flex: 1 }}>{item.school}</span><label><input type="radio" name="staffPrimarySchool" checked={item.isPrimary} disabled={readOnly} onChange={() => setPrimary(item.school)} /> 主担当</label>{!readOnly && <button type="button" onClick={() => removeSchool(item.school)}>削除</button>}</div>)}{fieldErrors.assignedSchools && <div style={{ color: '#b91c1c' }}>{fieldErrors.assignedSchools}</div>}</div>
       <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0 }}><legend>状態</legend><label style={{ marginRight: 20 }}><input type="radio" checked={form.enabled} onChange={() => setForm(value => ({ ...value, enabled: true }))} /> 有効</label><label><input type="radio" checked={!form.enabled} onChange={() => setForm(value => ({ ...value, enabled: false }))} /> 無効</label>{deleted && <div style={{ marginTop: 8, color: '#991b1b' }}>🔴 削除済み</div>}</fieldset>
