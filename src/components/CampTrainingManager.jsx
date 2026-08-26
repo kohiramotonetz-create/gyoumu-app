@@ -289,7 +289,11 @@ export default function CampTrainingManager({ GAS_URL, API_KEY, sessionToken, ro
       <label>年度<select value={year} disabled={saving || inputDirty} onChange={event => changeCampPeriod(() => setYear(Number(event.target.value)))}>{years.map(value => <option key={value} value={value}>{value}年度</option>)}</select></label>
       <label>季節<select value={season} disabled={saving || inputDirty} onChange={event => changeCampPeriod(() => setSeason(event.target.value))}>{CAMP_SEASONS.map(value => <option key={value}>{value}</option>)}</select></label>
     </div>
-    <div className="camp-training-tabs"><button disabled={saving || inputDirty} className={view === 'ranking' ? 'active' : ''} onClick={() => changeView('ranking')}>ランキング</button>{role === 'admin' && <button disabled={saving || inputDirty} className={view === 'participants' ? 'active' : ''} onClick={() => changeView('participants')}>参加者設定</button>}{role === 'admin' && <button disabled={saving || inputDirty} className={view === 'input' ? 'active' : ''} onClick={() => changeView('input')}>データ入力</button>}</div>
+    <div className="camp-training-tabs">
+      <button type="button" aria-pressed={view === 'ranking'} disabled={saving || inputDirty} className={view === 'ranking' ? 'active' : ''} onClick={() => changeView('ranking')}>ランキング</button>
+      {role === 'admin' && <button type="button" aria-pressed={view === 'participants'} disabled={saving || inputDirty} className={view === 'participants' ? 'active' : ''} onClick={() => changeView('participants')}>参加者設定</button>}
+      {role === 'admin' && <button type="button" aria-pressed={view === 'input'} disabled={saving || inputDirty} className={view === 'input' ? 'active' : ''} onClick={() => changeView('input')}>データ入力</button>}
+    </div>
     {message.text && <div role={message.type === 'error' ? 'alert' : 'status'} className={`camp-training-message ${message.type}`}>{message.text}</div>}
     {view === 'ranking' && <><div className="camp-training-switches">{[...CAMP_DAYS.map(String), 'total'].map(value => <button key={value} disabled={saving} className={rankingMode === value ? 'active' : ''} onClick={() => setRankingMode(value)}>{value === 'total' ? '総合集計' : `${value}日目`}</button>)}</div>{!loading && rows.length > 0 && renderTable(false)}</>}
     {view === 'participants' && role === 'admin' && <><div className="camp-participant-filters">

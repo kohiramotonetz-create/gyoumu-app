@@ -57,6 +57,19 @@ test('データ入力UIは自動取得・再試行・未保存保護・参加者
   assert.match(source, /disabled=\{saving \|\| inputDirty\}/);
   assert.match(source, /sequence !== requestSequence\.current/);
   assert.match(source, /activeRequest\.current\?\.abort\(\)/);
+  assert.match(source, /aria-pressed=\{view === 'input'\}/);
+  assert.match(source, /if \(nextView === view \|\| inputDirty \|\| saving\) return/);
+});
+
+test('データ入力タブは取得中や未保存保護中も選択状態をDOMと配色で示す', () => {
+  const componentSource = fs.readFileSync(new URL('../src/components/CampTrainingManager.jsx', import.meta.url), 'utf8');
+  const cssSource = fs.readFileSync(new URL('../src/App.css', import.meta.url), 'utf8');
+
+  assert.match(componentSource, /className=\{view === 'input' \? 'active' : ''\}/);
+  assert.match(componentSource, /aria-pressed=\{view === 'input'\}/);
+  assert.match(cssSource, /button\[aria-pressed="true"\]/);
+  assert.match(cssSource, /button\.active:disabled/);
+  assert.match(cssSource, /box-shadow: inset 0 -3px 0 #facc15/);
 });
 
 test('参加者を単一校舎・全担当校舎・任意学年・氏名で絞り込む', () => {

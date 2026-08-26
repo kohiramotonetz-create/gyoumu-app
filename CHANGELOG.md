@@ -63,6 +63,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - 2026-08-20再開確認: 年度候補取得に限り、合宿参加者・合宿特訓入力シートが未作成の場合を履歴なしとして現在年度を返すよう改善。片方のみ存在、両方空、重複・異なる履歴、不正年度、admin・head-teacherの許可とteacher・不正セッションの拒否を追加検証し、`npm test`は27件成功。存在するシートの不正ヘッダーと不正年度は引き続きエラー停止する。
 - 2026-08-20データ入力UI改善: adminがデータ入力タブを開いた時と年度・季節・日を変更した時に、選択条件の入力データを自動取得する方式へ変更。最後に取得・保存した値と現在値を比較し、未保存入力中は条件・画面切替を無効化。確認付きの「変更を破棄」で保存済みデータを再取得できる。保存API成功後の再取得だけが失敗した場合は、保存済みであることと再試行が必要なことを明示する。参加者0人時の操作案内と参加者設定への移動も追加。GASは合宿管理用シート未作成・不正ヘッダーを`CAMP_SETUP_REQUIRED`で判別可能にし、既存action・成功レスポンス・保存形式は維持。
 - 2026-08-20入力取得性能改善: `getCampTrainingInput`で管理セッション検証時に読み取った新4マスターのユーザー情報を、参加者検証と入力ランキング生成でも同一リクエスト内に限って再利用するよう変更。新4マスターの全件読取を3回から1回へ削減し、永続キャッシュ、API形式、保存形式、ランキング仕様、DocumentLockは変更していない。ローカル検証済み。GAS反映後の実環境性能は未確認。
+- 2026-08-20本番・タブ状態確認: GAS WebアプリVersion 160とVercel本番へ反映し、adminの入力表13人・head-teacherのランキング限定表示を確認。新bundleではデータ入力クリック直後から取得完了後まで`view='input'`とactive配色が維持され、実利用時の非選択表示は旧bundleを開いたままだった状態と整合した。選択状態をDOMからも判別できる`aria-pressed`と、activeかつdisabledでも配色を維持するCSSをローカル修正（未commit・未反映）。
 - Git branch: `codex/issue-010-camp-training`
 - Commit / Push: `663f9a1 feat: add camp training management and ranking`を作業ブランチへcommit・push済み。今回の参加者フィルタ改善は未commit・未push。
 - GAS: clasp push済み。既存WebアプリURLをVersion 158（`Issue #010 camp training management and ranking`）へ更新済み。今回の表示ボタン方式と参加者フィルタ改善はGAS API・保存形式の変更なし。
