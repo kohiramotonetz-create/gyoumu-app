@@ -53,14 +53,15 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 ### Issue #012 スキマ君利用設定 中学生・高校生モード一括変更
 
 - 日付: 2026-08-26
-- 状態: React・GAS実装、ローカル検証、対象GASプロジェクトへのclasp pushを実施。GASセットアップ関数実行、Webアプリ再デプロイ、本番シート確認、本番動作確認は未実施。
+- 状態: React・GAS実装、対象GASへのclasp push、セットアップ関数による本番シート9列化、GAS Webアプリ再デプロイ、実動作確認、mainへのfast-forward反映を完了。
 - 変更内容: 「スキマ君コンテンツ」を既存7列の末尾へ`中学生モード`、`高校生モード`を加えた9列構成へ拡張し、管理画面の各生徒行へ2つの未保存プリセットボタンを追加。プリセット適用後も個別チェックを変更でき、既存`updateSukimakunPermissions`へ`allowedContentIds`として保存する。
 - 移行・同期: 正常7列は既存値と行順を維持して末尾ヘッダーだけを追加し、旧4列は既存値を維持して9列化する。正常9列は変更せず、既存モード値を保持する。想定外ヘッダーや余分な列は警告してコンテンツ同期を停止する。新規コンテンツの両モード初期値はFALSE。
 - API: `getSukimakunPermissionMatrix`の既存`contents`要素へ`juniorHighMode`、`highSchoolMode`を非破壊的に追加。既存action、リクエスト、権限保存レスポンス、`permissionsInitialized`は変更なし。
 - 影響範囲: gyoumu-appのスキマ君利用設定、GASのコンテンツマスターセットアップ・読込、student-app-dbの「スキマ君コンテンツ」列構成。student-appコード、login、SSO、権限保存シートは変更なし。
-- テスト: `npm test` 48件、`npm run build`、変更対象lint、GAS構文、`git diff --check`が成功。実GAS API、実アカウント、student-app-db、本番student-appとの結合確認は未実施。
-- GAS: `gas/.clasp.json`で指定された既存プロジェクトへclasp push済み。Webアプリ再デプロイは未実施。
+- テスト: feature branchとmainの両方で`npm test` 48件、`npm run build`、変更対象lint、GAS構文、GAS関連テスト12件、`git diff --check`が成功。再デプロイ済みGAS、student-app-db、本番権限データとの結合をローカル画面から確認した。student-appの通常ログインとSSOは実アカウント未確認（関連コード変更なし）。
+- GAS: `gas/.clasp.json`で指定された既存プロジェクトへclasp push済み。利用者が`setupSukimakunPermissionSheets()`を実行して9列化とモード値設定を行い、GAS Webアプリを再デプロイ済み。実動作確認後の追加修正はReact表示のみのため追加再デプロイ不要。
 - 2026-08-26実動作確認: ローカルfeature branchから再デプロイ済みGASへ接続し、中学生3学年41名・25コンテンツの取得、各生徒行のモードボタン、シート設定に一致する中学生／高校生プリセット、未保存表示、個別ON/OFF、生徒間非干渉を確認。動作確認用アカウントで中学生モードを保存し、初回レスポンスは15秒でタイムアウトしたが再取得で保存済みと確認した。その後、取得済みの元設定へ復元保存し、再取得一致、初期化済み状態、保存ボタン無効を確認した。ブラウザ確認でモード列が横スクロール時に固定列の下へ隠れやすい表示を検出し、列幅固定とボタン幅上書きで同一行に安定表示するよう修正した。
+- Git・デプロイ: 実装`89eecd2`、表示修正`b1ebc4e`をIssue branchへ通常pushし、競合なしのfast-forwardでmainへ反映・通常pushした。接続中のVercelアカウントでは`gyoumu-app`プロジェクトを参照できないため、Vercel本番デプロイ状態は未確認。
 - Version: 変更なし（Version 4.2.1）。
 
 ### Issue #011 前置詞テストのコンテンツ権限追加
