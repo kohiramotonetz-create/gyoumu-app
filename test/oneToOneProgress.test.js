@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { parseSchoolUnitsCsv, selectSchoolUnitAxis, SOCIAL_FIELDS } from '../src/utils/schoolUnits.js';
+import { formatLessonDateJa, getChapterSegments, isConsecutiveUnits } from '../src/utils/oneToOneProgressDisplay.js';
 
 const csv = fs.readFileSync(new URL('../public/school_units.csv', import.meta.url), 'utf8');
 
@@ -59,4 +60,25 @@ test('一覧は1生徒ブロックに学校・ネッツ2行と分離入力・履
   assert.match(source, /aria-expanded=\{expanded\}/);
   assert.match(source, /学校：.*ネッツ：/s);
   assert.match(source, /SOCIAL_FIELDS\.map/);
+  assert.match(source, /学校とネッツの共通単元軸/);
+  assert.match(source, /currentUnit\.unitName/);
+  assert.match(source, /無効化済み/);
+  assert.doesNotMatch(source, /\{event\.status\}<\/strong>/);
+});
+
+test('授業日は時刻変換せず日本語の日付として表示する', () => {
+  assert.equal(formatLessonDateJa('2026-08-27'), '8月27日');
+  assert.equal(formatLessonDateJa('2026-01-01'), '1月1日');
+  assert.equal(formatLessonDateJa('2026-08-31'), '8月31日');
+  assert.equal(formatLessonDateJa('2026-12-31'), '12月31日');
+});
+
+test('章境界と学校の連続区間を表示用に判定する', () => {
+  const axis = selectSchoolUnitAxis(parseSchoolUnitsCsv(csv), '中１', 'math');
+  const segments = getChapterSegments(axis);
+  assert.ok(segments.length > 1);
+  assert.equal(segments[0].startOrder, 1);
+  assert.equal(segments[0].chapter, axis[0].chapter);
+  assert.ok(isConsecutiveUnits(axis.slice(0, 5)));
+  assert.equal(isConsecutiveUnits([axis[0], axis[2]]), false);
 });

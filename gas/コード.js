@@ -1869,7 +1869,17 @@ function voidOneToOneProgressEvent_(data, session, replacementEventId, lockAlrea
 
 function serializeOneToOneProgressState_(state) {
   const serializeDate = value => value instanceof Date && !isNaN(value.getTime()) ? value.toISOString() : value || "";
-  const history = type => state.events.filter(event => event.progressType === type).map(event => Object.assign({}, event, { lessonDate: serializeDate(event.lessonDate), recordedAt: serializeDate(event.recordedAt), correctedAt: serializeDate(event.correctedAt) }));
+  const serializeLessonDate = value => {
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      // 授業日は日時ではなく、日本時間上の暦日としてAPIへ返す。
+      // eslint-disable-next-line no-undef
+      return Utilities.formatDate(value, "Asia/Tokyo", "yyyy-MM-dd");
+    }
+    const text = String(value || "").trim();
+    const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : text;
+  };
+  const history = type => state.events.filter(event => event.progressType === type).map(event => Object.assign({}, event, { lessonDate: serializeLessonDate(event.lessonDate), recordedAt: serializeDate(event.recordedAt), correctedAt: serializeDate(event.correctedAt) }));
   return { fieldId: state.fieldId || "", axis: state.axis, schoolCurrentUnitId: state.schoolCurrent && state.schoolCurrent.unitId || null, netzCurrentUnitId: state.netzCurrent && state.netzCurrent.unitId || null, schoolHistory: history("school"), netzHistory: history("netz") };
 }
 

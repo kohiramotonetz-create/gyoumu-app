@@ -6,7 +6,8 @@ const vm = require('node:vm');
 
 const generated = fs.readFileSync(path.join(__dirname, '..', 'gas', 'schoolUnits.generated.js'), 'utf8');
 const source = fs.readFileSync(path.join(__dirname, '..', 'gas', 'コード.js'), 'utf8');
-const context = vm.createContext({ console, Date, Set, Map, Object, Array, String, Number, Boolean, Math, JSON, RegExp, Error });
+const formatTokyoDate = value => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
+const context = vm.createContext({ console, Date, Set, Map, Object, Array, String, Number, Boolean, Math, JSON, RegExp, Error, Utilities: { formatDate: formatTokyoDate } });
 vm.runInContext(`${generated}\n${source}`, context);
 
 test('GAS検証用単元軸はCSV順と同じ連番を返す', () => {
@@ -97,4 +98,22 @@ test('社会の現在位置とVOID再計算は分野間で相互干渉しない'
   assert.equal(context.__g.netzCurrent, null);
   assert.equal(context.__c.schoolCurrent, null);
   assert.equal(context.__c.netzCurrent.unitOrder, 3);
+});
+
+test('lessonDateは日本時間の暦日をAPI境界で維持しrecordedAtは日時として分離する', () => {
+  const cases = [
+    ['2026-08-26T15:00:00.000Z', '2026-08-27'],
+    ['2025-12-31T15:00:00.000Z', '2026-01-01'],
+    ['2026-08-30T15:00:00.000Z', '2026-08-31'],
+    ['2026-12-30T15:00:00.000Z', '2026-12-31']
+  ];
+  cases.forEach(([iso, expected]) => {
+    context.__dateState = { fieldId: '', axis: [], schoolCurrent: null, netzCurrent: null, events: [{ eventId: 'e', progressType: 'school', lessonDate: new Date(iso), recordedAt: new Date('2026-08-27T01:23:45.000Z'), correctedAt: '', units: [] }] };
+    const serialized = vm.runInContext('serializeOneToOneProgressState_(__dateState)', context);
+    assert.equal(serialized.schoolHistory[0].lessonDate, expected);
+    assert.equal(serialized.schoolHistory[0].recordedAt, '2026-08-27T01:23:45.000Z');
+  });
+  context.__dateState.events[0].lessonDate = '2026-08-27';
+  const stringDate = vm.runInContext('serializeOneToOneProgressState_(__dateState)', context);
+  assert.equal(stringDate.schoolHistory[0].lessonDate, '2026-08-27');
 });
