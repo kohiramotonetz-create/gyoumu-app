@@ -22,8 +22,9 @@ if (headers.length !== (hasUnitId ? 8 : 7)) throw new Error('school_units.csvに
 
 const seenIds = new Set();
 const generated = lines.map((line, index) => {
-  const cells = line.split(',').map(value => value.trim());
-  if (cells.length !== headers.length) throw new Error(`${index + 2}行目の列数が不正です`);
+  const rawCells = line.split(',');
+  const cells = rawCells.map(value => value.trim());
+  if (rawCells.length !== headers.length) throw new Error(`${index + 2}行目の列数が不正です`);
   const identity = cells.slice(0, 7).join('\u241f');
   const hash = crypto.createHash('sha256').update(identity, 'utf8').digest('hex').slice(0, 16);
   const subjectId = subjectIds[cells[1]];
@@ -34,14 +35,16 @@ const generated = lines.map((line, index) => {
   if (unitId !== expectedId) throw new Error(`${index + 2}行目のunitIdが内容と一致しません`);
   if (seenIds.has(unitId)) throw new Error(`unitIdが重複しています: ${unitId}`);
   seenIds.add(unitId);
-  return [...cells.slice(0, 7), unitId];
+  // unitId検証には正規化値を使うが、既存7列は空白を含めて元の値を維持する。
+  return [...rawCells.slice(0, 7), unitId];
 });
 
 fs.writeFileSync(csvPath, `${expected.concat('unitId').join(',')}\r\n${generated.map(row => row.join(',')).join('\r\n')}\r\n`, 'utf8');
 const compact = generated.map((row, index) => {
-  const fieldId = row[1] === '社会' ? socialFieldIds[row[2]] : '';
-  if (row[1] === '社会' && !fieldId) throw new Error(`社会のテキスト名に対応するfieldIdがありません: ${row[2]}`);
-  return [row[7], row[0], subjectIds[row[1]], row[2], row[3], row[4], row[5], row[6], index + 1, fieldId];
+  const cells = row.map(value => value.trim());
+  const fieldId = cells[1] === '社会' ? socialFieldIds[cells[2]] : '';
+  if (cells[1] === '社会' && !fieldId) throw new Error(`社会のテキスト名に対応するfieldIdがありません: ${cells[2]}`);
+  return [cells[7], cells[0], subjectIds[cells[1]], cells[2], cells[3], cells[4], cells[5], cells[6], index + 1, fieldId];
 });
 fs.writeFileSync(gasPath, `// public/school_units.csv から自動生成。直接編集しないこと。\nvar SCHOOL_UNIT_MASTER_GENERATED = ${JSON.stringify(compact)};\n`, 'utf8');
 console.log(`school_units.csv: ${generated.length} units`);
