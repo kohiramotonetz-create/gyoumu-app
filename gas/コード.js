@@ -1999,6 +1999,14 @@ function validateGrade_(value) {
   return canonicalGrades[grade];
 }
 
+function validateGrades_(value) {
+  const rawGrades = Array.isArray(value) ? value : String(value || "").split(",");
+  const grades = rawGrades.filter(item => String(item || "").trim()).map(validateGrade_);
+  const uniqueGrades = [...new Set(grades)];
+  if (!uniqueGrades.length) throw new Error("Grade is invalid");
+  return uniqueGrades;
+}
+
 function validateRole_(value, allowedRoles) {
   const role = String(value || "").trim();
   if (!allowedRoles.includes(role)) throw new Error("Role is invalid");
@@ -2648,13 +2656,13 @@ function updateAcademicResultTest_(data, admin) {
 function getAcademicResultMatrix_(data) {
   const testId = String(data.testId || "").trim();
   const school = String(data.school || "").trim();
-  const grade = validateGrade_(data.grade);
+  const grades = validateGrades_(data.grade);
   const test = getAcademicTestRecords_().find(item => item.testId === testId);
   if (!test) throw new Error("対象テストが見つかりません");
   if (!school) throw new Error("校舎を指定してください");
   const resultMap = Object.create(null);
   getAcademicResultRows_().filter(record => record.testId === testId).forEach(record => { resultMap[record.userId] = record; });
-  const students = getNewAuthData_().contexts.filter(user => user.role === "student" && user.enabled && !user.deleted && user.school === school && user.grade === grade).map(user => {
+  const students = getNewAuthData_().contexts.filter(user => user.role === "student" && user.enabled && !user.deleted && user.school === school && grades.includes(user.grade)).map(user => {
     const existing = resultMap[user.userId];
     const scores = {};
     ACADEMIC_SUBJECTS.forEach(subject => { scores[subject] = existing ? normalizeAcademicScore_(existing.scores[subject], test.maxScore) : ""; });
@@ -2665,7 +2673,7 @@ function getAcademicResultMatrix_(data) {
 
 function bulkUpdateAcademicResults_(data, admin) {
   const testId = String(data.testId || "").trim();
-  const grade = validateGrade_(data.grade);
+  const grades = validateGrades_(data.grade);
   if (!Array.isArray(data.records) || data.records.length < 1) throw new Error("保存対象がありません");
   // eslint-disable-next-line no-undef
   const lock = LockService.getDocumentLock();
@@ -2681,7 +2689,7 @@ function bulkUpdateAcademicResults_(data, admin) {
       if (!userId || seenPayload[userId]) throw new Error("保存対象の生徒が重複しています");
       seenPayload[userId] = true;
       const student = users.find(user => user.userId === userId && user.role === "student" && user.enabled && !user.deleted);
-      if (!student || student.grade !== grade) throw new Error("対象生徒または学年が不正です");
+      if (!student || !grades.includes(student.grade)) throw new Error("対象生徒または学年が不正です");
       return { userId, scores: normalizeAcademicScores_(record.scores, test.maxScore) };
     });
     const current = getAcademicResultRows_();

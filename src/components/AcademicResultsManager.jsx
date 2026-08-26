@@ -14,7 +14,7 @@ export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken,
   const [form, setForm] = useState(emptyForm);
   const [editingTestId, setEditingTestId] = useState('');
   const [year, setYear] = useState(getCurrentSchoolYear());
-  const [grade, setGrade] = useState('');
+  const [grades, setGrades] = useState([]);
   const [testId, setTestId] = useState('');
   const [school, setSchool] = useState('');
   const [students, setStudents] = useState([]);
@@ -72,10 +72,10 @@ export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken,
   };
 
   const loadMatrix = async () => {
-    if (!testId || !school || !grade) return setMessage({ type: 'error', text: '年度・学年・テスト・校舎を選択してください。' });
+    if (!testId || !school || grades.length === 0) return setMessage({ type: 'error', text: '年度・学年・テスト・校舎を選択してください。' });
     setLoading(true); setMessage({ type: '', text: '' });
     try {
-      const response = await postAction('getAcademicResultMatrix', { testId, school, grade });
+      const response = await postAction('getAcademicResultMatrix', { testId, school, grade: grades.join(',') });
       const next = [...(response.students || [])].sort(compareStudentsByKana);
       setStudents(next); setEditing(Object.fromEntries(next.map(student => [student.userId, { ...student.scores }])));
       setMessage({ type: 'success', text: `${next.length}名の成績を取得しました。` });
@@ -108,10 +108,10 @@ export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken,
 
   const saveResults = async () => {
     if (!dirtyStudents.length) return;
-    if (!window.confirm(`${dirtyStudents.length}名分の「${year}年度 ${grade} ${selectedTest.testName}」の成績を保存します。`)) return;
+    if (!window.confirm(`${dirtyStudents.length}名分の「${year}年度 ${grades.join('・')} ${selectedTest.testName}」の成績を保存します。`)) return;
     setSaving(true);
     try {
-      await postAction('bulkUpdateAcademicResults', { testId, grade, records: dirtyStudents.map(student => ({ userId: student.userId, scores: editing[student.userId] })) });
+      await postAction('bulkUpdateAcademicResults', { testId, grade: grades.join(','), records: dirtyStudents.map(student => ({ userId: student.userId, scores: editing[student.userId] })) });
       await loadMatrix(); setMessage({ type: 'success', text: `${dirtyStudents.length}名分の成績を保存しました。` });
     } catch (error) { setMessage({ type: 'error', text: error.message }); }
     finally { setSaving(false); }
@@ -143,11 +143,11 @@ export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken,
       <div style={{ ...panel, marginBottom: 14 }}>
         <div style={filterGrid}>
           <label style={fieldLabel}>年度<select style={fieldControl} value={year} onChange={e => { setYear(Number(e.target.value)); setTestId(''); setStudents([]); }}>{years.map(value => <option key={value} value={value}>{value}年度</option>)}</select></label>
-          <label style={fieldLabel}>学年<GradeSelect style={fieldControl} value={grade ? [grade] : []} onChange={values => { setGrade(values[0] || ''); setTestId(''); setStudents([]); }} includeGroups={false} /></label>
+          <label style={fieldLabel}>学年<GradeSelect style={fieldControl} value={grades} onChange={values => { setGrades(values); setTestId(''); setStudents([]); }} /></label>
           <label style={fieldLabel}>テスト<select style={fieldControl} value={testId} onChange={e => { setTestId(e.target.value); setStudents([]); }}><option value="">選択してください</option>{availableTests.map(test => <option key={test.testId} value={test.testId}>{test.testName}</option>)}</select></label>
           <label style={fieldLabel}>校舎<SchoolSelect style={fieldControl} value={school} onChange={e => { setSchool(e.target.value); setStudents([]); }} assignedSchools={assignedSchools} /></label>
         </div>
-        <button style={{ ...styles.doneBtn, marginTop: 14 }} disabled={loading || !testId || !school || !grade} onClick={loadMatrix}>{loading ? '読み込み中...' : '表示'}</button>
+        <button style={{ ...styles.doneBtn, marginTop: 14 }} disabled={loading || !testId || !school || grades.length === 0} onClick={loadMatrix}>{loading ? '読み込み中...' : '表示'}</button>
       </div>
       {students.length > 0 && <div style={{ ...panel, padding: 0, overflow: 'hidden' }}><div style={{ overflow: 'auto', maxHeight: '70vh', WebkitOverflowScrolling: 'touch' }}><table style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: 1080, width: '100%' }}><thead><tr><th style={{ ...header, left: 0, zIndex: 20, minWidth: 180 }}>生徒名</th>{ACADEMIC_SUBJECTS.map(subject => <th key={subject.key} style={header}>{subject.label}</th>)}<th style={header}>合計</th></tr></thead><tbody>{sortedStudents.map((student, studentIndex) => { const scores = editing[student.userId] || {}; const dirty = !areAcademicScoresEqual(scores, student.scores); const total = calculateAcademicTotal(scores); return <tr key={student.userId} style={{ background: dirty ? '#fffbeb' : '#fff' }}><td style={{ position: 'sticky', left: 0, zIndex: 5, padding: 8, background: dirty ? '#fffbeb' : '#fff', borderBottom: '1px solid #e5e7eb' }}><strong>{student.name}</strong><div style={{ fontSize: 11, color: '#64748b' }}>{student.userId}{dirty && ' ・ 未保存'}</div></td>{ACADEMIC_SUBJECTS.map(subject => <td key={subject.key} style={{ padding: 5, borderBottom: '1px solid #e5e7eb' }}><input aria-label={`${student.name} ${subject.label}`} inputMode="numeric" value={scores[subject.key] ?? ''} onChange={e => changeScore(student, subject.key, e.target.value)} onPaste={e => pasteScores(e, studentIndex, subject.key)} style={{ width: 68, padding: 7, boxSizing: 'border-box' }} /></td>)}<td style={{ textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid #e5e7eb' }}>{total === null ? '－' : total}</td></tr>; })}</tbody></table></div><div style={{ padding: 14, borderTop: '1px solid #e5e7eb', textAlign: 'right' }}><span style={{ marginRight: 14 }}>未保存の変更：{dirtyStudents.length}名</span><button style={styles.doneBtn} disabled={saving || dirtyStudents.length === 0} onClick={saveResults}>{saving ? '保存中...' : `一括保存（${dirtyStudents.length}名）`}</button></div></div>}
       <p style={{ color: '#64748b', fontSize: 12 }}>複数行貼り付けはPCで対象生徒の国語セルから、合計を除く9科目をコピーして行ってください。</p>

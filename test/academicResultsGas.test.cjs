@@ -59,6 +59,12 @@ test('テスト入力の年度・種別・満点・名称を厳密検証する',
   assert.throws(() => vm.runInContext('validateAcademicMaxScore_(0)', context));
 });
 
+test('学年グループは既存の正式学年検証を使い順序を維持する', () => {
+  assert.deepEqual(Array.from(vm.runInContext('validateGrades_("中１,中２,中３")', context)), ['中１', '中２', '中３']);
+  assert.deepEqual(Array.from(vm.runInContext('validateGrades_(["小1", "小２", "小1"])', context)), ['小１', '小２']);
+  assert.throws(() => vm.runInContext('validateGrades_("中１,不正")', context), /Grade is invalid/);
+});
+
 test('学校成績actionはadminセッションを必須とする', () => {
   context.requireAdminSession = token => {
     if (token !== 'admin-token') throw new Error('管理者権限が必要です');
@@ -201,4 +207,6 @@ test('成績マトリックスはAPI指定学年で生徒マスターを絞り�
     assert.equal(result.students.length, 1);
     assert.equal(result.students[0].grade, grade);
   }
+  context.__matrix = { testId: 't1', school: '木太南', grade: '中１,中２,中３' };
+  assert.equal(vm.runInContext('getAcademicResultMatrix_(__matrix).students.length', context), 3);
 });

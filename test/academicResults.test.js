@@ -13,6 +13,15 @@ test('学校成績年度は2024年度から現在年度+1まで自動生成し�
   assert.equal(getAcademicYearOptions([], now).some(year => year < 2024), false);
 });
 
+test('アプリ利用チェックと学校成績管理は同じ学年候補・値・順序を使う', () => {
+  const appUsage = fs.readFileSync(new URL('../src/components/AppUsageTracker.jsx', import.meta.url), 'utf8');
+  const manager = fs.readFileSync(new URL('../src/components/AcademicResultsManager.jsx', import.meta.url), 'utf8');
+  assert.match(appUsage, /<GradeSelect style=\{styles\.select\} value=\{selectedGrade\} onChange=\{setSelectedGrade\} \/>/);
+  assert.match(manager, /<GradeSelect style=\{fieldControl\} value=\{grades\}/);
+  assert.doesNotMatch(manager, /includeGroups=\{false\}/);
+  assert.match(manager, /grade: grades\.join\(','\)/);
+});
+
 test('9科目すべて入力済みの場合だけ合計する', () => {
   assert.equal(calculateAcademicTotal(completeScores([72, 81, 68, 75, 80, 90, 85, 88, 92])), 731);
   assert.equal(calculateAcademicTotal(completeScores([72, 81, 68, 75, 80, '', 85, 88, 92])), null);
@@ -66,8 +75,8 @@ test('管理画面はadmin限定メニュー・9科目表・未保存一括保�
   assert.match(manager, /一括保存/);
   assert.match(manager, /subjectKey !== 'japanese'/);
   assert.doesNotMatch(manager, /test\.grade/);
-  assert.match(manager, /getAcademicResultMatrix', \{ testId, school, grade \}/);
-  assert.match(manager, /bulkUpdateAcademicResults', \{ testId, grade,/);
+  assert.match(manager, /getAcademicResultMatrix', \{ testId, school, grade: grades\.join\(','\) \}/);
+  assert.match(manager, /bulkUpdateAcademicResults', \{ testId, grade: grades\.join\(','\),/);
   assert.match(manager, /styles\.select/);
   assert.match(manager, /repeat\(auto-fit, minmax\(180px, 1fr\)\)/);
 });
