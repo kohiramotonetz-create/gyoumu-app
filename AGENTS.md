@@ -98,6 +98,19 @@ Google Spreadsheet
 - updatedAt
 - updatedBy
 
+### 1対1受講科目
+
+生徒プロフィールの補助マスターとして、専用シートで管理します。
+
+- userId
+- subjectId
+- enabled
+- createdAt
+- updatedAt
+- updatedBy
+
+`userId × subjectId`を一意とし、解除時は行削除せず`enabled=false`とします。`userId`は先頭ゼロを保持する文字列として扱います。
+
 ## Roles
 
 許可するroleは次の4種類です。

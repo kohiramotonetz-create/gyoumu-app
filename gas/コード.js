@@ -34,6 +34,9 @@ const CAMP_PARTICIPANT_HEADERS = ["year", "season", "studentId", "updatedAt", "u
 const CAMP_TRAINING_HEADERS = ["year", "season", "day", "studentId", "japanese", "math", "english", "social", "science", "updatedAt", "updatedBy"];
 const CAMP_SEASONS = ["夏", "冬"];
 const CAMP_SUBJECT_KEYS = ["japanese", "math", "english", "social", "science"];
+const ONE_TO_ONE_SUBJECT_SHEET_NAME = "1対1受講科目";
+const ONE_TO_ONE_SUBJECT_HEADERS = ["userId", "subjectId", "enabled", "createdAt", "updatedAt", "updatedBy"];
+const ONE_TO_ONE_SUBJECT_IDS = ["english", "math", "japanese", "science", "social"];
 const ACCOUNT_MASTER_SHEET_SPECS = [
   { name: "アカウントマスター", headers: ["userId", "password", "isInitial", "passwordUpdatedAt", "role", "enabled", "sukimakunToken", "sukimakunTokenExpire", "createdAt", "updatedAt", "deletedAt"], textColumns: [1, 2, 7], dateColumns: [4, 8, 9, 10, 11] },
   { name: "生徒マスター", headers: ["userId", "school", "name", "nameKana", "grade", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [6, 7] },
@@ -1531,6 +1534,134 @@ function initializeExistingStudentSukimakunPermissions() {
   return result;
 }
 
+function assertOneToOneSubjectSheet_() {
+  // eslint-disable-next-line no-undef
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONE_TO_ONE_SUBJECT_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 1 || sheet.getLastColumn() !== ONE_TO_ONE_SUBJECT_HEADERS.length) {
+    throw new Error("1対1受講科目シートが未セットアップです");
+  }
+  const headers = sheet.getRange(1, 1, 1, ONE_TO_ONE_SUBJECT_HEADERS.length).getValues()[0].map(String);
+  if (headers.join("\t") !== ONE_TO_ONE_SUBJECT_HEADERS.join("\t")) throw new Error("1対1受講科目シートのヘッダーが不正です");
+  return sheet;
+}
+
+function buildOneToOneSubjectStateMap_(rows) {
+  const states = Object.create(null);
+  const seen = new Set();
+  const validSubjects = new Set(ONE_TO_ONE_SUBJECT_IDS);
+  const warnings = { invalidRowCount: 0, invalidSubjectIdCount: 0 };
+  for (let i = 1; i < rows.length; i++) {
+    const userId = normalizeUserId(rows[i][0]);
+    const subjectId = String(rows[i][1] || "").trim();
+    if (!userId || !subjectId) { warnings.invalidRowCount++; continue; }
+    const key = `${userId}::${subjectId}`;
+    if (seen.has(key)) throw new Error("1対1受講科目にuserIdとsubjectIdの重複があります");
+    seen.add(key);
+    if (!validSubjects.has(subjectId)) { warnings.invalidSubjectIdCount++; continue; }
+    if (!states[userId]) states[userId] = [];
+    if (isEnabledValue(rows[i][2])) states[userId].push(subjectId);
+  }
+  Object.keys(states).forEach(userId => states[userId].sort((left, right) => ONE_TO_ONE_SUBJECT_IDS.indexOf(left) - ONE_TO_ONE_SUBJECT_IDS.indexOf(right)));
+  return { states, warnings };
+}
+
+function findOneToOneSubjectStudent_(userId) {
+  const targetId = normalizeUserId(userId);
+  return getUserAuthContexts_().find(user => user.userId === targetId && user.role === "student" && !user.deleted) || null;
+}
+
+function getOneToOneSubjects(userId) {
+  const target = findOneToOneSubjectStudent_(userId);
+  if (!target) throw new Error("対象の生徒が見つかりません");
+  const rows = assertOneToOneSubjectSheet_().getDataRange().getValues();
+  const state = buildOneToOneSubjectStateMap_(rows);
+  return { subjectIds: state.states[target.userId] || [], warnings: state.warnings };
+}
+
+function replaceOneToOneSubjects_(targetUserId, subjectIds, updatedBy) {
+  if (!Array.isArray(subjectIds)) throw new Error("受講科目の形式が不正です");
+  const normalizedSubjects = subjectIds.map(value => String(value || "").trim());
+  if (new Set(normalizedSubjects).size !== normalizedSubjects.length || normalizedSubjects.some(subjectId => !ONE_TO_ONE_SUBJECT_IDS.includes(subjectId))) {
+    throw new Error("受講科目に重複または不正なsubjectIdが含まれています");
+  }
+  // eslint-disable-next-line no-undef
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(10000)) throw new Error("別の更新処理が実行中です");
+  try {
+    const target = findOneToOneSubjectStudent_(targetUserId);
+    if (!target) throw new Error("対象の生徒が見つかりません");
+    const sheet = assertOneToOneSubjectSheet_();
+    const snapshot = sheet.getDataRange().getValues();
+    buildOneToOneSubjectStateMap_(snapshot);
+    const preserved = [];
+    const createdAtBySubject = Object.create(null);
+    snapshot.slice(1).forEach(row => {
+      if (normalizeUserId(row[0]) === target.userId) createdAtBySubject[String(row[1] || "").trim()] = row[3];
+      else preserved.push(row.slice(0, ONE_TO_ONE_SUBJECT_HEADERS.length));
+    });
+    const now = new Date();
+    const enabled = new Set(normalizedSubjects);
+    const targetRows = ONE_TO_ONE_SUBJECT_IDS.map(subjectId => [formatUserIdForSheet(target.userId), subjectId, enabled.has(subjectId), createdAtBySubject[subjectId] || now, now, toSafeSheetText(updatedBy)]);
+    const nextRows = preserved.concat(targetRows);
+    const previousCount = Math.max(0, snapshot.length - 1);
+    const clearCount = Math.max(previousCount, nextRows.length);
+    try {
+      if (clearCount) sheet.getRange(2, 1, clearCount, ONE_TO_ONE_SUBJECT_HEADERS.length).clearContent();
+      if (nextRows.length) sheet.getRange(2, 1, nextRows.length, ONE_TO_ONE_SUBJECT_HEADERS.length).setValues(nextRows);
+    } catch (error) {
+      try {
+        if (clearCount) sheet.getRange(2, 1, clearCount, ONE_TO_ONE_SUBJECT_HEADERS.length).clearContent();
+        if (previousCount) sheet.getRange(2, 1, previousCount, ONE_TO_ONE_SUBJECT_HEADERS.length).setValues(snapshot.slice(1).map(row => row.slice(0, ONE_TO_ONE_SUBJECT_HEADERS.length)));
+      } catch { throw new Error("受講科目の更新と復元に失敗しました"); }
+      throw error;
+    }
+    return { subjectIds: normalizedSubjects.slice().sort((left, right) => ONE_TO_ONE_SUBJECT_IDS.indexOf(left) - ONE_TO_ONE_SUBJECT_IDS.indexOf(right)) };
+  } finally { lock.releaseLock(); }
+}
+
+// eslint-disable-next-line no-unused-vars
+function setupOneToOneSubjectSheet() {
+  // eslint-disable-next-line no-undef
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const existing = spreadsheet.getSheetByName(ONE_TO_ONE_SUBJECT_SHEET_NAME);
+  if (existing && existing.getLastRow() > 0) assertOneToOneSubjectSheet_();
+  const result = { createdSheets: [], initializedHeaders: [], warnings: [] };
+  const sheet = ensureSheetWithHeaders(spreadsheet, ONE_TO_ONE_SUBJECT_SHEET_NAME, ONE_TO_ONE_SUBJECT_HEADERS, result);
+  sheet.getRange(1, 1, sheet.getMaxRows(), 1).setNumberFormat("@");
+  if (sheet.getMaxRows() > 1) sheet.getRange(2, 4, sheet.getMaxRows() - 1, 2).setNumberFormat("yyyy/MM/dd HH:mm:ss");
+  return { sheetName: ONE_TO_ONE_SUBJECT_SHEET_NAME, created: result.createdSheets.includes(ONE_TO_ONE_SUBJECT_SHEET_NAME) };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runSetupOneToOneSubjectSheetSummary() {
+  const result = setupOneToOneSubjectSheet();
+  console.log(JSON.stringify(result, null, 2));
+}
+
+// eslint-disable-next-line no-unused-vars
+function inspectOneToOneSubjectData() {
+  const rows = assertOneToOneSubjectSheet_().getDataRange().getValues();
+  const students = new Set(getUserAuthContexts_().filter(user => user.role === "student").map(user => user.userId));
+  const seen = new Set();
+  const counts = { dataRows: Math.max(0, rows.length - 1), duplicateRows: 0, invalidSubjectIds: 0, unknownStudents: 0, enabledRows: 0, disabledRows: 0 };
+  rows.slice(1).forEach(row => {
+    const userId = normalizeUserId(row[0]);
+    const subjectId = String(row[1] || "").trim();
+    const key = `${userId}::${subjectId}`;
+    if (seen.has(key)) counts.duplicateRows++; else seen.add(key);
+    if (!ONE_TO_ONE_SUBJECT_IDS.includes(subjectId)) counts.invalidSubjectIds++;
+    if (!students.has(userId)) counts.unknownStudents++;
+    if (isEnabledValue(row[2])) counts.enabledRows++; else counts.disabledRows++;
+  });
+  return counts;
+}
+
+// eslint-disable-next-line no-unused-vars
+function runInspectOneToOneSubjectDataSummary() {
+  const result = inspectOneToOneSubjectData();
+  console.log(JSON.stringify(result, null, 2));
+}
+
 function normalizeKana_(value) {
   return String(value || "").normalize("NFKC").trim().replace(/\s+/g, "\u3000")
     .replace(/[ぁ-ゖ]/g, character => String.fromCharCode(character.charCodeAt(0) + 0x60));
@@ -1684,7 +1815,13 @@ function getSafeAccountValidationMessage_(error) {
     "Account was not found": "対象アカウントが見つかりません",
     "Account type does not match": "アカウント種別が一致しません",
     "Student profile was not found": "生徒情報が見つかりません",
-    "Staff profile was not found": "講師情報が見つかりません"
+    "Staff profile was not found": "講師情報が見つかりません",
+    "1対1受講科目シートが未セットアップです": "1対1受講科目のセットアップが必要です",
+    "1対1受講科目シートのヘッダーが不正です": "1対1受講科目シートの列構成を確認してください",
+    "対象の生徒が見つかりません": "対象の生徒が見つかりません",
+    "受講科目の形式が不正です": "受講科目の形式が不正です",
+    "受講科目に重複または不正なsubjectIdが含まれています": "受講科目に不正な値が含まれています",
+    "1対1受講科目にuserIdとsubjectIdの重複があります": "1対1受講科目データが重複しています"
   };
   return exactMessages[message] || "アカウント処理に失敗しました";
 }
@@ -1692,6 +1829,14 @@ function getSafeAccountValidationMessage_(error) {
 function handleNewAccountAdminAction_(data) {
   const admin = requireAdminSession(data.sessionToken);
   const action = data.action;
+  if (action === "getOneToOneSubjects") {
+    const state = getOneToOneSubjects(data.userId);
+    return { result: "success", userId: normalizeUserId(data.userId), subjectIds: state.subjectIds, warnings: state.warnings };
+  }
+  if (action === "updateOneToOneSubjects") {
+    const state = replaceOneToOneSubjects_(data.userId, data.subjectIds, admin.userId);
+    return { result: "success", userId: normalizeUserId(data.userId), subjectIds: state.subjectIds };
+  }
   if (action === "checkUserIdAvailable") {
     const userId = String(data.userId == null ? "" : data.userId).trim();
     if (!/^\d{6}$/.test(userId)) return { result: "success", available: false, message: "IDは半角数字6桁で入力してください" };
@@ -2068,7 +2213,7 @@ function doPost(e) {
   }
 
   // --- APIキーによる認証 ---
-  const newAccountActions = ["checkUserIdAvailable", "createStudentAccount", "updateStudentAccount", "deleteStudentAccount", "getStudentAccounts", "createStaffAccount", "updateStaffAccount", "deleteStaffAccount", "getStaffAccounts"];
+  const newAccountActions = ["checkUserIdAvailable", "createStudentAccount", "updateStudentAccount", "deleteStudentAccount", "getStudentAccounts", "createStaffAccount", "updateStaffAccount", "deleteStaffAccount", "getStaffAccounts", "getOneToOneSubjects", "updateOneToOneSubjects"];
   if (newAccountActions.includes(data.action)) {
     try {
       return responseJSON(handleNewAccountAdminAction_(data));

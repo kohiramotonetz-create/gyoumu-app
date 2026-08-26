@@ -16,6 +16,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - Issue #012 スキマ君利用設定 中学生・高校生モード一括変更
   - Issue #014 nameKana姓名間スペースの全角統一
   - Issue #015 生徒表示順をカナ五十音順へ統一
+  - Issue #016 1対1受講科目管理
 - 主な変更: `version.js`をVersion番号の正本とし、共通`VersionLabel`からログイン画面、生徒画面、講師・管理者画面の右下へ`Version 4.2.1`を表示する構造へ統一。
 - Frontend影響: Version表示のみ。既存画面、認証、権限、APIの仕様変更なし。
 - GAS影響: なし。
@@ -51,6 +52,18 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### Issue #016 1対1受講科目管理
+
+- 日付: 2026-08-27
+- 状態: React・GAS実装、ローカル検証、既存clasp管理対象へのGASコード反映を実施。専用シートの本番セットアップ、初回データ登録、GAS Webアプリ再デプロイ、実動作確認は未実施。
+- 変更内容: 生徒ごとの1対1受講科目を`userId × subjectId`で管理する専用マスターを追加。生徒詳細で英語・数学・国語・理科・社会を複数選択し、基本情報とは独立して取得・保存できる。
+- データ／シート: `1対1受講科目`シートを`userId / subjectId / enabled / createdAt / updatedAt / updatedBy`の6列で使用。userId列は文字列形式、解除は行削除せず`enabled=FALSE`とする。初回一括登録では先頭3列だけの直接入力を許容する。
+- API: adminセッション必須の`getOneToOneSubjects`、`updateOneToOneSubjects`を追加。内部共通取得処理は将来のIssue #017「1対1進捗チェック」とIssue #018「生徒プロフィール」から再利用できる構造とする。既存アカウントAPI、4マスター、認証・権限仕様は変更しない。
+- 安全性: 有効subjectIdのみを返し、`userId × subjectId`重複はエラーにする。更新はDocumentLock、全件検証、一括書込み、失敗時復元を行う。未登録生徒と不正subjectIdを拒否する。
+- GAS: 既存`gas/.clasp.json`の対象プロジェクトへclasp push済み。setup関数実行、Webアプリ再デプロイ、本番シート・本番データ変更は未実施。
+- 影響範囲: gyoumu-appのadmin向け生徒詳細とGAS。student-app、ログイン、SSO、スキマ君権限、進捗履歴は変更しない。
+- Version: 変更なし（Version 4.2.1）。
 
 ### Issue #015 生徒表示順をカナ五十音順へ統一
 
