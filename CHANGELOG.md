@@ -56,12 +56,13 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 ### Issue #016 1対1受講科目管理
 
 - 日付: 2026-08-27
-- 状態: React・GAS実装、ローカル検証、既存clasp管理対象へのGASコード反映を実施。専用シートの本番セットアップ、初回データ登録、GAS Webアプリ再デプロイ、実動作確認は未実施。
+- 状態: React・GAS実装、ローカル検証、対象GASへのclasp push、専用シートの本番セットアップ、GAS Webアプリ再デプロイ、実動作確認を完了。
 - 変更内容: 生徒ごとの1対1受講科目を`userId × subjectId`で管理する専用マスターを追加。生徒詳細で英語・数学・国語・理科・社会を複数選択し、基本情報とは独立して取得・保存できる。
 - データ／シート: `1対1受講科目`シートを`userId / subjectId / enabled / createdAt / updatedAt / updatedBy`の6列で使用。userId列は文字列形式、解除は行削除せず`enabled=FALSE`とする。初回一括登録では先頭3列だけの直接入力を許容する。
 - API: adminセッション必須の`getOneToOneSubjects`、`updateOneToOneSubjects`を追加。内部共通取得処理は将来のIssue #017「1対1進捗チェック」とIssue #018「生徒プロフィール」から再利用できる構造とする。既存アカウントAPI、4マスター、認証・権限仕様は変更しない。
 - 安全性: 有効subjectIdのみを返し、`userId × subjectId`重複はエラーにする。更新はDocumentLock、全件検証、一括書込み、失敗時復元を行う。未登録生徒と不正subjectIdを拒否する。
-- GAS: 既存`gas/.clasp.json`の対象プロジェクトへclasp push済み。setup関数実行、Webアプリ再デプロイ、本番シート・本番データ変更は未実施。
+- GAS・データ: 既存`gas/.clasp.json`の対象プロジェクトへclasp push済み。利用者が`setupOneToOneSubjectSheet()`を実行して本番シートを作成し、A列の文字列形式を確認した。検査用1行で重複・不正subjectId・未登録生徒が各0件であることを確認後、GAS Webアプリを新Versionとして再デプロイ済み。
+- 実動作確認: ローカルgyoumu-appから、スプレッドシート登録済み科目の取得・チェック表示、科目追加・解除・保存・再取得、他生徒へ影響しないことを利用者が確認済み。
 - 影響範囲: gyoumu-appのadmin向け生徒詳細とGAS。student-app、ログイン、SSO、スキマ君権限、進捗履歴は変更しない。
 - Version: 変更なし（Version 4.2.1）。
 
