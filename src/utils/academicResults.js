@@ -11,6 +11,18 @@ export const ACADEMIC_SUBJECTS = [
 ];
 
 export const TEST_TYPE_LABELS = { regular: '定期テスト', diagnostic: '診断テスト', other: 'その他' };
+export const ACADEMIC_START_YEAR = 2024;
+
+export function getCurrentSchoolYear(now = new Date()) {
+  return now.getMonth() < 3 ? now.getFullYear() - 1 : now.getFullYear();
+}
+
+export function getAcademicYearOptions(testYears = [], now = new Date()) {
+  const currentYear = getCurrentSchoolYear(now);
+  const validStoredYears = testYears.map(Number).filter(year => Number.isInteger(year) && year >= ACADEMIC_START_YEAR);
+  const lastYear = Math.max(currentYear + 1, ACADEMIC_START_YEAR, ...validStoredYears);
+  return Array.from({ length: lastYear - ACADEMIC_START_YEAR + 1 }, (_, index) => ACADEMIC_START_YEAR + index);
+}
 
 export function normalizeAcademicScore(value, maxScore) {
   if (value === '' || value === null || value === undefined) return '';

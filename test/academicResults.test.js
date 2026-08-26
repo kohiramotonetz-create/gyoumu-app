@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { ACADEMIC_SUBJECTS, areAcademicScoresEqual, calculateAcademicTotal, normalizeAcademicScore, parseAcademicScorePaste } from '../src/utils/academicResults.js';
+import { ACADEMIC_SUBJECTS, areAcademicScoresEqual, calculateAcademicTotal, getAcademicYearOptions, getCurrentSchoolYear, normalizeAcademicScore, parseAcademicScorePaste } from '../src/utils/academicResults.js';
 
 const completeScores = values => Object.fromEntries(ACADEMIC_SUBJECTS.map(({ key }, index) => [key, values[index]]));
+
+test('学校成績年度は2024年度から現在年度+1まで自動生成し保存済み将来年度も含める', () => {
+  const now = new Date(2026, 7, 27);
+  assert.equal(getCurrentSchoolYear(now), 2026);
+  assert.deepEqual(getAcademicYearOptions([], now), [2024, 2025, 2026, 2027]);
+  assert.deepEqual(getAcademicYearOptions([2023, 2028], now), [2024, 2025, 2026, 2027, 2028]);
+  assert.equal(getAcademicYearOptions([], now).some(year => year < 2024), false);
+});
 
 test('9科目すべて入力済みの場合だけ合計する', () => {
   assert.equal(calculateAcademicTotal(completeScores([72, 81, 68, 75, 80, 90, 85, 88, 92])), 731);
@@ -60,4 +68,6 @@ test('管理画面はadmin限定メニュー・9科目表・未保存一括保�
   assert.doesNotMatch(manager, /test\.grade/);
   assert.match(manager, /getAcademicResultMatrix', \{ testId, school, grade \}/);
   assert.match(manager, /bulkUpdateAcademicResults', \{ testId, grade,/);
+  assert.match(manager, /styles\.select/);
+  assert.match(manager, /repeat\(auto-fit, minmax\(180px, 1fr\)\)/);
 });
