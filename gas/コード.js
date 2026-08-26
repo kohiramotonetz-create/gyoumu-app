@@ -45,7 +45,7 @@ const ONE_TO_ONE_PROGRESS_UNIT_HEADERS = ["eventId", "unitId", "unitOrder", "tex
 const ONE_TO_ONE_SOCIAL_FIELDS = [{ fieldId: "history", label: "歴史" }, { fieldId: "geography", label: "地理" }, { fieldId: "civics", label: "公民" }];
 const ACADEMIC_TEST_SHEET_NAME = "学校成績テスト";
 const ACADEMIC_RESULT_SHEET_NAME = "学校成績";
-const ACADEMIC_TEST_HEADERS = ["testId", "schoolYear", "grade", "testName", "testType", "maxScore", "enabled", "sortOrder", "createdAt", "updatedAt", "updatedBy"];
+const ACADEMIC_TEST_HEADERS = ["testId", "schoolYear", "testName", "testType", "maxScore", "enabled", "sortOrder", "createdAt", "updatedAt", "updatedBy"];
 const ACADEMIC_SUBJECTS = ["japanese", "math", "english", "science", "social", "music", "health", "art", "technologyHomeEconomics"];
 const ACADEMIC_RESULT_HEADERS = ["testId", "userId"].concat(ACADEMIC_SUBJECTS, ["createdAt", "updatedAt", "updatedBy"]);
 const ACADEMIC_TEST_TYPES = ["regular", "diagnostic", "other"];
@@ -2559,7 +2559,7 @@ function setupAcademicResultSheets() {
   const testSheet = ensureStrictSheet(ACADEMIC_TEST_SHEET_NAME, ACADEMIC_TEST_HEADERS);
   const resultSheet = ensureStrictSheet(ACADEMIC_RESULT_SHEET_NAME, ACADEMIC_RESULT_HEADERS);
   testSheet.getRange("A:A").setNumberFormat("@");
-  testSheet.getRange("K:K").setNumberFormat("@");
+  testSheet.getRange("J:J").setNumberFormat("@");
   resultSheet.getRange("A:B").setNumberFormat("@");
   resultSheet.getRange("N:N").setNumberFormat("@");
   return { createdSheets, sheets: [ACADEMIC_TEST_SHEET_NAME, ACADEMIC_RESULT_SHEET_NAME] };
@@ -2570,9 +2570,9 @@ function getAcademicTestRecords_() {
   const seen = Object.create(null);
   return rows.slice(1).filter(row => row.some(value => value !== "")).map(row => {
     const test = {
-      testId: String(row[0] || "").trim(), schoolYear: validateAcademicYear_(row[1]), grade: validateGrade_(row[2]),
-      testName: normalizeAcademicTestName_(row[3]), testType: validateAcademicTestType_(row[4]), maxScore: validateAcademicMaxScore_(row[5]),
-      enabled: isEnabledValue(row[6]), sortOrder: Number(row[7]), createdAt: row[8], updatedAt: row[9], updatedBy: String(row[10] || "").trim()
+      testId: String(row[0] || "").trim(), schoolYear: validateAcademicYear_(row[1]),
+      testName: normalizeAcademicTestName_(row[2]), testType: validateAcademicTestType_(row[3]), maxScore: validateAcademicMaxScore_(row[4]),
+      enabled: isEnabledValue(row[5]), sortOrder: Number(row[6]), createdAt: row[7], updatedAt: row[8], updatedBy: String(row[9] || "").trim()
     };
     if (!test.testId || seen[test.testId]) throw new Error("学校成績テストにtestIdの重複があります");
     seen[test.testId] = true;
@@ -2597,7 +2597,6 @@ function getAcademicResultRows_() {
 
 function createAcademicResultTest_(data, admin) {
   const schoolYear = validateAcademicYear_(data.schoolYear);
-  const grade = validateGrade_(data.grade);
   const testName = normalizeAcademicTestName_(data.testName);
   const testType = validateAcademicTestType_(data.testType);
   const maxScore = validateAcademicMaxScore_(data.maxScore);
@@ -2606,16 +2605,16 @@ function createAcademicResultTest_(data, admin) {
   lock.waitLock(10000);
   try {
     const tests = getAcademicTestRecords_();
-    if (tests.some(test => test.schoolYear === schoolYear && test.grade === grade && normalizeAcademicTestName_(test.testName) === testName)) throw new Error("同じ年度・学年・テスト名が既に存在します");
-    const sortOrder = Math.max(0, ...tests.filter(test => test.schoolYear === schoolYear && test.grade === grade).map(test => Number(test.sortOrder) || 0)) + 1;
+    if (tests.some(test => test.schoolYear === schoolYear && normalizeAcademicTestName_(test.testName) === testName)) throw new Error("同じ年度・テスト名が既に存在します");
+    const sortOrder = Math.max(0, ...tests.filter(test => test.schoolYear === schoolYear).map(test => Number(test.sortOrder) || 0)) + 1;
     const now = new Date();
     // eslint-disable-next-line no-undef
-    const record = { testId: `academic_${Utilities.getUuid()}`, schoolYear, grade, testName, testType, maxScore, enabled: true, sortOrder, createdAt: now, updatedAt: now, updatedBy: admin.userId };
+    const record = { testId: `academic_${Utilities.getUuid()}`, schoolYear, testName, testType, maxScore, enabled: true, sortOrder, createdAt: now, updatedAt: now, updatedBy: admin.userId };
     const sheet = getAcademicSheets_().testSheet;
     const row = sheet.getLastRow() + 1;
     sheet.getRange(row, 1).setNumberFormat("@");
-    sheet.getRange(row, 11).setNumberFormat("@");
-    sheet.getRange(row, 1, 1, ACADEMIC_TEST_HEADERS.length).setValues([[record.testId, schoolYear, grade, testName, testType, maxScore, true, sortOrder, now, now, admin.userId]]);
+    sheet.getRange(row, 10).setNumberFormat("@");
+    sheet.getRange(row, 1, 1, ACADEMIC_TEST_HEADERS.length).setValues([[record.testId, schoolYear, testName, testType, maxScore, true, sortOrder, now, now, admin.userId]]);
     return record;
   } finally { lock.releaseLock(); }
 }
@@ -2635,13 +2634,13 @@ function updateAcademicResultTest_(data, admin) {
     const targetIndex = tests.findIndex(test => test.testId === testId);
     if (targetIndex < 0) throw new Error("対象テストが見つかりません");
     const target = tests[targetIndex];
-    if (tests.some(test => test.testId !== testId && test.schoolYear === target.schoolYear && test.grade === target.grade && normalizeAcademicTestName_(test.testName) === testName)) throw new Error("同じ年度・学年・テスト名が既に存在します");
+    if (tests.some(test => test.testId !== testId && test.schoolYear === target.schoolYear && normalizeAcademicTestName_(test.testName) === testName)) throw new Error("同じ年度・テスト名が既に存在します");
     const results = getAcademicResultRows_().filter(record => record.testId === testId);
     results.forEach(record => ACADEMIC_SUBJECTS.forEach(subject => normalizeAcademicScore_(record.scores[subject], maxScore)));
     const now = new Date();
     const row = targetIndex + 2;
-    sheets.testSheet.getRange(row, 4, 1, 4).setValues([[testName, testType, maxScore, data.enabled]]);
-    sheets.testSheet.getRange(row, 10, 1, 2).setValues([[now, admin.userId]]);
+    sheets.testSheet.getRange(row, 3, 1, 4).setValues([[testName, testType, maxScore, data.enabled]]);
+    sheets.testSheet.getRange(row, 9, 1, 2).setValues([[now, admin.userId]]);
     return { ...target, testName, testType, maxScore, enabled: data.enabled, updatedAt: now, updatedBy: admin.userId };
   } finally { lock.releaseLock(); }
 }
@@ -2649,12 +2648,13 @@ function updateAcademicResultTest_(data, admin) {
 function getAcademicResultMatrix_(data) {
   const testId = String(data.testId || "").trim();
   const school = String(data.school || "").trim();
+  const grade = validateGrade_(data.grade);
   const test = getAcademicTestRecords_().find(item => item.testId === testId);
   if (!test) throw new Error("対象テストが見つかりません");
   if (!school) throw new Error("校舎を指定してください");
   const resultMap = Object.create(null);
   getAcademicResultRows_().filter(record => record.testId === testId).forEach(record => { resultMap[record.userId] = record; });
-  const students = getNewAuthData_().contexts.filter(user => user.role === "student" && user.enabled && !user.deleted && user.school === school && user.grade === test.grade).map(user => {
+  const students = getNewAuthData_().contexts.filter(user => user.role === "student" && user.enabled && !user.deleted && user.school === school && user.grade === grade).map(user => {
     const existing = resultMap[user.userId];
     const scores = {};
     ACADEMIC_SUBJECTS.forEach(subject => { scores[subject] = existing ? normalizeAcademicScore_(existing.scores[subject], test.maxScore) : ""; });
@@ -2665,6 +2665,7 @@ function getAcademicResultMatrix_(data) {
 
 function bulkUpdateAcademicResults_(data, admin) {
   const testId = String(data.testId || "").trim();
+  const grade = validateGrade_(data.grade);
   if (!Array.isArray(data.records) || data.records.length < 1) throw new Error("保存対象がありません");
   // eslint-disable-next-line no-undef
   const lock = LockService.getDocumentLock();
@@ -2680,7 +2681,7 @@ function bulkUpdateAcademicResults_(data, admin) {
       if (!userId || seenPayload[userId]) throw new Error("保存対象の生徒が重複しています");
       seenPayload[userId] = true;
       const student = users.find(user => user.userId === userId && user.role === "student" && user.enabled && !user.deleted);
-      if (!student || student.grade !== test.grade) throw new Error("対象生徒または学年が不正です");
+      if (!student || student.grade !== grade) throw new Error("対象生徒または学年が不正です");
       return { userId, scores: normalizeAcademicScores_(record.scores, test.maxScore) };
     });
     const current = getAcademicResultRows_();
@@ -2730,7 +2731,7 @@ function getAcademicResultsForStudent_(userId, options) {
     const test = testById[record.testId];
     const scores = normalizeAcademicScores_(record.scores, test.maxScore);
     if (!groups[test.schoolYear]) groups[test.schoolYear] = [];
-    groups[test.schoolYear].push({ testId: test.testId, testName: test.testName, testType: test.testType, grade: test.grade, maxScore: test.maxScore, enabled: test.enabled, scores, total: calculateAcademicTotal_(scores), updatedAt: record.updatedAt });
+    groups[test.schoolYear].push({ testId: test.testId, testName: test.testName, testType: test.testType, maxScore: test.maxScore, enabled: test.enabled, scores, total: calculateAcademicTotal_(scores), updatedAt: record.updatedAt });
   });
   return { schoolYears: Object.keys(groups).map(Number).sort((a, b) => b - a).map(schoolYear => ({ schoolYear, tests: groups[schoolYear].sort((a, b) => (testById[a.testId].sortOrder - testById[b.testId].sortOrder)) })) };
 }
@@ -2739,9 +2740,8 @@ function handleAcademicResultAction_(data) {
   const admin = requireAdminSession(data.sessionToken);
   if (data.action === "getAcademicResultTests") {
     const schoolYear = data.schoolYear === "" || data.schoolYear == null ? null : validateAcademicYear_(data.schoolYear);
-    const grade = data.grade ? validateGrade_(data.grade) : "";
     const includeDisabled = data.includeDisabled === true;
-    const tests = getAcademicTestRecords_().filter(test => (schoolYear === null || test.schoolYear === schoolYear) && (!grade || test.grade === grade) && (includeDisabled || test.enabled)).sort((a, b) => b.schoolYear - a.schoolYear || a.sortOrder - b.sortOrder || a.testName.localeCompare(b.testName, "ja"));
+    const tests = getAcademicTestRecords_().filter(test => (schoolYear === null || test.schoolYear === schoolYear) && (includeDisabled || test.enabled)).sort((a, b) => b.schoolYear - a.schoolYear || a.sortOrder - b.sortOrder || a.testName.localeCompare(b.testName, "ja"));
     return { result: "success", tests };
   }
   if (data.action === "createAcademicResultTest") return { result: "success", test: createAcademicResultTest_(data, admin) };

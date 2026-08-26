@@ -57,4 +57,7 @@ test('管理画面はadmin限定メニュー・9科目表・未保存一括保�
   assert.match(manager, /未保存の変更/);
   assert.match(manager, /一括保存/);
   assert.match(manager, /subjectKey !== 'japanese'/);
+  assert.doesNotMatch(manager, /test\.grade/);
+  assert.match(manager, /getAcademicResultMatrix', \{ testId, school, grade \}/);
+  assert.match(manager, /bulkUpdateAcademicResults', \{ testId, grade,/);
 });

@@ -7,7 +7,7 @@ import { ACADEMIC_SUBJECTS, TEST_TYPE_LABELS, areAcademicScoresEqual, calculateA
 
 const REQUEST_TIMEOUT_MS = 30000;
 const currentSchoolYear = () => { const now = new Date(); return now.getMonth() < 3 ? now.getFullYear() - 1 : now.getFullYear(); };
-const emptyForm = () => ({ schoolYear: currentSchoolYear(), grade: '', testName: '', testType: 'regular', maxScore: 100 });
+const emptyForm = () => ({ testName: '', testType: 'regular', maxScore: 100 });
 
 export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken, assignedSchools = [], styles, onSessionExpired }) {
   const [tab, setTab] = useState('input');
@@ -45,7 +45,7 @@ export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken,
   useEffect(() => { loadTests(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const years = useMemo(() => [...new Set([currentSchoolYear(), ...tests.map(test => test.schoolYear)])].sort((a, b) => b - a), [tests]);
-  const availableTests = useMemo(() => tests.filter(test => test.enabled && test.schoolYear === Number(year) && test.grade === grade).sort((a, b) => a.sortOrder - b.sortOrder), [tests, year, grade]);
+  const availableTests = useMemo(() => tests.filter(test => test.enabled && test.schoolYear === Number(year)).sort((a, b) => a.sortOrder - b.sortOrder), [tests, year]);
   const selectedTest = tests.find(test => test.testId === testId);
   const sortedStudents = useMemo(() => [...students].sort(compareStudentsByKana), [students]);
   const dirtyStudents = useMemo(() => sortedStudents.filter(student => !areAcademicScoresEqual(editing[student.userId], student.scores)), [editing, sortedStudents]);
@@ -54,7 +54,7 @@ export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken,
     event.preventDefault();
     setSaving(true); setMessage({ type: '', text: '' });
     try {
-      const payload = { ...form, schoolYear: Number(form.schoolYear), maxScore: Number(form.maxScore) };
+      const payload = { ...form, schoolYear: Number(year), maxScore: Number(form.maxScore) };
       if (editingTestId) await postAction('updateAcademicResultTest', { testId: editingTestId, testName: payload.testName, testType: payload.testType, maxScore: payload.maxScore, enabled: tests.find(test => test.testId === editingTestId)?.enabled === true });
       else await postAction('createAcademicResultTest', payload);
       setForm(emptyForm()); setEditingTestId(''); await loadTests();
@@ -63,7 +63,7 @@ export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken,
     finally { setSaving(false); }
   };
 
-  const startEditTest = test => { setEditingTestId(test.testId); setForm({ schoolYear: test.schoolYear, grade: test.grade, testName: test.testName, testType: test.testType, maxScore: test.maxScore }); };
+  const startEditTest = test => { setEditingTestId(test.testId); setYear(test.schoolYear); setForm({ testName: test.testName, testType: test.testType, maxScore: test.maxScore }); };
   const toggleTest = async test => {
     if (test.enabled && !window.confirm('このテストを無効化します。既存成績は削除されません。よろしいですか？')) return;
     setSaving(true);
@@ -73,10 +73,10 @@ export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken,
   };
 
   const loadMatrix = async () => {
-    if (!testId || !school) return setMessage({ type: 'error', text: '年度・学年・テスト・校舎を選択してください。' });
+    if (!testId || !school || !grade) return setMessage({ type: 'error', text: '年度・学年・テスト・校舎を選択してください。' });
     setLoading(true); setMessage({ type: '', text: '' });
     try {
-      const response = await postAction('getAcademicResultMatrix', { testId, school });
+      const response = await postAction('getAcademicResultMatrix', { testId, school, grade });
       const next = [...(response.students || [])].sort(compareStudentsByKana);
       setStudents(next); setEditing(Object.fromEntries(next.map(student => [student.userId, { ...student.scores }])));
       setMessage({ type: 'success', text: `${next.length}名の成績を取得しました。` });
@@ -112,7 +112,7 @@ export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken,
     if (!window.confirm(`${dirtyStudents.length}名分の「${year}年度 ${grade} ${selectedTest.testName}」の成績を保存します。`)) return;
     setSaving(true);
     try {
-      await postAction('bulkUpdateAcademicResults', { testId, records: dirtyStudents.map(student => ({ userId: student.userId, scores: editing[student.userId] })) });
+      await postAction('bulkUpdateAcademicResults', { testId, grade, records: dirtyStudents.map(student => ({ userId: student.userId, scores: editing[student.userId] })) });
       await loadMatrix(); setMessage({ type: 'success', text: `${dirtyStudents.length}名分の成績を保存しました。` });
     } catch (error) { setMessage({ type: 'error', text: error.message }); }
     finally { setSaving(false); }
@@ -126,23 +126,22 @@ export default function AcademicResultsManager({ GAS_URL, API_KEY, sessionToken,
     {message.text && <div role="status" style={{ whiteSpace: 'pre-wrap', padding: 10, marginBottom: 12, borderRadius: 6, background: message.type === 'error' ? '#fee2e2' : '#dcfce7', color: message.type === 'error' ? '#991b1b' : '#166534' }}>{message.text}</div>}
     {tab === 'tests' ? <div style={{ display: 'grid', gap: 16 }}>
       <form onSubmit={saveTest} style={{ ...panel, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
-        <label>年度<input type="number" value={form.schoolYear} disabled={Boolean(editingTestId)} onChange={e => setForm(value => ({ ...value, schoolYear: e.target.value }))} required /></label>
-        <label>学年<GradeSelect value={form.grade ? [form.grade] : []} disabled={Boolean(editingTestId)} onChange={values => setForm(value => ({ ...value, grade: values[0] || '' }))} includeGroups={false} /></label>
+        <label>年度<input type="number" value={year} disabled={Boolean(editingTestId)} onChange={e => setYear(Number(e.target.value))} required /></label>
         <label>テスト名<input value={form.testName} onChange={e => setForm(value => ({ ...value, testName: e.target.value }))} required /></label>
         <label>種別<select value={form.testType} onChange={e => setForm(value => ({ ...value, testType: e.target.value }))}>{Object.entries(TEST_TYPE_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label>満点<input type="number" min="1" max="1000" value={form.maxScore} onChange={e => setForm(value => ({ ...value, maxScore: e.target.value }))} required /></label>
-        <button disabled={saving || !form.grade} style={styles.doneBtn}>{editingTestId ? '更新' : 'テスト追加'}</button>
+        <button disabled={saving} style={styles.doneBtn}>{editingTestId ? '更新' : 'テスト追加'}</button>
         {editingTestId && <button type="button" onClick={() => { setEditingTestId(''); setForm(emptyForm()); }}>キャンセル</button>}
-        {editingTestId && <small>年度・学年は作成後に変更できません。</small>}
+        {editingTestId && <small>年度は作成後に変更できません。</small>}
       </form>
-      <div style={panel}>{loading ? '読み込み中...' : tests.map(test => <div key={test.testId} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: 10, borderBottom: '1px solid #e5e7eb', opacity: test.enabled ? 1 : .6 }}><strong>{test.schoolYear}年度 {test.grade} {test.testName}</strong><span>{TEST_TYPE_LABELS[test.testType]}</span><span>{test.maxScore}点</span><span>{test.enabled ? '有効' : '無効'}</span><button onClick={() => startEditTest(test)}>編集</button><button disabled={saving} onClick={() => toggleTest(test)}>{test.enabled ? '無効化' : '有効化'}</button></div>)}</div>
+      <div style={panel}>{loading ? '読み込み中...' : tests.map(test => <div key={test.testId} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: 10, borderBottom: '1px solid #e5e7eb', opacity: test.enabled ? 1 : .6 }}><strong>{test.schoolYear}年度 {test.testName}</strong><span>{TEST_TYPE_LABELS[test.testType]}</span><span>{test.maxScore}点</span><span>{test.enabled ? '有効' : '無効'}</span><button onClick={() => startEditTest(test)}>編集</button><button disabled={saving} onClick={() => toggleTest(test)}>{test.enabled ? '無効化' : '有効化'}</button></div>)}</div>
     </div> : <>
       <div style={{ ...panel, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end', marginBottom: 14 }}>
         <label>年度<select value={year} onChange={e => { setYear(Number(e.target.value)); setTestId(''); setStudents([]); }}>{years.map(value => <option key={value}>{value}</option>)}</select></label>
         <label>学年<GradeSelect value={grade ? [grade] : []} onChange={values => { setGrade(values[0] || ''); setTestId(''); setStudents([]); }} includeGroups={false} /></label>
         <label>テスト<select value={testId} onChange={e => { setTestId(e.target.value); setStudents([]); }}><option value="">選択してください</option>{availableTests.map(test => <option key={test.testId} value={test.testId}>{test.testName}</option>)}</select></label>
         <label>校舎<SchoolSelect value={school} onChange={e => { setSchool(e.target.value); setStudents([]); }} assignedSchools={assignedSchools} /></label>
-        <button style={styles.doneBtn} disabled={loading || !testId || !school} onClick={loadMatrix}>{loading ? '読み込み中...' : '表示'}</button>
+        <button style={styles.doneBtn} disabled={loading || !testId || !school || !grade} onClick={loadMatrix}>{loading ? '読み込み中...' : '表示'}</button>
       </div>
       {students.length > 0 && <div style={{ ...panel, padding: 0, overflow: 'hidden' }}><div style={{ overflow: 'auto', maxHeight: '70vh', WebkitOverflowScrolling: 'touch' }}><table style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: 1080, width: '100%' }}><thead><tr><th style={{ ...header, left: 0, zIndex: 20, minWidth: 180 }}>生徒名</th>{ACADEMIC_SUBJECTS.map(subject => <th key={subject.key} style={header}>{subject.label}</th>)}<th style={header}>合計</th></tr></thead><tbody>{sortedStudents.map((student, studentIndex) => { const scores = editing[student.userId] || {}; const dirty = !areAcademicScoresEqual(scores, student.scores); const total = calculateAcademicTotal(scores); return <tr key={student.userId} style={{ background: dirty ? '#fffbeb' : '#fff' }}><td style={{ position: 'sticky', left: 0, zIndex: 5, padding: 8, background: dirty ? '#fffbeb' : '#fff', borderBottom: '1px solid #e5e7eb' }}><strong>{student.name}</strong><div style={{ fontSize: 11, color: '#64748b' }}>{student.userId}{dirty && ' ・ 未保存'}</div></td>{ACADEMIC_SUBJECTS.map(subject => <td key={subject.key} style={{ padding: 5, borderBottom: '1px solid #e5e7eb' }}><input aria-label={`${student.name} ${subject.label}`} inputMode="numeric" value={scores[subject.key] ?? ''} onChange={e => changeScore(student, subject.key, e.target.value)} onPaste={e => pasteScores(e, studentIndex, subject.key)} style={{ width: 68, padding: 7, boxSizing: 'border-box' }} /></td>)}<td style={{ textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid #e5e7eb' }}>{total === null ? '－' : total}</td></tr>; })}</tbody></table></div><div style={{ padding: 14, borderTop: '1px solid #e5e7eb', textAlign: 'right' }}><span style={{ marginRight: 14 }}>未保存の変更：{dirtyStudents.length}名</span><button style={styles.doneBtn} disabled={saving || dirtyStudents.length === 0} onClick={saveResults}>{saving ? '保存中...' : `一括保存（${dirtyStudents.length}名）`}</button></div></div>}
       <p style={{ color: '#64748b', fontSize: 12 }}>複数行貼り付けはPCで対象生徒の国語セルから、合計を除く9科目をコピーして行ってください。</p>
