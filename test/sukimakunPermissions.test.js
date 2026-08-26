@@ -29,6 +29,8 @@ test('管理画面はプリセットをstateだけへ適用し、既存保存API
 
   assert.match(source, /applyModePreset\(student\.userId, 'juniorHighMode'/);
   assert.match(source, /applyModePreset\(student\.userId, 'highSchoolMode'/);
+  assert.match(source, /width: '210px', minWidth: '210px', maxWidth: '210px'/);
+  assert.match(source, /width: 'auto', flex: '1 1 90px'/);
   assert.match(presetBody, /setEditingByStudentId/);
   assert.doesNotMatch(presetBody, /postAction|updateSukimakunPermissions/);
   assert.match(source, /onChange=\{\(\) => toggleContent\(student\.userId, content\.contentId\)\}/);

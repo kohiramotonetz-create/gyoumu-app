@@ -282,7 +282,7 @@ export default function SukimakunPermissionManager({
                 <tr>
                   <th style={{ ...headerCellStyle, left: 0, zIndex: 30, minWidth: `${NAME_COLUMN_WIDTH}px`, width: `${NAME_COLUMN_WIDTH}px`, textAlign: 'left' }}>生徒名</th>
                   <th style={{ ...headerCellStyle, left: `${NAME_COLUMN_WIDTH}px`, zIndex: 30, minWidth: `${ID_COLUMN_WIDTH}px`, width: `${ID_COLUMN_WIDTH}px` }}>生徒ID</th>
-                  <th style={{ ...headerCellStyle, minWidth: '190px' }}>モード一括設定</th>
+                  <th style={{ ...headerCellStyle, width: '210px', minWidth: '210px', maxWidth: '210px' }}>モード一括設定</th>
                   {activeContents.map(content => (
                     <th key={content.contentId} title={content.displayName} style={headerCellStyle}>{content.displayName}</th>
                   ))}
@@ -306,10 +306,10 @@ export default function SukimakunPermissionManager({
                       <td style={{ position: 'sticky', left: `${NAME_COLUMN_WIDTH}px`, zIndex: 5, width: `${ID_COLUMN_WIDTH}px`, minWidth: `${ID_COLUMN_WIDTH}px`, padding: '8px', borderRight: '1px solid #d1d5db', borderBottom: '1px solid #e5e7eb', background: rowBackground, color: '#64748b', fontSize: '12px', textAlign: 'center', boxSizing: 'border-box' }}>
                         {student.userId}
                       </td>
-                      <td style={{ minWidth: '190px', padding: '7px 8px', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle' }}>
+                      <td style={{ width: '210px', minWidth: '210px', maxWidth: '210px', padding: '7px 8px', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                          <button type="button" onClick={() => applyModePreset(student.userId, 'juniorHighMode', '中学生モード')} disabled={isSaving || sessionExpired} style={{ ...styles.doneBtn, padding: '6px 9px', fontSize: '12px' }}>中学生モード</button>
-                          <button type="button" onClick={() => applyModePreset(student.userId, 'highSchoolMode', '高校生モード')} disabled={isSaving || sessionExpired} style={{ ...styles.doneBtn, padding: '6px 9px', fontSize: '12px' }}>高校生モード</button>
+                          <button type="button" onClick={() => applyModePreset(student.userId, 'juniorHighMode', '中学生モード')} disabled={isSaving || sessionExpired} style={{ ...styles.doneBtn, width: 'auto', flex: '1 1 90px', margin: 0, padding: '6px 8px', fontSize: '12px', whiteSpace: 'nowrap' }}>中学生モード</button>
+                          <button type="button" onClick={() => applyModePreset(student.userId, 'highSchoolMode', '高校生モード')} disabled={isSaving || sessionExpired} style={{ ...styles.doneBtn, width: 'auto', flex: '1 1 90px', margin: 0, padding: '6px 8px', fontSize: '12px', whiteSpace: 'nowrap' }}>高校生モード</button>
                         </div>
                         {rowStatus.type === 'preset' && <div role="status" style={{ marginTop: '4px', color: '#b45309', fontSize: '11px', lineHeight: 1.35 }}>{rowStatus.message}</div>}
                       </td>
