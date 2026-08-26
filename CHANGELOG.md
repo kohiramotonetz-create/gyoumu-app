@@ -18,6 +18,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - Issue #015 生徒表示順をカナ五十音順へ統一
   - Issue #016 1対1受講科目管理
   - Issue #017 1対1進捗チェック
+  - Issue #020 学校成績管理
 - 主な変更: `version.js`をVersion番号の正本とし、共通`VersionLabel`からログイン画面、生徒画面、講師・管理者画面の右下へ`Version 4.2.1`を表示する構造へ統一。
 - Frontend影響: Version表示のみ。既存画面、認証、権限、APIの仕様変更なし。
 - GAS影響: なし。
@@ -53,6 +54,14 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### Issue #020 学校成績管理
+
+- 変更内容: admin限定の学校成績管理画面を追加し、年度・学年ごとのテスト設定と、校舎・テストを指定した9科目成績入力に対応した。Excel／Googleスプレッドシートから国語・数学・英語・理科・社会・音楽・保健・美術・技家の順で9列を複数生徒へ貼り付け、React stateで確認後に変更生徒だけを一括保存する。
+- データ: `学校成績テスト`と`学校成績`を正本とし、`testId × userId`を一意キーにする。合計は保存せず、9科目すべて入力済みの場合だけ自動計算する。空欄と0点を区別する。
+- API・権限: adminセッションを必須とするテスト取得・作成・更新、成績マトリックス取得、一括保存actionを追加。GAS側でもテスト、学年、生徒role、enabled、点数範囲、重複を検証し、DocumentLockと失敗時復元を使用する。Issue #018向け生徒別内部取得処理を追加した。
+- セットアップ: `setupAcademicResultSheets()`を追加。Codexによる実行、本番2シート作成、GAS Webアプリ再デプロイ、本番成績入力、実環境確認は未実施。
+- Version: 変更なし（Version 4.2.1）。student-appおよびstudent-app-log-gasへの変更なし。
 
 ### Issue #017 1対1進捗チェック
 

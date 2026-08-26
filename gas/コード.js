@@ -1,4 +1,4 @@
-/* global SCHOOL_UNIT_MASTER_GENERATED */
+/* global SCHOOL_UNIT_MASTER_GENERATED, SpreadsheetApp, LockService, Utilities */
 /**
  * 業務アプリ・生徒用アプリ 統合バックエンド (最終確定バグ修正版)
  */
@@ -43,6 +43,12 @@ const ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME = "1対1進捗単元";
 const ONE_TO_ONE_PROGRESS_EVENT_HEADERS = ["eventId", "userId", "subjectId", "progressType", "lessonDate", "recordedAt", "recordedBy", "status", "correctedAt", "correctedBy", "correctionReason", "replacementEventId", "requestId", "fieldId"];
 const ONE_TO_ONE_PROGRESS_UNIT_HEADERS = ["eventId", "unitId", "unitOrder", "textNameSnapshot", "chapterSnapshot", "sectionSnapshot", "unitNameSnapshot", "pageSnapshot"];
 const ONE_TO_ONE_SOCIAL_FIELDS = [{ fieldId: "history", label: "歴史" }, { fieldId: "geography", label: "地理" }, { fieldId: "civics", label: "公民" }];
+const ACADEMIC_TEST_SHEET_NAME = "学校成績テスト";
+const ACADEMIC_RESULT_SHEET_NAME = "学校成績";
+const ACADEMIC_TEST_HEADERS = ["testId", "schoolYear", "grade", "testName", "testType", "maxScore", "enabled", "sortOrder", "createdAt", "updatedAt", "updatedBy"];
+const ACADEMIC_SUBJECTS = ["japanese", "math", "english", "science", "social", "music", "health", "art", "technologyHomeEconomics"];
+const ACADEMIC_RESULT_HEADERS = ["testId", "userId"].concat(ACADEMIC_SUBJECTS, ["createdAt", "updatedAt", "updatedBy"]);
+const ACADEMIC_TEST_TYPES = ["regular", "diagnostic", "other"];
 const ACCOUNT_MASTER_SHEET_SPECS = [
   { name: "アカウントマスター", headers: ["userId", "password", "isInitial", "passwordUpdatedAt", "role", "enabled", "sukimakunToken", "sukimakunTokenExpire", "createdAt", "updatedAt", "deletedAt"], textColumns: [1, 2, 7], dateColumns: [4, 8, 9, 10, 11] },
   { name: "生徒マスター", headers: ["userId", "school", "name", "nameKana", "grade", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [6, 7] },
@@ -2464,6 +2470,281 @@ function handleCampAction_(data) {
   throw new Error("Unknown camp action");
 }
 
+function normalizeAcademicTestName_(value) {
+  const name = String(value == null ? "" : value).normalize("NFKC").trim().replace(/\s+/g, " ");
+  if (!name || name.length > 100) throw new Error("テスト名を正しく入力してください");
+  return name;
+}
+
+function validateAcademicYear_(value) {
+  const year = Number(value);
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) throw new Error("年度を正しく入力してください");
+  return year;
+}
+
+function validateAcademicTestType_(value) {
+  const type = String(value || "").trim();
+  if (!ACADEMIC_TEST_TYPES.includes(type)) throw new Error("テスト種別が不正です");
+  return type;
+}
+
+function validateAcademicMaxScore_(value) {
+  const maxScore = Number(value);
+  if (!Number.isInteger(maxScore) || maxScore < 1 || maxScore > 1000) throw new Error("満点を正しく入力してください");
+  return maxScore;
+}
+
+function normalizeAcademicScore_(value, maxScore) {
+  if (value === "" || value === null || value === undefined) return "";
+  const normalized = typeof value === "string" ? value.normalize("NFKC").trim() : value;
+  if (normalized === "") return "";
+  if ((typeof normalized === "string" && !/^\d+$/.test(normalized)) || !Number.isInteger(Number(normalized))) {
+    throw new Error("点数は整数または空欄で入力してください");
+  }
+  const score = Number(normalized);
+  if (score < 0 || score > maxScore) throw new Error(`点数は0～${maxScore}で入力してください`);
+  return score;
+}
+
+function normalizeAcademicScores_(scores, maxScore) {
+  if (!scores || typeof scores !== "object" || Array.isArray(scores)) throw new Error("成績の形式が不正です");
+  const unexpected = Object.keys(scores).filter(key => !ACADEMIC_SUBJECTS.includes(key));
+  if (unexpected.length) throw new Error("成績に不正な科目が含まれています");
+  const result = {};
+  ACADEMIC_SUBJECTS.forEach(subject => { result[subject] = normalizeAcademicScore_(scores[subject], maxScore); });
+  return result;
+}
+
+function calculateAcademicTotal_(scores) {
+  if (!scores || ACADEMIC_SUBJECTS.some(subject => scores[subject] === "" || scores[subject] === null || scores[subject] === undefined)) return null;
+  return ACADEMIC_SUBJECTS.reduce((sum, subject) => sum + Number(scores[subject]), 0);
+}
+
+function getAcademicSheets_() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const testSheet = spreadsheet.getSheetByName(ACADEMIC_TEST_SHEET_NAME);
+  const resultSheet = spreadsheet.getSheetByName(ACADEMIC_RESULT_SHEET_NAME);
+  if (!testSheet || !resultSheet) throw new Error("学校成績シートのセットアップが必要です");
+  [[testSheet, ACADEMIC_TEST_HEADERS], [resultSheet, ACADEMIC_RESULT_HEADERS]].forEach(([sheet, headers]) => {
+    const actual = sheet.getLastColumn() ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0].map(String) : [];
+    if (actual.length !== headers.length || actual.some((header, index) => header !== headers[index])) throw new Error("学校成績シートのヘッダーが不正です");
+  });
+  return { testSheet, resultSheet };
+}
+
+// GASエディタから手動実行する公開セットアップ関数。
+// eslint-disable-next-line no-unused-vars
+function setupAcademicResultSheets() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const createdSheets = [];
+  const ensureStrictSheet = (sheetName, headers) => {
+    let sheet = spreadsheet.getSheetByName(sheetName);
+    if (!sheet) {
+      sheet = spreadsheet.insertSheet(sheetName);
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      createdSheets.push(sheetName);
+      return sheet;
+    }
+    if (sheet.getLastRow() === 0 && sheet.getLastColumn() === 0) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      return sheet;
+    }
+    const lastColumn = sheet.getLastColumn();
+    const actual = lastColumn ? sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0].map(String) : [];
+    if (actual.length !== headers.length || actual.some((header, index) => header !== headers[index])) throw new Error(`想定外のヘッダーです: ${sheetName}`);
+    return sheet;
+  };
+  const testSheet = ensureStrictSheet(ACADEMIC_TEST_SHEET_NAME, ACADEMIC_TEST_HEADERS);
+  const resultSheet = ensureStrictSheet(ACADEMIC_RESULT_SHEET_NAME, ACADEMIC_RESULT_HEADERS);
+  testSheet.getRange("A:A").setNumberFormat("@");
+  testSheet.getRange("K:K").setNumberFormat("@");
+  resultSheet.getRange("A:B").setNumberFormat("@");
+  resultSheet.getRange("N:N").setNumberFormat("@");
+  return { createdSheets, sheets: [ACADEMIC_TEST_SHEET_NAME, ACADEMIC_RESULT_SHEET_NAME] };
+}
+
+function getAcademicTestRecords_() {
+  const rows = getAcademicSheets_().testSheet.getDataRange().getValues();
+  const seen = Object.create(null);
+  return rows.slice(1).filter(row => row.some(value => value !== "")).map(row => {
+    const test = {
+      testId: String(row[0] || "").trim(), schoolYear: validateAcademicYear_(row[1]), grade: validateGrade_(row[2]),
+      testName: normalizeAcademicTestName_(row[3]), testType: validateAcademicTestType_(row[4]), maxScore: validateAcademicMaxScore_(row[5]),
+      enabled: isEnabledValue(row[6]), sortOrder: Number(row[7]), createdAt: row[8], updatedAt: row[9], updatedBy: String(row[10] || "").trim()
+    };
+    if (!test.testId || seen[test.testId]) throw new Error("学校成績テストにtestIdの重複があります");
+    seen[test.testId] = true;
+    return test;
+  });
+}
+
+function getAcademicResultRows_() {
+  const rows = getAcademicSheets_().resultSheet.getDataRange().getValues();
+  const seen = Object.create(null);
+  return rows.slice(1).filter(row => row.some(value => value !== "")).map(row => {
+    const testId = String(row[0] || "").trim();
+    const userId = normalizeUserId(row[1]);
+    const key = `${testId}\t${userId}`;
+    if (!testId || !userId || seen[key]) throw new Error("学校成績にtestId×userIdの重複があります");
+    seen[key] = true;
+    const scores = {};
+    ACADEMIC_SUBJECTS.forEach((subject, index) => { scores[subject] = row[index + 2] === "" ? "" : row[index + 2]; });
+    return { testId, userId, scores, createdAt: row[11], updatedAt: row[12], updatedBy: String(row[13] || "").trim() };
+  });
+}
+
+function createAcademicResultTest_(data, admin) {
+  const schoolYear = validateAcademicYear_(data.schoolYear);
+  const grade = validateGrade_(data.grade);
+  const testName = normalizeAcademicTestName_(data.testName);
+  const testType = validateAcademicTestType_(data.testType);
+  const maxScore = validateAcademicMaxScore_(data.maxScore);
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(10000);
+  try {
+    const tests = getAcademicTestRecords_();
+    if (tests.some(test => test.schoolYear === schoolYear && test.grade === grade && normalizeAcademicTestName_(test.testName) === testName)) throw new Error("同じ年度・学年・テスト名が既に存在します");
+    const sortOrder = Math.max(0, ...tests.filter(test => test.schoolYear === schoolYear && test.grade === grade).map(test => Number(test.sortOrder) || 0)) + 1;
+    const now = new Date();
+    const record = { testId: `academic_${Utilities.getUuid()}`, schoolYear, grade, testName, testType, maxScore, enabled: true, sortOrder, createdAt: now, updatedAt: now, updatedBy: admin.userId };
+    const sheet = getAcademicSheets_().testSheet;
+    const row = sheet.getLastRow() + 1;
+    sheet.getRange(row, 1).setNumberFormat("@");
+    sheet.getRange(row, 11).setNumberFormat("@");
+    sheet.getRange(row, 1, 1, ACADEMIC_TEST_HEADERS.length).setValues([[record.testId, schoolYear, grade, testName, testType, maxScore, true, sortOrder, now, now, admin.userId]]);
+    return record;
+  } finally { lock.releaseLock(); }
+}
+
+function updateAcademicResultTest_(data, admin) {
+  const testId = String(data.testId || "").trim();
+  const testName = normalizeAcademicTestName_(data.testName);
+  const testType = validateAcademicTestType_(data.testType);
+  const maxScore = validateAcademicMaxScore_(data.maxScore);
+  if (typeof data.enabled !== "boolean") throw new Error("enabledが不正です");
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(10000);
+  try {
+    const sheets = getAcademicSheets_();
+    const tests = getAcademicTestRecords_();
+    const targetIndex = tests.findIndex(test => test.testId === testId);
+    if (targetIndex < 0) throw new Error("対象テストが見つかりません");
+    const target = tests[targetIndex];
+    if (tests.some(test => test.testId !== testId && test.schoolYear === target.schoolYear && test.grade === target.grade && normalizeAcademicTestName_(test.testName) === testName)) throw new Error("同じ年度・学年・テスト名が既に存在します");
+    const results = getAcademicResultRows_().filter(record => record.testId === testId);
+    results.forEach(record => ACADEMIC_SUBJECTS.forEach(subject => normalizeAcademicScore_(record.scores[subject], maxScore)));
+    const now = new Date();
+    const row = targetIndex + 2;
+    sheets.testSheet.getRange(row, 4, 1, 4).setValues([[testName, testType, maxScore, data.enabled]]);
+    sheets.testSheet.getRange(row, 10, 1, 2).setValues([[now, admin.userId]]);
+    return { ...target, testName, testType, maxScore, enabled: data.enabled, updatedAt: now, updatedBy: admin.userId };
+  } finally { lock.releaseLock(); }
+}
+
+function getAcademicResultMatrix_(data) {
+  const testId = String(data.testId || "").trim();
+  const school = String(data.school || "").trim();
+  const test = getAcademicTestRecords_().find(item => item.testId === testId);
+  if (!test) throw new Error("対象テストが見つかりません");
+  if (!school) throw new Error("校舎を指定してください");
+  const resultMap = Object.create(null);
+  getAcademicResultRows_().filter(record => record.testId === testId).forEach(record => { resultMap[record.userId] = record; });
+  const students = getNewAuthData_().contexts.filter(user => user.role === "student" && user.enabled && !user.deleted && user.school === school && user.grade === test.grade).map(user => {
+    const existing = resultMap[user.userId];
+    const scores = {};
+    ACADEMIC_SUBJECTS.forEach(subject => { scores[subject] = existing ? normalizeAcademicScore_(existing.scores[subject], test.maxScore) : ""; });
+    return { userId: user.userId, name: user.name, nameKana: user.nameKana, school: user.school, grade: user.grade, scores, total: calculateAcademicTotal_(scores) };
+  }).sort(compareStudentsByKana_);
+  return { test, students };
+}
+
+function bulkUpdateAcademicResults_(data, admin) {
+  const testId = String(data.testId || "").trim();
+  if (!Array.isArray(data.records) || data.records.length < 1) throw new Error("保存対象がありません");
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(10000);
+  try {
+    const sheets = getAcademicSheets_();
+    const test = getAcademicTestRecords_().find(item => item.testId === testId);
+    if (!test || !test.enabled) throw new Error("有効な対象テストが見つかりません");
+    const users = getNewAuthData_().contexts;
+    const seenPayload = Object.create(null);
+    const normalizedRecords = data.records.map(record => {
+      const userId = normalizeUserId(record && record.userId);
+      if (!userId || seenPayload[userId]) throw new Error("保存対象の生徒が重複しています");
+      seenPayload[userId] = true;
+      const student = users.find(user => user.userId === userId && user.role === "student" && user.enabled && !user.deleted);
+      if (!student || student.grade !== test.grade) throw new Error("対象生徒または学年が不正です");
+      return { userId, scores: normalizeAcademicScores_(record.scores, test.maxScore) };
+    });
+    const current = getAcademicResultRows_();
+    const snapshot = current.map(record => ({ ...record, scores: { ...record.scores } }));
+    const byKey = Object.create(null);
+    current.forEach(record => { byKey[`${record.testId}\t${record.userId}`] = record; });
+    const now = new Date();
+    normalizedRecords.forEach(record => {
+      const key = `${testId}\t${record.userId}`;
+      if (byKey[key]) {
+        byKey[key].scores = record.scores; byKey[key].updatedAt = now; byKey[key].updatedBy = admin.userId;
+      } else {
+        const created = { testId, userId: record.userId, scores: record.scores, createdAt: now, updatedAt: now, updatedBy: admin.userId };
+        current.push(created); byKey[key] = created;
+      }
+    });
+    const toRows = records => records.map(record => [record.testId, record.userId].concat(ACADEMIC_SUBJECTS.map(subject => record.scores[subject]), [record.createdAt, record.updatedAt, record.updatedBy]));
+    const writeRows = records => {
+      const existingCount = Math.max(0, sheets.resultSheet.getLastRow() - 1);
+      const clearCount = Math.max(existingCount, records.length);
+      if (clearCount) sheets.resultSheet.getRange(2, 1, clearCount, ACADEMIC_RESULT_HEADERS.length).clearContent();
+      if (records.length) {
+        sheets.resultSheet.getRange(2, 1, records.length, ACADEMIC_RESULT_HEADERS.length).setValues(toRows(records));
+        sheets.resultSheet.getRange(2, 1, records.length, 2).setNumberFormat("@");
+        sheets.resultSheet.getRange(2, 14, records.length, 1).setNumberFormat("@");
+      }
+    };
+    try { writeRows(current); }
+    catch {
+      try { writeRows(snapshot); } catch { throw new Error("学校成績の保存と復元に失敗しました"); }
+      throw new Error("学校成績を保存できなかったため元の状態へ復元しました");
+    }
+    return { updatedCount: normalizedRecords.length, updatedAt: now.toISOString() };
+  } finally { lock.releaseLock(); }
+}
+
+// Issue #018から利用する内部共通取得関数。
+// eslint-disable-next-line no-unused-vars
+function getAcademicResultsForStudent_(userId, options) {
+  const normalizedUserId = normalizeUserId(userId);
+  const includeDisabled = !options || options.includeDisabled !== false;
+  const tests = getAcademicTestRecords_().filter(test => includeDisabled || test.enabled);
+  const testById = Object.create(null);
+  tests.forEach(test => { testById[test.testId] = test; });
+  const groups = Object.create(null);
+  getAcademicResultRows_().filter(record => record.userId === normalizedUserId && testById[record.testId]).forEach(record => {
+    const test = testById[record.testId];
+    const scores = normalizeAcademicScores_(record.scores, test.maxScore);
+    if (!groups[test.schoolYear]) groups[test.schoolYear] = [];
+    groups[test.schoolYear].push({ testId: test.testId, testName: test.testName, testType: test.testType, grade: test.grade, maxScore: test.maxScore, enabled: test.enabled, scores, total: calculateAcademicTotal_(scores), updatedAt: record.updatedAt });
+  });
+  return { schoolYears: Object.keys(groups).map(Number).sort((a, b) => b - a).map(schoolYear => ({ schoolYear, tests: groups[schoolYear].sort((a, b) => (testById[a.testId].sortOrder - testById[b.testId].sortOrder)) })) };
+}
+
+function handleAcademicResultAction_(data) {
+  const admin = requireAdminSession(data.sessionToken);
+  if (data.action === "getAcademicResultTests") {
+    const schoolYear = data.schoolYear === "" || data.schoolYear == null ? null : validateAcademicYear_(data.schoolYear);
+    const grade = data.grade ? validateGrade_(data.grade) : "";
+    const includeDisabled = data.includeDisabled === true;
+    const tests = getAcademicTestRecords_().filter(test => (schoolYear === null || test.schoolYear === schoolYear) && (!grade || test.grade === grade) && (includeDisabled || test.enabled)).sort((a, b) => b.schoolYear - a.schoolYear || a.sortOrder - b.sortOrder || a.testName.localeCompare(b.testName, "ja"));
+    return { result: "success", tests };
+  }
+  if (data.action === "createAcademicResultTest") return { result: "success", test: createAcademicResultTest_(data, admin) };
+  if (data.action === "updateAcademicResultTest") return { result: "success", test: updateAcademicResultTest_(data, admin) };
+  if (data.action === "getAcademicResultMatrix") return { result: "success", ...getAcademicResultMatrix_(data) };
+  if (data.action === "bulkUpdateAcademicResults") return { result: "success", ...bulkUpdateAcademicResults_(data, admin) };
+  throw new Error("Unknown academic result action");
+}
+
 function doPost(e) {
   let data;
   try {
@@ -2512,6 +2793,15 @@ function doPost(e) {
     } catch (error) {
       const authorizationError = isManagementAuthorizationError(error) || /担当外|利用権限/.test(String(error && error.message || ""));
       return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "この1対1進捗を利用する権限がありません" : String(error && error.message || "入力内容が不正です") });
+    }
+  }
+
+  const academicResultActions = ["getAcademicResultTests", "createAcademicResultTest", "updateAcademicResultTest", "getAcademicResultMatrix", "bulkUpdateAcademicResults"];
+  if (academicResultActions.includes(data.action)) {
+    try { return responseJSON(handleAcademicResultAction_(data)); }
+    catch (error) {
+      const authorizationError = isManagementAuthorizationError(error);
+      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "管理者権限が必要です" : String(error && error.message || "入力内容が不正です") });
     }
   }
 

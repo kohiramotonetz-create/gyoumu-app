@@ -13,6 +13,7 @@ import AppUsageTracker from './components/AppUsageTracker.jsx'
 import SukimakunPermissionManager from './components/SukimakunPermissionManager.jsx'
 import CampTrainingManager from './components/CampTrainingManager.jsx'
 import OneToOneProgressManager from './components/OneToOneProgressManager.jsx'
+import AcademicResultsManager from './components/AcademicResultsManager.jsx'
 import VersionLabel from './components/common/VersionLabel.jsx'
 import { ALL_SCHOOLS } from './constants/organization.js'
 
@@ -116,6 +117,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     { id: 'model-answer', label: '個トレ２（模範解答）', icon: '✅' },
     { id: 'test-review-check', label: 'テスト振り返り確認', icon: '📝' },
     { id: 'sukimakun-permissions', label: 'スキマ君利用設定', icon: '⚙️', adminOnly: true },
+    { id: 'academic-results', label: '学校成績管理', icon: '📊', adminOnly: true },
   ];
 
   const menuItems = useMemo(() => {
@@ -206,6 +208,17 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
 
             {activeContent === 'sukimakun-permissions' && role === 'admin' && (
               <SukimakunPermissionManager
+                GAS_URL={GAS_URL}
+                API_KEY={API_KEY}
+                sessionToken={sessionToken}
+                assignedSchools={availableAssignedSchools}
+                styles={styles}
+                onSessionExpired={handleLogout}
+              />
+            )}
+
+            {activeContent === 'academic-results' && role === 'admin' && (
+              <AcademicResultsManager
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}
                 sessionToken={sessionToken}
