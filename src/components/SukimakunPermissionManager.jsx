@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
-import { getSukimakunPresetContentIds, replaceStudentContentIds } from '../utils/sukimakunPermissions.js';
+import { areSameContentIds, getStudentsWithUnsavedChanges, getSukimakunPresetContentIds, replaceStudentContentIds, saveSukimakunPermissionsSequentially } from '../utils/sukimakunPermissions.js';
 
 const READ_API_TIMEOUT_MS = 30000;
 const WRITE_API_TIMEOUT_MS = 15000;
@@ -11,12 +11,6 @@ const NAME_COLUMN_WIDTH = 180;
 const ID_COLUMN_WIDTH = 130;
 
 const getStudentDisplayName = student => String(student?.name || '').trim() || '氏名未登録';
-
-const areSameContentIds = (left = [], right = []) => {
-  if (left.length !== right.length) return false;
-  const rightSet = new Set(right);
-  return left.every(contentId => rightSet.has(contentId));
-};
 
 export default function SukimakunPermissionManager({
   GAS_URL,
@@ -36,7 +30,10 @@ export default function SukimakunPermissionManager({
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkSaveStatus, setBulkSaveStatus] = useState({ type: '', message: '' });
   const fetchInProgressRef = useRef(false);
+  const bulkSaveInProgressRef = useRef(false);
 
   const activeContents = useMemo(() => contents
     .filter(content => content.enabled === true)
@@ -50,6 +47,10 @@ export default function SukimakunPermissionManager({
       String(student.userId || '').toLowerCase().includes(normalizedQuery)
     );
   }, [students, query]);
+
+  const unsavedStudents = useMemo(() =>
+    getStudentsWithUnsavedChanges(filteredStudents, editingByStudentId),
+  [filteredStudents, editingByStudentId]);
 
   const postAction = async (action, payload = {}, timeout = WRITE_API_TIMEOUT_MS) => {
     const response = await axios.post(GAS_URL, JSON.stringify({
@@ -152,6 +153,7 @@ export default function SukimakunPermissionManager({
         (student.allowedContentIds || []).filter(contentId => activeContentIds.has(contentId))
       ])));
       setRowStatusByStudentId({});
+      setBulkSaveStatus({ type: '', message: '' });
       setStatus({
         type: 'success',
         message: nextStudents.length > 0
@@ -193,32 +195,65 @@ export default function SukimakunPermissionManager({
     }));
   };
 
-  const savePermissions = async student => {
+  const persistStudentPermissions = async student => {
     const studentId = student.userId;
     const editingContentIds = editingByStudentId[studentId] || [];
-    const displayName = getStudentDisplayName(student);
-    if (!window.confirm(`${displayName}さんのスキマ君利用設定を保存しますか？`)) return;
-
     setRowStatusByStudentId(current => ({ ...current, [studentId]: { type: 'saving', message: '保存中...' } }));
+    const data = await postAction('updateSukimakunPermissions', {
+      targetUserId: studentId,
+      allowedContentIds: editingContentIds
+    });
+    const savedContentIds = Array.isArray(data.allowedContentIds) ? data.allowedContentIds : editingContentIds;
+    setStudents(current => current.map(currentStudent =>
+      currentStudent.userId === studentId
+        ? { ...currentStudent, allowedContentIds: savedContentIds, permissionsInitialized: true }
+        : currentStudent
+    ));
+    setEditingByStudentId(current => ({ ...current, [studentId]: savedContentIds }));
+    setRowStatusByStudentId(current => ({ ...current, [studentId]: { type: 'success', message: '保存しました' } }));
+    return savedContentIds;
+  };
+
+  const markSaveError = (studentId, error) => {
+    setRowStatusByStudentId(current => ({
+      ...current,
+      [studentId]: { type: 'error', message: getApiErrorMessage(error, '保存できませんでした。') }
+    }));
+  };
+
+  const savePermissions = async student => {
+    if (!window.confirm(`${getStudentDisplayName(student)}さんのスキマ君利用設定を保存しますか？`)) return;
     try {
-      const data = await postAction('updateSukimakunPermissions', {
-        targetUserId: studentId,
-        allowedContentIds: editingContentIds
-      });
-      const savedContentIds = Array.isArray(data.allowedContentIds) ? data.allowedContentIds : editingContentIds;
-      setStudents(current => current.map(currentStudent =>
-        currentStudent.userId === studentId
-          ? { ...currentStudent, allowedContentIds: savedContentIds, permissionsInitialized: true }
-          : currentStudent
-      ));
-      setEditingByStudentId(current => ({ ...current, [studentId]: savedContentIds }));
-      setRowStatusByStudentId(current => ({ ...current, [studentId]: { type: 'success', message: '保存しました' } }));
+      await persistStudentPermissions(student);
     } catch (error) {
-      setRowStatusByStudentId(current => ({
-        ...current,
-        [studentId]: { type: 'error', message: getApiErrorMessage(error, '保存できませんでした。') }
-      }));
+      markSaveError(student.userId, error);
     }
+  };
+
+  const saveAllUnsavedPermissions = async () => {
+    if (bulkSaveInProgressRef.current || unsavedStudents.length === 0) return;
+    const targets = [...unsavedStudents];
+    bulkSaveInProgressRef.current = true;
+    setBulkSaving(true);
+    setBulkSaveStatus({ type: 'saving', message: `${targets.length}人の設定を保存しています...` });
+    const results = await saveSukimakunPermissionsSequentially(targets, async student => {
+      try {
+        return await persistStudentPermissions(student);
+      } catch (error) {
+        markSaveError(student.userId, error);
+        throw error;
+      }
+    });
+    const successCount = results.filter(result => result.success).length;
+    const failureCount = results.length - successCount;
+    setBulkSaveStatus({
+      type: failureCount > 0 ? 'error' : 'success',
+      message: failureCount > 0
+        ? `${successCount}人保存しました。${failureCount}人の保存に失敗しました。未保存の生徒だけ再度保存できます。`
+        : `${successCount}人の設定を保存しました。`
+    });
+    bulkSaveInProgressRef.current = false;
+    setBulkSaving(false);
   };
 
   const panelStyle = { background: '#fff', border: '1px solid #ddd', borderRadius: '8px', padding: '16px' };
@@ -259,7 +294,7 @@ export default function SukimakunPermissionManager({
           <span style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>学年</span>
           <GradeSelect value={selectedGrades} onChange={setSelectedGrades} style={styles.select} />
         </label>
-        <button onClick={fetchPermissions} disabled={loading || sessionExpired} style={styles.doneBtn}>
+        <button onClick={fetchPermissions} disabled={loading || bulkSaving || sessionExpired} style={styles.doneBtn}>
           {loading ? '読み込み中...' : '生徒一覧を取得'}
         </button>
         <label style={{ flex: '1 1 240px', minWidth: '220px' }}>
@@ -308,8 +343,8 @@ export default function SukimakunPermissionManager({
                       </td>
                       <td style={{ width: '210px', minWidth: '210px', maxWidth: '210px', padding: '7px 8px', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', boxSizing: 'border-box' }}>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                          <button type="button" onClick={() => applyModePreset(student.userId, 'juniorHighMode', '中学生モード')} disabled={isSaving || sessionExpired} style={{ ...styles.doneBtn, width: 'auto', flex: '1 1 90px', margin: 0, padding: '6px 8px', fontSize: '12px', whiteSpace: 'nowrap' }}>中学生モード</button>
-                          <button type="button" onClick={() => applyModePreset(student.userId, 'highSchoolMode', '高校生モード')} disabled={isSaving || sessionExpired} style={{ ...styles.doneBtn, width: 'auto', flex: '1 1 90px', margin: 0, padding: '6px 8px', fontSize: '12px', whiteSpace: 'nowrap' }}>高校生モード</button>
+                          <button type="button" onClick={() => applyModePreset(student.userId, 'juniorHighMode', '中学生モード')} disabled={isSaving || bulkSaving || sessionExpired} style={{ ...styles.doneBtn, width: 'auto', flex: '1 1 90px', margin: 0, padding: '6px 8px', fontSize: '12px', whiteSpace: 'nowrap' }}>中学生モード</button>
+                          <button type="button" onClick={() => applyModePreset(student.userId, 'highSchoolMode', '高校生モード')} disabled={isSaving || bulkSaving || sessionExpired} style={{ ...styles.doneBtn, width: 'auto', flex: '1 1 90px', margin: 0, padding: '6px 8px', fontSize: '12px', whiteSpace: 'nowrap' }}>高校生モード</button>
                         </div>
                         {rowStatus.type === 'preset' && <div role="status" style={{ marginTop: '4px', color: '#b45309', fontSize: '11px', lineHeight: 1.35 }}>{rowStatus.message}</div>}
                       </td>
@@ -320,13 +355,13 @@ export default function SukimakunPermissionManager({
                             aria-label={`${getStudentDisplayName(student)}の${content.displayName}`}
                             checked={editingContentIds.includes(content.contentId)}
                             onChange={() => toggleContent(student.userId, content.contentId)}
-                            disabled={isSaving || sessionExpired}
-                            style={{ width: '18px', height: '18px', cursor: isSaving || sessionExpired ? 'not-allowed' : 'pointer' }}
+                            disabled={isSaving || bulkSaving || sessionExpired}
+                            style={{ width: '18px', height: '18px', cursor: isSaving || bulkSaving || sessionExpired ? 'not-allowed' : 'pointer' }}
                           />
                         </td>
                       ))}
                       <td style={{ minWidth: '170px', padding: '7px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle' }}>
-                        <button onClick={() => savePermissions(student)} disabled={isSaving || sessionExpired || !needsSave} style={{ ...styles.doneBtn, padding: '7px 14px', opacity: !needsSave ? 0.55 : 1 }}>
+                        <button onClick={() => savePermissions(student)} disabled={isSaving || bulkSaving || sessionExpired || !needsSave} style={{ ...styles.doneBtn, padding: '7px 14px', opacity: !needsSave ? 0.55 : 1 }}>
                           {isSaving ? '保存中...' : '保存'}
                         </button>
                         {isDirty && !isSaving && <div style={{ marginTop: '3px', color: '#b45309', fontSize: '11px', fontWeight: 'bold' }}>未保存の変更</div>}
@@ -344,6 +379,24 @@ export default function SukimakunPermissionManager({
             </table>
           </div>
           {filteredStudents.length === 0 && <p style={{ color: '#666', padding: '16px' }}>該当する生徒はいません。</p>}
+          <div style={{ padding: '16px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', textAlign: 'center' }}>
+            <div style={{ marginBottom: '10px', color: unsavedStudents.length > 0 ? '#b45309' : '#64748b', fontWeight: 'bold' }}>
+              未保存の変更：{unsavedStudents.length}人
+            </div>
+            <button
+              type="button"
+              onClick={saveAllUnsavedPermissions}
+              disabled={bulkSaving || sessionExpired || unsavedStudents.length === 0}
+              style={{ ...styles.doneBtn, width: 'auto', minWidth: '180px', padding: '10px 20px', opacity: unsavedStudents.length === 0 ? 0.55 : 1 }}
+            >
+              {bulkSaving ? '保存中...' : `一括保存（${unsavedStudents.length}人）`}
+            </button>
+            {bulkSaveStatus.message && (
+              <div role={bulkSaveStatus.type === 'error' ? 'alert' : 'status'} style={{ marginTop: '10px', color: bulkSaveStatus.type === 'error' ? '#b91c1c' : bulkSaveStatus.type === 'success' ? '#166534' : '#475569', fontSize: '13px' }}>
+                {bulkSaveStatus.message}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

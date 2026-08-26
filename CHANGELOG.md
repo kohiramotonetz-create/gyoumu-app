@@ -14,6 +14,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - Issue #010 合宿参加者設定・合宿特訓データ入力・ランキング
   - Issue #011 前置詞テストのコンテンツ権限追加
   - Issue #012 スキマ君利用設定 中学生・高校生モード一括変更
+  - Issue #013 スキマ君利用設定 一括保存
 - 主な変更: `version.js`をVersion番号の正本とし、共通`VersionLabel`からログイン画面、生徒画面、講師・管理者画面の右下へ`Version 4.2.1`を表示する構造へ統一。
 - Frontend影響: Version表示のみ。既存画面、認証、権限、APIの仕様変更なし。
 - GAS影響: なし。
@@ -49,6 +50,16 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### Issue #013 スキマ君利用設定 一括保存
+
+- 日付: 2026-08-26
+- 状態: React実装、自動テスト、build、変更対象lint、ローカル起動確認を完了。Issue branchへ反映し、main未反映。
+- 変更内容: スキマ君利用設定画面の最下部へ、現在表示中かつ保存済み`allowedContentIds`と編集中の値に差分がある生徒だけを対象とする一括保存を追加。対象人数を表示し、0人では無効化する。
+- 保存方式: 既存`updateSukimakunPermissions`を生徒ごとに逐次呼び出す。成功した生徒だけ保存済みstateを更新し、部分失敗時は失敗した生徒の未保存状態を保持して再実行対象とする。既存の個別保存、中学生・高校生モード、個別チェックは維持する。
+- GAS・データ影響: GAS、API、シート構造、`allowedContentIds`、`permissionsInitialized`の仕様変更なし。clasp push・GAS再デプロイ不要。
+- テスト: `npm test` 51件、`npm run build`、変更対象lint、`git diff --check`が成功。ローカル起動とログイン画面表示を確認したが、認証後の実GAS保存は本番データを安全に復元できる確認用アカウント情報がないため未実施。
+- Version: 変更なし（Version 4.2.1）。
 
 ### Issue #012 スキマ君利用設定 中学生・高校生モード一括変更
 
