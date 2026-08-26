@@ -1,4 +1,4 @@
-/* global SCHOOL_UNIT_MASTER_GENERATED, SpreadsheetApp, LockService, Utilities */
+/* global SCHOOL_UNIT_MASTER_GENERATED */
 /**
  * 業務アプリ・生徒用アプリ 統合バックエンド (最終確定バグ修正版)
  */
@@ -2521,6 +2521,7 @@ function calculateAcademicTotal_(scores) {
 }
 
 function getAcademicSheets_() {
+  // eslint-disable-next-line no-undef
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const testSheet = spreadsheet.getSheetByName(ACADEMIC_TEST_SHEET_NAME);
   const resultSheet = spreadsheet.getSheetByName(ACADEMIC_RESULT_SHEET_NAME);
@@ -2535,6 +2536,7 @@ function getAcademicSheets_() {
 // GASエディタから手動実行する公開セットアップ関数。
 // eslint-disable-next-line no-unused-vars
 function setupAcademicResultSheets() {
+  // eslint-disable-next-line no-undef
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const createdSheets = [];
   const ensureStrictSheet = (sheetName, headers) => {
@@ -2599,6 +2601,7 @@ function createAcademicResultTest_(data, admin) {
   const testName = normalizeAcademicTestName_(data.testName);
   const testType = validateAcademicTestType_(data.testType);
   const maxScore = validateAcademicMaxScore_(data.maxScore);
+  // eslint-disable-next-line no-undef
   const lock = LockService.getDocumentLock();
   lock.waitLock(10000);
   try {
@@ -2606,6 +2609,7 @@ function createAcademicResultTest_(data, admin) {
     if (tests.some(test => test.schoolYear === schoolYear && test.grade === grade && normalizeAcademicTestName_(test.testName) === testName)) throw new Error("同じ年度・学年・テスト名が既に存在します");
     const sortOrder = Math.max(0, ...tests.filter(test => test.schoolYear === schoolYear && test.grade === grade).map(test => Number(test.sortOrder) || 0)) + 1;
     const now = new Date();
+    // eslint-disable-next-line no-undef
     const record = { testId: `academic_${Utilities.getUuid()}`, schoolYear, grade, testName, testType, maxScore, enabled: true, sortOrder, createdAt: now, updatedAt: now, updatedBy: admin.userId };
     const sheet = getAcademicSheets_().testSheet;
     const row = sheet.getLastRow() + 1;
@@ -2622,6 +2626,7 @@ function updateAcademicResultTest_(data, admin) {
   const testType = validateAcademicTestType_(data.testType);
   const maxScore = validateAcademicMaxScore_(data.maxScore);
   if (typeof data.enabled !== "boolean") throw new Error("enabledが不正です");
+  // eslint-disable-next-line no-undef
   const lock = LockService.getDocumentLock();
   lock.waitLock(10000);
   try {
@@ -2661,6 +2666,7 @@ function getAcademicResultMatrix_(data) {
 function bulkUpdateAcademicResults_(data, admin) {
   const testId = String(data.testId || "").trim();
   if (!Array.isArray(data.records) || data.records.length < 1) throw new Error("保存対象がありません");
+  // eslint-disable-next-line no-undef
   const lock = LockService.getDocumentLock();
   lock.waitLock(10000);
   try {
