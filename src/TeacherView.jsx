@@ -169,6 +169,22 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     else { setActiveContent(item.id); if (profileRoute) window.location.hash = ''; }
     if (window.innerWidth < 1200) setIsSidebarOpen(false);
   };
+  const handleMainKeyDown = (event) => {
+    const scrollElement = event.currentTarget;
+    const keyScroll = {
+      ArrowDown: 48,
+      ArrowUp: -48,
+      PageDown: scrollElement.clientHeight * 0.8,
+      PageUp: scrollElement.clientHeight * -0.8,
+    };
+    if (event.key in keyScroll) {
+      event.preventDefault();
+      scrollElement.scrollBy({ top: keyScroll[event.key] });
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      scrollElement.scrollTo({ top: event.key === 'Home' ? 0 : scrollElement.scrollHeight });
+    }
+  };
 
   return (
     <div className="teacher-shell">
@@ -195,7 +211,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
           <button className="teacher-logout" onClick={handleLogout}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 17l5-5-5-5M15 12H3M15 3h5a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-5"/></svg>ログアウト</button>
           </nav>
       </aside>
-        <main className={`teacher-main ${!isSidebarOpen ? 'teacher-main--wide' : ''}`}>
+        <main className={`teacher-main ${!isSidebarOpen ? 'teacher-main--wide' : ''}`} tabIndex="0" aria-label="メインコンテンツ" onKeyDown={handleMainKeyDown}>
           <div className={`teacher-content ${activeContent !== 'home' ? 'teacher-content--legacy' : ''} ${profileRoute ? 'teacher-content--profile' : ''}`}>
             {profileRoute && <StudentProfileView userId={profileRoute.userId} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={handleLogout} onBack={() => { if (window.history.length > 1) window.history.back(); else window.location.hash = ''; }} />}
             {!profileRoute && <>

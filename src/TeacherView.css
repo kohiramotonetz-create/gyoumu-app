@@ -29,7 +29,8 @@
 .teacher-nav-item--active { color:var(--primary-dark); background:#f3f7f5; font-weight:700; }
 .teacher-nav-home:hover, .teacher-nav-item:hover { background:#f3f7f5; color:var(--primary-dark); }
 .teacher-logout { margin-top:auto; padding:0 26px 14px; min-height:62px; color:#ff2222; font-weight:600; }
-.teacher-main { height:100dvh; margin-left:270px; padding:96px 32px 28px; overflow-y:auto; background:var(--background); transition:margin-left .16s ease; }
+.teacher-main { height:100dvh; margin-left:270px; padding:96px 32px 28px; overflow-y:auto; background:var(--background); scrollbar-width:none; -ms-overflow-style:none; transition:margin-left .16s ease; }
+.teacher-main::-webkit-scrollbar { display:none; width:0; height:0; }
 .teacher-main--wide { margin-left:0; }
 .teacher-content { width:100%; max-width:1240px; margin:0 auto; }
 .teacher-content--legacy { max-width:1000px; }
