@@ -1671,8 +1671,8 @@ function inspectOneToOneSubjectData() {
   dataRows.forEach(row => {
     const userId = normalizeUserId(row[0]);
     const subjectId = String(row[1] || "").trim();
-    if (isEnabledValue(row[2])) counts.enabledRows++; else counts.disabledRows++;
     if (!userId || !subjectId) { counts.invalidRows++; return; }
+    if (isEnabledValue(row[2])) counts.enabledRows++; else counts.disabledRows++;
     const key = `${userId}::${subjectId}`;
     if (seen.has(key)) counts.duplicateRows++; else seen.add(key);
     if (!ONE_TO_ONE_SUBJECT_IDS.includes(subjectId)) counts.invalidSubjectIds++;

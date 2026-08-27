@@ -133,6 +133,13 @@ test('TRUE/FALSEに関係なく同一キーだけを重複とし完全空行を�
   assert.equal(result.invalidSubjectIds, 0);
   assert.equal(result.unknownStudents, 0);
   assert.equal(result.disabledRows, 46);
+
+  context.__summaryRows = [headers, ['000001', 'english', false, '', '', ''], ['', '', false, '', '', '']];
+  result = vm.runInContext('inspectOneToOneSubjectData()', context);
+  assert.equal(result.disabledRows, 1);
+  assert.equal(result.invalidRows, 1);
+  assert.equal(result.invalidSubjectIds, 0);
+  assert.equal(result.unknownStudents, 0);
 });
 
 test('未登録生徒を拒否し、登録済み生徒の空設定は空配列で返す', () => {
