@@ -83,6 +83,58 @@ test('読み取り専用診断は完全重複・TRUE/FALSE競合・正規化後�
   assert.equal(disabled.duplicateType, 'ENABLED_FALSE_DUPLICATE');
 });
 
+test('通常検査は正式5科目のTRUE/FALSEを正常として扱い不正subjectIdと未登録userIdだけを数える', () => {
+  context.__summaryRows = [
+    ['userId', 'subjectId', 'enabled', 'createdAt', 'updatedAt', 'updatedBy'],
+    ['037071', 'english', true, '', '', ''],
+    ['037071', 'math', false, '', '', ''],
+    ['037071', 'japanese', false, '', '', ''],
+    ['037071', 'science', false, '', '', ''],
+    ['037071', 'social', false, '', '', ''],
+    ['037071', 'other', false, '', '', ''],
+    ['999999', 'math', false, '', '', '']
+  ];
+  context.assertOneToOneSubjectSheet_ = () => ({ getDataRange: () => ({ getValues: () => context.__summaryRows }) });
+  context.getUserAuthContexts_ = () => [{ userId: '037071', role: 'student' }];
+  const result = vm.runInContext('inspectOneToOneSubjectData()', context);
+  assert.equal(result.dataRows, 7);
+  assert.equal(result.enabledRows, 1);
+  assert.equal(result.disabledRows, 6);
+  assert.equal(result.duplicateRows, 0);
+  assert.equal(result.invalidRows, 0);
+  assert.equal(result.invalidSubjectIds, 1);
+  assert.equal(result.unknownStudents, 1);
+});
+
+test('TRUE/FALSEに関係なく同一キーだけを重複とし完全空行を集計しない', () => {
+  const headers = ['userId', 'subjectId', 'enabled', 'createdAt', 'updatedAt', 'updatedBy'];
+  const uniqueRows = Array.from({ length: 394 }, (_, index) => {
+    const userId = String(Math.floor(index / 5) + 1).padStart(6, '0');
+    const subjectId = ['english', 'math', 'japanese', 'science', 'social'][index % 5];
+    return [userId, subjectId, index % 2 === 0, '', '', ''];
+  });
+  context.__summaryRows = [headers, ...uniqueRows];
+  context.assertOneToOneSubjectSheet_ = () => ({ getDataRange: () => ({ getValues: () => context.__summaryRows }) });
+  context.getUserAuthContexts_ = () => Array.from({ length: 79 }, (_, index) => ({ userId: String(index + 1).padStart(6, '0'), role: 'student' }));
+  let result = vm.runInContext('inspectOneToOneSubjectData()', context);
+  assert.equal(result.dataRows, 394);
+  assert.equal(result.duplicateRows, 0);
+  assert.equal(result.invalidSubjectIds, 0);
+  assert.equal(result.unknownStudents, 0);
+
+  context.__summaryRows.push(['000001', 'english', false, '', '', '']);
+  result = vm.runInContext('inspectOneToOneSubjectData()', context);
+  assert.equal(result.duplicateRows, 1);
+
+  context.__summaryRows = [headers, ...uniqueRows.slice(0, 93), ...Array.from({ length: 301 }, () => ['', '', '', '', '', ''])];
+  result = vm.runInContext('inspectOneToOneSubjectData()', context);
+  assert.equal(result.dataRows, 93);
+  assert.equal(result.duplicateRows, 0);
+  assert.equal(result.invalidSubjectIds, 0);
+  assert.equal(result.unknownStudents, 0);
+  assert.equal(result.disabledRows, 46);
+});
+
 test('未登録生徒を拒否し、登録済み生徒の空設定は空配列で返す', () => {
   context.findOneToOneSubjectStudent_ = userId => userId === '001200' ? { userId: '001200', role: 'student' } : null;
   context.__sheetRows = [['userId', 'subjectId', 'enabled', 'createdAt', 'updatedAt', 'updatedBy']];

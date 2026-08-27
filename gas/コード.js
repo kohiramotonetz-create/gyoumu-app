@@ -1666,15 +1666,17 @@ function inspectOneToOneSubjectData() {
   const rows = assertOneToOneSubjectSheet_().getDataRange().getValues();
   const students = new Set(getUserAuthContexts_().filter(user => user.role === "student").map(user => user.userId));
   const seen = new Set();
-  const counts = { dataRows: Math.max(0, rows.length - 1), duplicateRows: 0, invalidSubjectIds: 0, unknownStudents: 0, enabledRows: 0, disabledRows: 0 };
-  rows.slice(1).forEach(row => {
+  const dataRows = rows.slice(1).filter(row => row.some(value => value !== "" && value != null));
+  const counts = { dataRows: dataRows.length, duplicateRows: 0, invalidRows: 0, invalidSubjectIds: 0, unknownStudents: 0, enabledRows: 0, disabledRows: 0 };
+  dataRows.forEach(row => {
     const userId = normalizeUserId(row[0]);
     const subjectId = String(row[1] || "").trim();
+    if (isEnabledValue(row[2])) counts.enabledRows++; else counts.disabledRows++;
+    if (!userId || !subjectId) { counts.invalidRows++; return; }
     const key = `${userId}::${subjectId}`;
     if (seen.has(key)) counts.duplicateRows++; else seen.add(key);
     if (!ONE_TO_ONE_SUBJECT_IDS.includes(subjectId)) counts.invalidSubjectIds++;
     if (!students.has(userId)) counts.unknownStudents++;
-    if (isEnabledValue(row[2])) counts.enabledRows++; else counts.disabledRows++;
   });
   return counts;
 }
@@ -1688,7 +1690,8 @@ function runInspectOneToOneSubjectDataSummary() {
 function inspectOneToOneSubjectDuplicateData_() {
   const rows = assertOneToOneSubjectSheet_().getDataRange().getValues();
   const grouped = Object.create(null);
-  rows.slice(1).forEach((row, index) => {
+  const dataRows = rows.slice(1).map((row, index) => ({ row, rowNumber: index + 2 })).filter(item => item.row.some(value => value !== "" && value != null));
+  dataRows.forEach(({ row, rowNumber }) => {
     const rawUserId = String(row[0] == null ? "" : row[0]);
     const rawSubjectId = String(row[1] == null ? "" : row[1]);
     const userId = normalizeUserId(rawUserId);
@@ -1697,7 +1700,7 @@ function inspectOneToOneSubjectDuplicateData_() {
     const key = `${userId}::${subjectId}`;
     if (!grouped[key]) grouped[key] = { userId, subjectId, rows: [], enabledTrueCount: 0, enabledFalseCount: 0, rawUserIds: new Set(), rawSubjectIds: new Set() };
     const item = grouped[key];
-    item.rows.push(index + 2);
+    item.rows.push(rowNumber);
     if (isEnabledValue(row[2])) item.enabledTrueCount++; else item.enabledFalseCount++;
     item.rawUserIds.add(rawUserId);
     item.rawSubjectIds.add(rawSubjectId);
@@ -1717,7 +1720,7 @@ function inspectOneToOneSubjectDuplicateData_() {
     duplicateType: item.enabledTrueCount > 0 && item.enabledFalseCount > 0 ? "TRUE_FALSE_CONFLICT" : item.enabledTrueCount > 0 ? "ENABLED_TRUE_DUPLICATE" : "ENABLED_FALSE_DUPLICATE"
   })).sort((left, right) => left.userId.localeCompare(right.userId) || ONE_TO_ONE_SUBJECT_IDS.indexOf(left.subjectId) - ONE_TO_ONE_SUBJECT_IDS.indexOf(right.subjectId) || left.subjectId.localeCompare(right.subjectId));
   return {
-    dataRows: Math.max(0, rows.length - 1),
+    dataRows: dataRows.length,
     duplicateKeyCount: duplicateKeys.length,
     duplicateRowCount: duplicateKeys.reduce((sum, item) => sum + item.duplicateRowCount, 0),
     duplicateKeys
