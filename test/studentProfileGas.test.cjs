@@ -18,13 +18,13 @@ const contexts = [
   { userId: '000009', role: 'student', enabled: true, deleted: true, school: '木太南' }
 ];
 
-test('プロフィール認可はadmin全校舎、担当staffだけを許可する', () => {
+test('プロフィール認可はadmin・teacher・head-teacherの全校舎を許可する', () => {
   for (const role of ['admin', 'teacher', 'head-teacher']) {
     context.__session = { userId: role === 'admin' ? 'admin' : role === 'teacher' ? 'teacher1' : 'head1', role, userContexts: contexts };
     assert.equal(vm.runInContext('assertStudentProfileAccess_(__session, "037071").userId', context), '037071');
+    assert.equal(vm.runInContext('assertStudentProfileAccess_(__session, "000007").userId', context), '000007');
   }
   context.__session = { userId: 'teacher1', role: 'teacher', userContexts: contexts };
-  assert.throws(() => vm.runInContext('assertStudentProfileAccess_(__session, "000007")', context), /権限/);
   assert.throws(() => vm.runInContext('assertStudentProfileAccess_(__session, "000008")', context), /見つかりません/);
   assert.throws(() => vm.runInContext('assertStudentProfileAccess_(__session, "000009")', context), /見つかりません/);
   assert.throws(() => vm.runInContext('assertStudentProfileAccess_(__session, "999999")', context), /見つかりません/);

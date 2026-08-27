@@ -29,15 +29,44 @@ test('ACTIVE履歴だけで学校・ネッツ最大位置を計算しVOIDを除�
   assert.equal(state.netzCurrent.unitOrder, 6);
 });
 
-test('teacher/head-teacher/adminだけ利用しteacherの担当校舎外を拒否する', () => {
+test('teacher/head-teacher/adminは担当外を含む単一校舎の生徒を利用できる', () => {
   context.validateManagementSession = (_token, _extend, include) => ({ userId: 'teacher1', role: 'teacher', userContexts: include ? [{ userId: 'teacher1', assignedSchools: ['校舎A'] }] : undefined });
   const session = vm.runInContext('requireOneToOneProgressSession_("token", true)', context);
   assert.equal(session.role, 'teacher');
   context.__session = session;
   context.__student = { userId: '001200', role: 'student', enabled: true, deleted: false, school: '校舎B' };
-  assert.throws(() => vm.runInContext('assertOneToOneProgressStudentAccess_(__session, __student, true)', context), /担当外/);
-  context.__session.role = 'admin';
-  assert.doesNotThrow(() => vm.runInContext('assertOneToOneProgressStudentAccess_(__session, __student, true)', context));
+  for (const role of ['teacher', 'head-teacher', 'admin']) {
+    context.__session.role = role;
+    assert.doesNotThrow(() => vm.runInContext('assertOneToOneProgressStudentAccess_(__session, __student, true)', context));
+  }
+});
+
+test('単一校舎は担当外も許可し、staffの複数校舎だけ担当範囲に制限する', () => {
+  context.__session = { userId: 'teacher1', role: 'teacher', userContexts: [{ userId: 'teacher1', assignedSchools: ['校舎A', '校舎B'] }] };
+  context.__data = { schools: ['校舎A'] };
+  assert.deepEqual(Array.from(vm.runInContext('resolveOneToOneProgressSchools_(__data, __session)', context)), ['校舎A']);
+  context.__data = { schools: ['校舎C'] };
+  assert.deepEqual(Array.from(vm.runInContext('resolveOneToOneProgressSchools_(__data, __session)', context)), ['校舎C']);
+  context.__data = { schools: ['校舎A', '校舎B'] };
+  assert.deepEqual(Array.from(vm.runInContext('resolveOneToOneProgressSchools_(__data, __session)', context)), ['校舎A', '校舎B']);
+  context.__data = { schools: ['校舎A', '校舎C'] };
+  assert.throws(() => vm.runInContext('resolveOneToOneProgressSchools_(__data, __session)', context), /担当校舎の範囲内/);
+
+  context.__session = { userId: 'head1', role: 'head-teacher', userContexts: [{ userId: 'head1', assignedSchools: ['校舎A', '校舎B'] }] };
+  context.__data = { schools: ['校舎A', '校舎B'] };
+  assert.doesNotThrow(() => vm.runInContext('resolveOneToOneProgressSchools_(__data, __session)', context));
+  context.__data = { schools: ['校舎A', '校舎C'] };
+  assert.throws(() => vm.runInContext('resolveOneToOneProgressSchools_(__data, __session)', context), /担当校舎の範囲内/);
+
+  context.__session = { userId: 'admin', role: 'admin', userContexts: [] };
+  assert.deepEqual(Array.from(vm.runInContext('resolveOneToOneProgressSchools_(__data, __session)', context)), ['校舎A', '校舎C']);
+});
+
+test('業務エラーはログアウト用認証エラーにせず、セッション失効だけを認証エラーにする', () => {
+  assert.equal(vm.runInContext('getOneToOneProgressErrorCode_(new Error("複数校舎選択は担当校舎の範囲内で指定してください"))', context), 'VALIDATION_ERROR');
+  assert.equal(vm.runInContext('getOneToOneProgressErrorCode_(new Error("対象生徒が見つかりません"))', context), 'VALIDATION_ERROR');
+  assert.equal(vm.runInContext('getOneToOneProgressErrorCode_(new Error("管理セッションが無効または期限切れです"))', context), 'AUTHORIZATION_ERROR');
+  assert.equal(vm.runInContext('getOneToOneProgressErrorCode_(new Error("1対1進捗の利用権限がありません"))', context), 'AUTHORIZATION_ERROR');
 });
 
 test('通常講師は訂正できず、adminだけVOID化できる', () => {

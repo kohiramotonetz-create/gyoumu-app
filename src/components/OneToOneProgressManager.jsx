@@ -8,6 +8,7 @@ import { formatSchoolUnit, SOCIAL_FIELDS } from '../utils/schoolUnits.js';
 import { formatLessonDateJa, isConsecutiveUnits } from '../utils/oneToOneProgressDisplay.js';
 import StudentProfileLink from './common/StudentProfileLink.jsx';
 import { OneToOneProgressLine as ProgressLine } from './common/OneToOneProgressDisplay.jsx';
+import { ALL_SCHOOLS } from '../constants/organization.js';
 
 const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
 const makeRequestId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -23,7 +24,7 @@ function HistoryUnits({ event }) {
 }
 
 export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken, role, assignedSchools = [], styles, onSessionExpired }) {
-  const [school, setSchool] = useState('');
+  const [school, setSchool] = useState(assignedSchools[0] || '');
   const [grade, setGrade] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [data, setData] = useState({ axis: [], students: [] });
@@ -53,7 +54,8 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
   const fetchMatrix = async () => {
     if (!school || !grade || !subjectId) return setNotice('校舎・学年・科目を選択してください。');
     setLoading(true); setNotice('');
-    try { setData(await request('getOneToOneProgressMatrix', { school, grade, subjectId })); }
+    const schools = school === '全担当校舎' ? (role === 'admin' ? ALL_SCHOOLS : assignedSchools) : [school];
+    try { setData(await request('getOneToOneProgressMatrix', { school, schools, grade, subjectId })); }
     catch (error) { setNotice(error.message); }
     finally { setLoading(false); }
   };
@@ -121,7 +123,7 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
       <h2 style={styles.contentTitle}>🤝 1対1進捗チェック</h2>
       <div style={{ background: '#fff', padding: 18, borderRadius: 8, boxShadow: '0 1px 3px #0002', marginBottom: 18 }}>
         <div style={{ display: 'grid', gap: 12 }}>
-          <SchoolSelect style={styles.select} value={school} onChange={event => setSchool(event.target.value)} assignedSchools={assignedSchools} />
+          <SchoolSelect style={styles.select} value={school} onChange={event => setSchool(event.target.value)} assignedSchools={role === 'admin' ? ALL_SCHOOLS : assignedSchools} />
           <GradeSelect style={styles.select} value={grade} onChange={values => setGrade(values[0] || '')} includeGroups={false} />
           <FilterButtonGroup label="科目" options={subjectLabels} selected={ONE_TO_ONE_SUBJECTS.find(subject => subject.subjectId === subjectId)?.label || ''} onSelect={label => setSubjectId(ONE_TO_ONE_SUBJECTS.find(subject => subject.label === label)?.subjectId || '')} isMultiple={false} />
           <button type="button" style={{ ...styles.doneBtn, background: '#0f766e', color: '#fff' }} onClick={fetchMatrix} disabled={loading}>{loading ? '読込中...' : '表示更新'}</button>

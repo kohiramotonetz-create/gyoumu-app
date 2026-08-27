@@ -1746,11 +1746,33 @@ function requireOneToOneProgressSession_(sessionToken, includeUserContexts) {
   return session;
 }
 
-function assertOneToOneProgressStudentAccess_(session, student, writeAccess) {
+function assertOneToOneProgressStudentAccess_(_session, student, _writeAccess) {
   if (!student || student.role !== "student" || !student.enabled || student.deleted) throw new Error("対象生徒が見つかりません");
-  if (session.role === "admin") return;
-  const actor = (session.userContexts || getUserAuthContexts_()).find(user => user.userId === session.userId);
-  if (!actor || !actor.assignedSchools.includes(student.school)) throw new Error(writeAccess ? "担当外校舎の生徒には登録できません" : "担当外校舎の生徒は閲覧できません");
+}
+
+function resolveOneToOneProgressSchools_(data, session) {
+  let requested = Array.isArray(data.schools) ? data.schools : [];
+  const legacySchool = String(data.school || "").trim();
+  if (!requested.length && legacySchool === "全担当校舎") {
+    if (session.role === "admin") requested = (session.userContexts || []).filter(user => user.role === "student" && user.enabled && !user.deleted).map(user => user.school);
+    else {
+      const actor = (session.userContexts || []).find(user => user.userId === session.userId);
+      requested = actor && Array.isArray(actor.assignedSchools) ? actor.assignedSchools : [];
+    }
+  } else if (!requested.length && legacySchool) requested = [legacySchool];
+  const schools = Array.from(new Set(requested.map(value => String(value || "").trim()).filter(Boolean)));
+  if (!schools.length) throw new Error("校舎を選択してください");
+  if (schools.length > 1 && session.role !== "admin") {
+    const actor = (session.userContexts || []).find(user => user.userId === session.userId);
+    if (!actor || schools.some(school => !actor.assignedSchools.includes(school))) throw new Error("複数校舎選択は担当校舎の範囲内で指定してください");
+  }
+  return schools;
+}
+
+function getOneToOneProgressErrorCode_(error) {
+  return isManagementAuthorizationError(error) || /利用権限/.test(String(error && error.message || ""))
+    ? "AUTHORIZATION_ERROR"
+    : "VALIDATION_ERROR";
 }
 
 function normalizeLessonDate_(value) {
@@ -1903,18 +1925,14 @@ function serializeOneToOneProgressState_(state) {
 function handleOneToOneProgressAction_(data) {
   const session = requireOneToOneProgressSession_(data.sessionToken, true);
   if (data.action === "getOneToOneProgressMatrix") {
-    const school = String(data.school || "").trim();
+    const schools = resolveOneToOneProgressSchools_(data, session);
     const grade = normalizeGrade(data.grade);
     const subjectId = String(data.subjectId || "").trim();
-    if (session.role !== "admin") {
-      const actor = session.userContexts.find(user => user.userId === session.userId);
-      if (!actor || !actor.assignedSchools.includes(school)) throw new Error("担当外校舎は閲覧できません");
-    }
     const subjectState = buildOneToOneSubjectStateMap_(assertOneToOneSubjectSheet_().getDataRange().getValues()).states;
     const sheets = assertOneToOneProgressSheets_();
     const fields = subjectId === "social" ? ONE_TO_ONE_SOCIAL_FIELDS : [{ fieldId: "", label: "" }];
     const fieldAxes = fields.map(field => ({ fieldId: field.fieldId, label: field.label, axis: getOneToOneSchoolUnitAxis_(grade, subjectId, field.fieldId) }));
-    const students = session.userContexts.filter(user => user.role === "student" && user.enabled && !user.deleted && user.school === school && normalizeGrade(user.grade) === grade && (subjectState[user.userId] || []).includes(subjectId)).map(user => {
+    const students = session.userContexts.filter(user => user.role === "student" && user.enabled && !user.deleted && schools.includes(user.school) && normalizeGrade(user.grade) === grade && (subjectState[user.userId] || []).includes(subjectId)).map(user => {
       const progressByField = Object.create(null);
       fields.forEach(field => {
         const state = readOneToOneProgressState_(user.userId, subjectId, user.grade, sheets, field.fieldId);
@@ -1923,7 +1941,7 @@ function handleOneToOneProgressAction_(data) {
       const normal = progressByField.default || {};
       return { userId: user.userId, name: user.name, nameKana: user.nameKana, school: user.school, grade: user.grade, schoolCurrentUnitId: normal.schoolCurrentUnitId || null, netzCurrentUnitId: normal.netzCurrentUnitId || null, progressByField };
     }).sort(compareStudentsByKana_);
-    return { result: "success", axis: subjectId === "social" ? [] : fieldAxes[0].axis, fieldAxes, students, sessionExpiresAt: session.sessionExpiresAt };
+    return { result: "success", schools, axis: subjectId === "social" ? [] : fieldAxes[0].axis, fieldAxes, students, sessionExpiresAt: session.sessionExpiresAt };
   }
   const userId = normalizeUserId(data.userId);
   const subjectId = String(data.subjectId || "").trim();
@@ -2781,10 +2799,6 @@ function assertStudentProfileAccess_(session, rawUserId) {
   if (!/^\d{6}$/.test(userId)) throw new Error("生徒が見つかりません");
   const student = session.userContexts.find(user => user.userId === userId && user.role === "student");
   if (!student || student.deleted || !student.enabled) throw new Error("生徒が見つかりません");
-  if (session.role !== "admin") {
-    const actor = session.userContexts.find(user => user.userId === session.userId && user.enabled && !user.deleted);
-    if (!actor || !actor.assignedSchools.includes(student.school)) throw new Error("この生徒を閲覧する権限がありません");
-  }
   return student;
 }
 
@@ -2993,8 +3007,8 @@ function doPost(e) {
     try {
       return responseJSON(handleOneToOneProgressAction_(data));
     } catch (error) {
-      const authorizationError = isManagementAuthorizationError(error) || /担当外|利用権限/.test(String(error && error.message || ""));
-      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "この1対1進捗を利用する権限がありません" : String(error && error.message || "入力内容が不正です") });
+      const code = getOneToOneProgressErrorCode_(error);
+      return responseJSON({ result: "error", code, message: code === "AUTHORIZATION_ERROR" ? "この1対1進捗を利用する権限がありません" : String(error && error.message || "入力内容が不正です") });
     }
   }
 
