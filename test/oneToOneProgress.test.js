@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { parseSchoolUnitsCsv, selectSchoolUnitAxis, SOCIAL_FIELDS } from '../src/utils/schoolUnits.js';
-import { formatLessonDateJa, getChapterSegments, isConsecutiveUnits } from '../src/utils/oneToOneProgressDisplay.js';
+import { formatLessonDateJa, getChapterSegments, isConsecutiveUnits, selectChapterSegments } from '../src/utils/oneToOneProgressDisplay.js';
 
 const csv = fs.readFileSync(new URL('../public/school_units.csv', import.meta.url), 'utf8');
 
@@ -86,4 +86,13 @@ test('章境界と学校の連続区間を表示用に判定する', () => {
   assert.equal(segments[0].chapter, axis[0].chapter);
   assert.ok(isConsecutiveUnits(axis.slice(0, 5)));
   assert.equal(isConsecutiveUnits([axis[0], axis[2]]), false);
+});
+
+test('細分化された章は主要区切りだけを等間隔に表示できる', () => {
+  const segments = Array.from({ length: 20 }, (_, index) => ({ chapter: String(index + 1), startOrder: index + 1 }));
+  const selected = selectChapterSegments(segments, 6);
+  assert.equal(selected.length, 6);
+  assert.equal(selected[0].chapter, '1');
+  assert.equal(selected.at(-1).chapter, '20');
+  assert.deepEqual(selectChapterSegments(segments, undefined), segments);
 });

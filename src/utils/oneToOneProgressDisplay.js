@@ -17,6 +17,13 @@ export function getChapterSegments(axis) {
   }, []);
 }
 
+export function selectChapterSegments(segments, maxLabels) {
+  if (!maxLabels || segments.length <= maxLabels) return segments;
+  if (maxLabels === 1) return segments.slice(0, 1);
+  const indexes = Array.from({ length: maxLabels }, (_, index) => Math.round(index * (segments.length - 1) / (maxLabels - 1)));
+  return indexes.filter((value, index) => index === 0 || value !== indexes[index - 1]).map(index => segments[index]);
+}
+
 export function isConsecutiveUnits(units) {
   if (!units.length) return false;
   return units.every((unit, index) => index === 0 || unit.unitOrder === units[index - 1].unitOrder + 1);

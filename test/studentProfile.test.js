@@ -96,8 +96,22 @@ test('プロフィールはPC案1の配置とモバイル1カラムを使用す�
   assert.match(profile, /student-profile__content-grid/);
   assert.match(profile, /student-profile__academic-grid/);
   assert.match(profile, /aria-pressed/);
-  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/);
-  assert.match(styles, /repeat\(auto-fit, minmax\(210px, 1fr\)\)/);
-  assert.match(styles, /@media \(max-width: 1100px\)/);
+  assert.match(styles, /minmax\(0, 0\.9fr\) minmax\(0, 1\.1fr\)/);
+  assert.match(styles, /minmax\(0, 1\.65fr\) minmax\(320px, 1fr\)/);
+  assert.match(styles, /repeat\(auto-fit, minmax\(190px, 1fr\)\)/);
+  assert.match(styles, /@media \(max-width: 1180px\)/);
   assert.match(styles, /overflow-x: auto/);
+});
+
+test('プロフィールは個トレ章ラベルを抑制し未利用コンテンツをcompact表示する', () => {
+  const profile = fs.readFileSync(new URL('../src/components/StudentProfileView.jsx', import.meta.url), 'utf8');
+  const axis = fs.readFileSync(new URL('../src/components/common/ProgressAxisLine.jsx', import.meta.url), 'utf8');
+  assert.match(profile, /maxChapterLabels=\{6\}/);
+  assert.match(axis, /selectChapterSegments/);
+  assert.match(axis, /title=\{formatUnit\(unit\)\}/);
+  assert.match(axis, /onFocus/);
+  assert.match(axis, /詳細：/);
+  assert.match(profile, /利用履歴あり/);
+  assert.match(profile, /まだ利用履歴なし/);
+  assert.match(profile, /student-profile__unused-item/);
 });
