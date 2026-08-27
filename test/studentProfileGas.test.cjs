@@ -79,7 +79,7 @@ test('スキマ君はallowedContentIdsだけをマスター順で返し、履歴
     { contentId: 'permission_off', displayName: '権限OFF', enabled: true, sortOrder: 3 }
   ];
   context.getSukimakunPermissionState = () => ({ permissionsInitialized: true, allowedContentIds: ['allowed_empty', 'allowed_used'] });
-  context.openSpreadsheetByProperty = () => ({ getSheets: () => [{ getDataRange: () => ({ getValues: () => [[],
+  context.openSpreadsheetByProperty = () => ({ getSheets: () => [{ getName: () => '未対応シート', getDataRange: () => ({ getValues: () => [[],
     [new Date('2026-08-27T09:30:00Z'), '', '037071', '同名を使用しない', '', '通常', 8, 10, '', '', '', 'allowed_used'],
     [new Date('2026-08-27T10:00:00Z'), '', '037071', '', '', '通常', 9, 10, '', '', '', 'permission_off'],
     [new Date('2026-08-27T11:00:00Z'), '', '037071', '', '', '通常', 1, 1, '', '', '', '']
@@ -92,4 +92,36 @@ test('スキマ君はallowedContentIdsだけをマスター順で返し、履歴
   assert.equal(result.currentContents[1].cumulativeRate, 80);
   assert.equal('pastContents' in result, false);
   assert.equal(result.legacyLogCount, 1);
+});
+
+test('正式1対1シートのlegacy行だけを互換集計しcanonical行と二重計上しない', () => {
+  context.getSukimakunContents = () => [
+    { contentId: 'junior_english_quiz', displayName: '1問ずつテスト', enabled: true, sortOrder: 1 },
+    { contentId: 'kakitan', displayName: '書き単', enabled: true, sortOrder: 2 }
+  ];
+  context.getSukimakunPermissionState = () => ({ permissionsInitialized: true, allowedContentIds: ['junior_english_quiz'] });
+  const rows = [[],
+    [new Date('2026-08-20T09:00:00Z'), '', '037071', '', '', '通常', 7, 10, '', '', '', ''],
+    [new Date('2026-08-21T09:00:00Z'), '', '037071', '', '', '通常', 8, 10, '', '', '', 'junior_english_quiz']
+  ];
+  context.openSpreadsheetByProperty = () => ({ getSheets: () => [
+    { getName: () => '1問ずつテスト(自習)', getDataRange: () => ({ getValues: () => rows }) },
+    { getName: () => '曖昧・未対応', getDataRange: () => ({ getValues: () => [[], [new Date(), '', '037071', '', '', '', 10, 10, '', '', '', '']] }) }
+  ] });
+  context.Utilities = { formatDate: date => date.toISOString() };
+  context.__student = contexts[3];
+  const result = vm.runInContext('getStudentProfileSukimakun_(__student)', context);
+  assert.equal(result.currentContents.length, 1);
+  assert.equal(result.currentContents[0].attemptCount, 2);
+  assert.equal(result.currentContents[0].cumulativeScore, 15);
+  assert.equal(result.compatibleLegacyLogCount, 1);
+  assert.equal(result.legacyLogCount, 2);
+});
+
+test('個トレ共通ページ照合は個別ページとCSV範囲を対応させ教材名表記を正規化する', () => {
+  context.__matcher = vm.runInContext('buildKoToreCompletionMatcher_(["iワークプラス 14, iワークプラス 15, iワークプラス 16"], "ｉワーク プラス")', context);
+  assert.equal(vm.runInContext('isKoToreUnitPageCompleted_("p.14-16", __matcher)', context), true);
+  context.__drillMatcher = vm.runInContext('buildKoToreCompletionMatcher_(["iワークドリル p.8"], "iワークドリル")', context);
+  assert.equal(vm.runInContext('isKoToreUnitPageCompleted_("p.8", __drillMatcher)', context), true);
+  assert.equal(vm.runInContext('isKoToreUnitPageCompleted_("p.9", __drillMatcher)', context), false);
 });

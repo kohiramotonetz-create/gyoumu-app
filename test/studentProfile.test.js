@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { buildStudentProfileHash, parseStudentProfileHash } from '../src/utils/studentProfileNavigation.js';
-import { parseKoToreUnitsCsv } from '../src/utils/kotoreProfile.js';
+import { ensureKoToreProfileAxes, parseKoToreUnitsCsv } from '../src/utils/kotoreProfile.js';
 import { ACADEMIC_PROFILE_SUBJECTS, buildAcademicChartData } from '../src/utils/academicProfile.js';
 
 test('プロフィールHashは先頭0を維持してsourceを往復する', () => {
@@ -36,6 +36,14 @@ test('プロフィールはカード別action・loading・再試行を持つ', (
 test('個トレ単元CSVは教材軸の順序と表示情報を保持する', () => {
   const units = parseKoToreUnitsCsv('学年,科目,テキスト名,章,単元,ページ\r\n中１,数学,教材A,1章,単元1,p.2\r\n中１,数学,教材A,1章,単元2,p.3\r\n');
   assert.deepEqual(units.map(unit => [unit.grade, unit.subject, unit.textName, unit.unitName, unit.page]), [['中１', '数学', '教材A', '単元1', 'p.2'], ['中１', '数学', '教材A', '単元2', 'p.3']]);
+});
+
+test('個トレAPIのaxisが欠けても同じ教材のCSV軸を補完する', () => {
+  const masterUnits = parseKoToreUnitsCsv('学年,科目,テキスト名,章,単元,ページ\n中１,英語,iワークプラス,Unit 1,一般動詞,p.14-16\n');
+  const result = ensureKoToreProfileAxes({ items: [{ subject: '英語', textName: 'ｉワーク プラス', unitOrder: 1 }] }, masterUnits);
+  assert.equal(result.items[0].axis.length, 1);
+  assert.equal(result.items[0].axis[0].page, 'p.14-16');
+  assert.equal(result.items[0].axis[0].unitOrder, 1);
 });
 
 test('Issue #017一覧とプロフィールは同じ進捗ラインを使う', () => {

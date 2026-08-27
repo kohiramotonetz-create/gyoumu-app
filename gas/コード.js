@@ -49,6 +49,17 @@ const ACADEMIC_TEST_HEADERS = ["testId", "schoolYear", "testName", "testType", "
 const ACADEMIC_SUBJECTS = ["japanese", "math", "english", "science", "social", "music", "health", "art", "technologyHomeEconomics"];
 const ACADEMIC_RESULT_HEADERS = ["testId", "userId"].concat(ACADEMIC_SUBJECTS, ["createdAt", "updatedAt", "updatedBy"]);
 const ACADEMIC_TEST_TYPES = ["regular", "diagnostic", "other"];
+// student-appのSUKIMAKUN_CONTENTSおよびstudent-app-log-gasの診断用正本と一致する1:1対応だけをlegacy読取に使用する。
+const SUKIMAKUN_LEGACY_LOG_SHEET_BY_CONTENT_ID = {
+  junior_english_quiz: "1問ずつテスト(自習)", kakitan: "書き単", irregular_verbs: "英単語(不規則変化)",
+  junior_kobun: "古文単語(自習)", target_1900: "ターゲット1900", target_1200: "ターゲット1200",
+  sokudoku_english: "速読英単語", dragon_english: "ドラゴンイングリッシュ", yumetan: "ユメタン",
+  kikutan_pre2: "キクタン準2級", kakushin_kobun_351: "核心古文単語351", kobun_315: "古文単語315",
+  iroha_nihoheto: "いろはにほへと", kobun_325: "古文325", formula_600: "FORMULA600",
+  kougei_art: "高松工芸美術科", miki_bunri: "三木高校文理コース", takamatsu_higashi_humanities: "高松東高校２年人文コース",
+  kanji_test: "漢字テスト", chemistry_formulas: "化学式・イオン式テスト", preposition_test: "前置詞テスト",
+  camp_kagawa_kanji: "合宿_香川県覚えるべき漢字", camp_science_qa: "合宿_理科一問一答", camp_social_qa: "合宿_社会一問一答"
+};
 const ACCOUNT_MASTER_SHEET_SPECS = [
   { name: "アカウントマスター", headers: ["userId", "password", "isInitial", "passwordUpdatedAt", "role", "enabled", "sukimakunToken", "sukimakunTokenExpire", "createdAt", "updatedAt", "deletedAt"], textColumns: [1, 2, 7], dateColumns: [4, 8, 9, 10, 11] },
   { name: "生徒マスター", headers: ["userId", "school", "name", "nameKana", "grade", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [6, 7] },
@@ -2781,6 +2792,48 @@ function getStudentProfileSummary_(student, session) {
   return { result: "success", student: { userId: student.userId, name: student.name, nameKana: student.nameKana, school: student.school, grade: student.grade, enabled: student.enabled }, oneToOneSubjectIds: getOneToOneSubjects(student.userId).subjectIds, sessionExpiresAt: session.sessionExpiresAt };
 }
 
+function normalizeKoToreText_(value) {
+  return String(value || "").normalize("NFKC").toLowerCase().replace(/[.．\s]/g, "");
+}
+
+function extractKoTorePageNumbers_(value) {
+  const normalized = String(value || "").normalize("NFKC").replace(/[ー―‐−～〜~]/g, "-");
+  const numbers = new Set();
+  const ranges = normalized.matchAll(/(?:p\s*[.．]?\s*)?(\d+)\s*-\s*(\d+)/gi);
+  for (const match of ranges) {
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    if (Number.isInteger(start) && Number.isInteger(end) && start <= end && end - start <= 200) {
+      for (let page = start; page <= end; page++) numbers.add(page);
+    }
+  }
+  const singles = normalized.matchAll(/(?:^|[^\d])(?:p\s*[.．]?\s*)?(\d+)(?!\d)/gi);
+  for (const match of singles) numbers.add(Number(match[1]));
+  return numbers;
+}
+
+function buildKoToreCompletionMatcher_(historyValues, textName) {
+  const normalizedTextName = normalizeKoToreText_(textName);
+  const literals = new Set();
+  const pageNumbers = new Set();
+  historyValues.forEach(value => {
+    String(value || "").split(",").forEach(part => {
+      const normalizedPart = normalizeKoToreText_(part).replace(normalizedTextName, "");
+      if (normalizedPart) literals.add(normalizedPart);
+      extractKoTorePageNumbers_(normalizedPart).forEach(page => pageNumbers.add(page));
+    });
+  });
+  return { literals, pageNumbers };
+}
+
+function isKoToreUnitPageCompleted_(unitPage, matcher) {
+  const normalizedPage = normalizeKoToreText_(unitPage);
+  if (!normalizedPage) return false;
+  if (matcher.literals.has(normalizedPage)) return true;
+  const unitNumbers = extractKoTorePageNumbers_(unitPage);
+  return Array.from(unitNumbers).some(page => matcher.pageNumbers.has(page));
+}
+
 function getStudentProfileKoTore_(student, masterUnits) {
   if (!Array.isArray(masterUnits)) throw new Error("個トレ単元マスターが不正です");
   const axes = Object.create(null);
@@ -2789,23 +2842,22 @@ function getStudentProfileKoTore_(student, masterUnits) {
     const textName = String(unit.textName || "").trim();
     const page = String(unit.page || "").trim();
     if (!subject || !textName || !page) return;
-    const key = `${subject}\t${textName}`;
+    const key = `${normalizeKoToreText_(subject)}\t${normalizeKoToreText_(textName)}`;
     if (!axes[key]) axes[key] = [];
     axes[key].push({ subject, textName, chapter: String(unit.chapter || "").trim(), unitName: String(unit.unitName || "").trim(), page, unitOrder: axes[key].length + 1 });
   });
   const spreadsheet = openSpreadsheetByProperty("KOTORE_PROGRESS_SPREADSHEET_ID");
   const sheet = spreadsheet.getSheetByName("progress") || spreadsheet.getSheets()[0];
   const rows = sheet.getDataRange().getValues().slice(1).filter(row => normalizeUserId(row[2]) === student.userId);
-  const normalizeProgressText = value => String(value || "").toLowerCase().replace(/[.\s]/g, "");
   const items = Object.keys(axes).map(key => {
     const axis = axes[key];
-    const matchingRows = rows.filter(row => `${String(row[5] || "").trim()}\t${String(row[6] || "").trim()}` === key);
+    const matchingRows = rows.filter(row => `${normalizeKoToreText_(row[5])}\t${normalizeKoToreText_(row[6])}` === key);
     if (!matchingRows.length) return null;
-    const history = matchingRows.map(row => normalizeProgressText(row[7])).join(",");
-    const current = axis.filter(unit => history.includes(normalizeProgressText(unit.page))).at(-1);
+    const matcher = buildKoToreCompletionMatcher_(matchingRows.map(row => row[7]), axis[0].textName);
+    const current = axis.filter(unit => isKoToreUnitPageCompleted_(unit.page, matcher)).at(-1);
     const dates = matchingRows.map(row => row[0] instanceof Date ? row[0] : new Date(row[0])).filter(date => !isNaN(date.getTime()));
     const lastRecordedAt = dates.length ? new Date(Math.max(...dates.map(date => date.getTime()))) : null;
-    return current ? { subject: current.subject, textName: current.textName, page: current.page, unitName: current.unitName, chapter: current.chapter, unitOrder: current.unitOrder, axis, lastRecordedAt: lastRecordedAt ? Utilities.formatDate(lastRecordedAt, "Asia/Tokyo", "M月d日") : "" } : null;
+    return { subject: axis[0].subject, textName: axis[0].textName, page: current ? current.page : "", unitName: current ? current.unitName : "", chapter: current ? current.chapter : "", unitOrder: current ? current.unitOrder : 0, axis, historyRows: matchingRows.length, matchedUnits: axis.filter(unit => isKoToreUnitPageCompleted_(unit.page, matcher)).length, lastRecordedAt: lastRecordedAt ? Utilities.formatDate(lastRecordedAt, "Asia/Tokyo", "M月d日") : "" };
   }).filter(Boolean);
   return { result: "success", items };
 }
@@ -2818,15 +2870,27 @@ function getStudentProfileSukimakun_(student) {
   const permission = getSukimakunPermissionState(student.userId, activeContents);
   const allowed = new Set(permission.allowedContentIds);
   const aggregate = Object.create(null);
+  const legacyContentIdsBySheet = Object.create(null);
+  Object.keys(SUKIMAKUN_LEGACY_LOG_SHEET_BY_CONTENT_ID).forEach(contentId => {
+    const sheetName = SUKIMAKUN_LEGACY_LOG_SHEET_BY_CONTENT_ID[contentId];
+    if (!legacyContentIdsBySheet[sheetName]) legacyContentIdsBySheet[sheetName] = [];
+    legacyContentIdsBySheet[sheetName].push(contentId);
+  });
   let legacyLogCount = 0;
+  let compatibleLegacyLogCount = 0;
   const logSpreadsheet = openSpreadsheetByProperty("APP_USAGE_SPREADSHEET_ID");
   logSpreadsheet.getSheets().forEach(sheet => {
     const values = sheet.getDataRange().getValues();
     if (values.length < 2) return;
+    const legacyCandidates = legacyContentIdsBySheet[sheet.getName()] || [];
+    const legacyContentId = legacyCandidates.length === 1 ? legacyCandidates[0] : "";
     values.slice(1).forEach(row => {
       if (normalizeUserId(row[2]) !== student.userId) return;
-      const contentId = String(row[11] || "").trim();
-      if (!contentId) { legacyLogCount++; return; }
+      const canonicalContentId = String(row[11] || "").trim();
+      if (!canonicalContentId) legacyLogCount++;
+      const contentId = canonicalContentId || legacyContentId;
+      if (!contentId) return;
+      if (!canonicalContentId) compatibleLegacyLogCount++;
       if (!contentById[contentId]) return;
       const score = Number(row[6]);
       const total = Number(row[7]);
@@ -2843,7 +2907,7 @@ function getStudentProfileSukimakun_(student) {
   const byContentId = Object.create(null);
   history.forEach(item => { byContentId[item.contentId] = item; });
   const currentContents = activeContents.filter(content => allowed.has(content.contentId)).map(content => byContentId[content.contentId] || serialize({ contentId: content.contentId, attemptCount: 0, cumulativeScore: 0, cumulativeTotal: 0 }));
-  return { result: "success", currentContents, permissionsInitialized: permission.permissionsInitialized, legacyLogCount, dataSinceContentIdEnabled: true };
+  return { result: "success", currentContents, permissionsInitialized: permission.permissionsInitialized, legacyLogCount, compatibleLegacyLogCount, dataSinceContentIdEnabled: true };
 }
 
 function getStudentProfileOneToOne_(student) {
@@ -3633,10 +3697,8 @@ function doPost(e) {
       const matrix = studentList.map(student => {
         const studentHistory = filteredProgress
           .filter(p => String(p[2] || "").replace(/^'/, "").trim() === student.userId)
-          .map(p => String(p[7] || "")) 
-          .join(" , ");
-
-        const normalizedHistory = studentHistory.toLowerCase().replace(/[\.\s]/g, "");
+          .map(p => String(p[7] || ""));
+        const completionMatcher = buildKoToreCompletionMatcher_(studentHistory, targetText);
 
         return {
           school: student.school,
@@ -3645,8 +3707,7 @@ function doPost(e) {
           userId: student.userId,
           completions: unitPages.map(pageStr => {
             if (!pageStr) return false;
-            const target = pageStr.toLowerCase().replace(/[\.\s]/g, "");
-            return normalizedHistory.includes(target);
+            return isKoToreUnitPageCompleted_(pageStr, completionMatcher);
           })
         };
       });

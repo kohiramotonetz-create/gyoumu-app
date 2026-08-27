@@ -3,7 +3,7 @@ import axios from 'axios';
 import { ONE_TO_ONE_SUBJECTS } from '../utils/oneToOneSubjects.js';
 import { OneToOneSubjectProgress } from './common/OneToOneProgressDisplay.jsx';
 import ProgressAxisLine from './common/ProgressAxisLine.jsx';
-import { parseKoToreUnitsCsv } from '../utils/kotoreProfile.js';
+import { ensureKoToreProfileAxes, parseKoToreUnitsCsv } from '../utils/kotoreProfile.js';
 import { ACADEMIC_PROFILE_SUBJECTS, buildAcademicChartData } from '../utils/academicProfile.js';
 
 const actions = {
@@ -39,7 +39,8 @@ export default function StudentProfileView({ userId, GAS_URL, API_KEY, sessionTo
         if (!response.ok) throw new Error('個トレ単元を取得できませんでした');
         payload = { masterUnits: parseKoToreUnitsCsv(await response.text()) };
       }
-      const data = await request(actions[key], payload);
+      const responseData = await request(actions[key], payload);
+      const data = key === 'kotore' ? ensureKoToreProfileAxes(responseData, payload.masterUnits) : responseData;
       setSections(value => ({ ...value, [key]: { loading: false, error: '', data } }));
     } catch (error) {
       if (error.code === 'AUTHORIZATION_ERROR') onSessionExpired?.();
