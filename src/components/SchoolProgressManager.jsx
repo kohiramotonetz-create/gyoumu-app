@@ -82,7 +82,6 @@ const SchoolProgressManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] 
     fontSize: '11px', 
     textAlign: 'center', 
     whiteSpace: 'nowrap',
-    position: 'sticky', // 基本すべて固定配置化
     boxSizing: 'border-box'
   };
 
@@ -141,13 +140,13 @@ const SchoolProgressManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] 
 
       {/* テーブル表示エリア */}
       {tableData.headers.length > 0 && (
-        <div style={{ overflow: 'auto', maxHeight: '72vh', border: '1px solid #ddd', borderRadius: '4px' }}>
+        <div style={{ overflowX: 'auto', border: '1px solid #ddd', borderRadius: '4px' }}>
           <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', backgroundColor: '#fff' }}>
             <thead>
               {/* 1行目: 大章 (chapter) 固定位置 top: 0 */}
               <tr style={{ height: '35px' }}>
-                <th rowSpan="4" style={{ ...thBase, top: 0, left: 0, zIndex: 20, width: `${SCHOOL_COL_WIDTH}px`, minWidth: `${SCHOOL_COL_WIDTH}px`, backgroundColor: '#f1f5f9' }}>校舎</th>
-                <th rowSpan="4" style={{ ...thBase, top: 0, left: `${SCHOOL_COL_WIDTH}px`, zIndex: 20, width: `${NAME_COL_WIDTH}px`, minWidth: `${NAME_COL_WIDTH}px`, backgroundColor: '#f1f5f9' }}>名前</th>
+                <th rowSpan="4" style={{ ...thBase, position: 'sticky', top: 0, left: 0, zIndex: 20, width: `${SCHOOL_COL_WIDTH}px`, minWidth: `${SCHOOL_COL_WIDTH}px`, backgroundColor: '#f1f5f9' }}>校舎</th>
+                <th rowSpan="4" style={{ ...thBase, position: 'sticky', top: 0, left: `${SCHOOL_COL_WIDTH}px`, zIndex: 20, width: `${NAME_COL_WIDTH}px`, minWidth: `${NAME_COL_WIDTH}px`, backgroundColor: '#f1f5f9' }}>名前</th>
                 {getSpans('chapter').map((s, i) => (
                   <th key={i} colSpan={s.span} style={{ ...thBase, top: 0, zIndex: 10, backgroundColor: '#f1f5f9', fontWeight: 'bold' }}>{s.label}</th>
                 ))}

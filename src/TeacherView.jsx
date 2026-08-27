@@ -24,6 +24,17 @@ import './TeacherView.css'
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
 const CAMP_MENU_ITEM = { id: 'camp-training', label: '合宿メニュー', icon: '🏕️' };
+const WIDE_CONTENT_IDS = new Set([
+  'app-usage',
+  'kotore-progress',
+  'school-progress',
+  'one-to-one-progress',
+  'academic-results',
+  'create-account',
+  'camp-training',
+  'test-review-check',
+  'sukimakun-permissions',
+]);
 const MENU_ICON_NAMES = {
   home: 'home', notices: 'megaphone', notifications: 'target', 'app-usage': 'clipboard', 'kotore-progress': 'chart',
   'school-progress': 'school', 'one-to-one-progress': 'chart', 'create-account': 'user', passwords: 'key',
@@ -185,6 +196,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
       scrollElement.scrollTo({ top: event.key === 'Home' ? 0 : scrollElement.scrollHeight });
     }
   };
+  const isWideContent = WIDE_CONTENT_IDS.has(activeContent);
 
   return (
     <div className="teacher-shell">
@@ -212,7 +224,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
           </nav>
       </aside>
         <main className={`teacher-main ${!isSidebarOpen ? 'teacher-main--wide' : ''}`} tabIndex="0" aria-label="メインコンテンツ" onKeyDown={handleMainKeyDown}>
-          <div className={`teacher-content ${activeContent !== 'home' ? 'teacher-content--legacy' : ''} ${profileRoute ? 'teacher-content--profile' : ''}`}>
+          <div className={`teacher-content ${activeContent !== 'home' && !isWideContent ? 'teacher-content--legacy' : ''} ${isWideContent ? 'teacher-content--wide' : ''} ${profileRoute ? 'teacher-content--profile' : ''}`}>
             {profileRoute && <StudentProfileView userId={profileRoute.userId} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={handleLogout} onBack={() => { if (window.history.length > 1) window.history.back(); else window.location.hash = ''; }} />}
             {!profileRoute && <>
             {activeContent === 'home' && <HomeDashboard userName={userName} />}

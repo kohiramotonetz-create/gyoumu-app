@@ -81,7 +81,7 @@ const KoToreProgressTracker = ({ styles, GAS_URL, API_KEY, assignedSchools = [] 
   const NAME_COL_WIDTH = 120;
   const ROW_HEIGHT = 45; // ヘッダー1行あたりの高さ
 
-  // 💡 すべてのヘッダー・セルのベーススタイル（position: 'sticky' を前提に再設計）
+  // ヘッダーはページと一緒に縦スクロールし、先頭列だけ横方向に固定する
   const cellBase = { 
     border: '1px solid #ddd', 
     padding: '4px 8px', 
@@ -93,7 +93,6 @@ const KoToreProgressTracker = ({ styles, GAS_URL, API_KEY, assignedSchools = [] 
 
   const headerBase = { 
     ...cellBase, 
-    position: 'sticky', 
     backgroundColor: '#f0fdf4', 
     color: '#166534', 
     zIndex: 10, 
@@ -159,13 +158,13 @@ const KoToreProgressTracker = ({ styles, GAS_URL, API_KEY, assignedSchools = [] 
 
       {/* マトリックス表示エリア */}
       {tableData.matrix.length > 0 && (
-        <div style={{ overflow: 'auto', maxHeight: '72vh', border: '1px solid #22c55e', borderRadius: '4px' }}>
+        <div style={{ overflowX: 'auto', border: '1px solid #22c55e', borderRadius: '4px' }}>
           <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', backgroundColor: '#fff' }}>
             <thead>
               {/* 1行目: 大単元 固定位置 top: 0 */}
               <tr style={{ height: `${ROW_HEIGHT}px` }}>
-                <th rowSpan="3" style={{ ...headerBase, top: 0, left: 0, zIndex: 30, width: `${SCHOOL_COL_WIDTH}px`, minWidth: `${SCHOOL_COL_WIDTH}px`, backgroundColor: '#e2f8e9' }}>校舎</th>
-                <th rowSpan="3" style={{ ...headerBase, top: 0, left: `${SCHOOL_COL_WIDTH}px`, zIndex: 30, width: `${NAME_COL_WIDTH}px`, minWidth: `${NAME_COL_WIDTH}px`, backgroundColor: '#e2f8e9' }}>名前</th>
+                <th rowSpan="3" style={{ ...headerBase, position: 'sticky', top: 0, left: 0, zIndex: 30, width: `${SCHOOL_COL_WIDTH}px`, minWidth: `${SCHOOL_COL_WIDTH}px`, backgroundColor: '#e2f8e9' }}>校舎</th>
+                <th rowSpan="3" style={{ ...headerBase, position: 'sticky', top: 0, left: `${SCHOOL_COL_WIDTH}px`, zIndex: 30, width: `${NAME_COL_WIDTH}px`, minWidth: `${NAME_COL_WIDTH}px`, backgroundColor: '#e2f8e9' }}>名前</th>
                 {selectedUnits.map((item, idx) => (
                   <th key={idx} style={{ ...headerBase, top: 0, zIndex: 10, minWidth: '100px', fontSize: '13px', fontWeight: 'bold', backgroundColor: '#e2f8e9' }}>{item.chapter}</th>
                 ))}

@@ -228,8 +228,6 @@ export default function SukimakunPermissionManager({
     ? { color: '#b91c1c', background: '#fee2e2', border: '1px solid #fecaca' }
     : { color: '#166534', background: '#dcfce7', border: '1px solid #bbf7d0' };
   const headerCellStyle = {
-    position: 'sticky',
-    top: 0,
     zIndex: 10,
     minWidth: '132px',
     maxWidth: '180px',
@@ -278,12 +276,12 @@ export default function SukimakunPermissionManager({
           <div style={{ padding: '10px 14px', color: '#475569', fontSize: '13px', borderBottom: '1px solid #e2e8f0' }}>
             表示 {filteredStudents.length}名／全{students.length}名 ・ 編集対象 {activeContents.length}コンテンツ
           </div>
-          <div style={{ overflow: 'auto', maxHeight: '68vh', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', minWidth: '100%', background: '#fff' }}>
               <thead>
                 <tr>
-                  <th style={{ ...headerCellStyle, left: 0, zIndex: 30, minWidth: `${NAME_COLUMN_WIDTH}px`, width: `${NAME_COLUMN_WIDTH}px`, textAlign: 'left' }}>生徒名</th>
-                  <th style={{ ...headerCellStyle, left: `${NAME_COLUMN_WIDTH}px`, zIndex: 30, minWidth: `${ID_COLUMN_WIDTH}px`, width: `${ID_COLUMN_WIDTH}px` }}>生徒ID</th>
+                  <th style={{ ...headerCellStyle, position: 'sticky', left: 0, zIndex: 30, minWidth: `${NAME_COLUMN_WIDTH}px`, width: `${NAME_COLUMN_WIDTH}px`, textAlign: 'left' }}>生徒名</th>
+                  <th style={{ ...headerCellStyle, position: 'sticky', left: `${NAME_COLUMN_WIDTH}px`, zIndex: 30, minWidth: `${ID_COLUMN_WIDTH}px`, width: `${ID_COLUMN_WIDTH}px` }}>生徒ID</th>
                   <th style={{ ...headerCellStyle, width: '210px', minWidth: '210px', maxWidth: '210px' }}>モード一括設定</th>
                   {activeContents.map(content => (
                     <th key={content.contentId} title={content.displayName} style={headerCellStyle}>{content.displayName}</th>

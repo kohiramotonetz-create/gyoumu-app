@@ -34,6 +34,7 @@
 .teacher-main--wide { margin-left:0; }
 .teacher-content { width:100%; max-width:1240px; margin:0 auto; }
 .teacher-content--legacy { max-width:1000px; }
+.teacher-content--wide { max-width:1560px; }
 .teacher-content--profile { max-width:1500px; }
 .home-greeting { margin-bottom:24px; }
 .home-greeting h1 { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0; color:var(--text-primary); font-size:26px; line-height:1.4; font-weight:700; letter-spacing:0; }

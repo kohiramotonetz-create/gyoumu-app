@@ -226,12 +226,12 @@ html, body, #root {
 .camp-training-controls select:disabled { color: #64748b; background: #f1f5f9; opacity: 1; -webkit-text-fill-color: #64748b; }
 .camp-training-tabs button, .camp-training-switches button { width: auto; padding: 9px 16px; margin: 0; background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; }
 .camp-training-tabs button.active, .camp-training-switches button.active { background: #166534; color: #fff; border-color: #166534; }
-.camp-training-table-wrap { overflow: auto; max-height: 65vh; border: 1px solid #dbe2e8; border-radius: 8px; background: #fff; }
+.camp-training-table-wrap { overflow-x: auto; border: 1px solid #dbe2e8; border-radius: 8px; background: #fff; }
 .camp-training-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
-.camp-training-table th { position: sticky; top: 0; z-index: 2; padding: 10px; white-space: nowrap; background: #f1f5f9; border-bottom: 1px solid #cbd5e1; }
+.camp-training-table th { padding: 10px; white-space: nowrap; background: #f1f5f9; border-bottom: 1px solid #cbd5e1; }
 .camp-training-table td { padding: 8px; text-align: center; white-space: nowrap; border-bottom: 1px solid #e2e8f0; }
 .camp-training-count { width: 72px; box-sizing: border-box; padding: 7px; text-align: right; border: 1px solid #cbd5e1; border-radius: 5px; }
-.camp-participant-list { max-height: 60vh; overflow: auto; background: #fff; border: 1px solid #dbe2e8; border-radius: 8px; }
+.camp-participant-list { overflow-x: auto; background: #fff; border: 1px solid #dbe2e8; border-radius: 8px; }
 .camp-participant-filters { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)) auto; gap: 12px; align-items: end; margin-bottom: 12px; }
 .camp-participant-filters label { display: grid; gap: 5px; font-weight: 700; color: #475569; }
 .camp-participant-filters select, .camp-participant-filters input { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; background: #fff; }

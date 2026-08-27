@@ -40,17 +40,17 @@ const AppUsageTracker = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) => 
   };
 
   // --- 確定版スタイル設定 ---
-  const thBase = { backgroundColor: '#f8f9fa', color: '#333', border: '1px solid #ddd', padding: '8px', fontSize: '12px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10 };
+  const thBase = { backgroundColor: '#f8f9fa', color: '#333', border: '1px solid #ddd', padding: '8px', fontSize: '12px', textAlign: 'center' };
   const tdBase = { border: '1px solid #ddd', padding: '8px', fontSize: '12px', textAlign: 'center', backgroundColor: '#fff', boxSizing: 'border-box' };
 
   const stickyCol1 = { ...tdBase, position: 'sticky', left: 0, zIndex: 5, width: '80px' };
-  const stickyHead1 = { ...thBase, position: 'sticky', left: 0, zIndex: 11, width: '80px' };
+  const stickyHead1 = { ...thBase, position: 'sticky', left: 0, zIndex: 2, width: '80px' };
 
   const stickyCol2 = { ...tdBase, position: 'sticky', left: '80px', zIndex: 5, width: '120px' };
-  const stickyHead2 = { ...thBase, position: 'sticky', left: '80px', zIndex: 11, width: '120px' };
+  const stickyHead2 = { ...thBase, position: 'sticky', left: '80px', zIndex: 2, width: '120px' };
 
   const stickyCol3 = { ...tdBase, position: 'sticky', left: '200px', zIndex: 5, width: '80px' };
-  const stickyHead3 = { ...thBase, position: 'sticky', left: '200px', zIndex: 11, width: '80px' };
+  const stickyHead3 = { ...thBase, position: 'sticky', left: '200px', zIndex: 2, width: '80px' };
 
   return (
     <div style={{ padding: '10px' }}>
@@ -76,7 +76,7 @@ const AppUsageTracker = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) => 
           </div>
 
           {tableData.students && tableData.students.length > 0 && (
-            <div style={{ overflow: 'auto', maxHeight: '70vh', border: '1px solid #ddd' }}>
+            <div style={{ overflowX: 'auto', border: '1px solid #ddd' }}>
               <table style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: 'max-content' }}>
                 <thead>
                   <tr>

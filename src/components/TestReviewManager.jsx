@@ -91,7 +91,7 @@ const TestReviewManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) =
 
   // ヘッダー共通スタイル
   const headerBase = {
-    position: 'sticky', backgroundColor: '#f8f9fa', 
+    backgroundColor: '#f8f9fa',
     border: '1px solid #ddd', padding: '8px', zIndex: 30, fontSize: '12px',
     textAlign: 'center', verticalAlign: 'middle'
   };
@@ -196,14 +196,14 @@ const TestReviewManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) =
 
       {/* 結果テーブル */}
       {hasSearched && (
-        <div style={{ overflow: 'auto', maxHeight: '78vh', border: '1px solid #ddd', width: '100%', backgroundColor: '#fff' }}>
+        <div style={{ overflowX: 'auto', border: '1px solid #ddd', width: '100%', backgroundColor: '#fff' }}>
           <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content' }}>
             <thead>
               {/* ヘッダー 1段目 */}
               <tr>
-                <th rowSpan="2" style={{ ...headerBase, top: 0, left: 0, zIndex: 40, width: SCHOOL_COL_WIDTH }}>校舎名</th>
-                <th rowSpan="2" style={{ ...headerBase, top: 0, left: SCHOOL_COL_WIDTH, zIndex: 40, width: NAME_COL_WIDTH }}>生徒名</th>
-                <th rowSpan="2" style={{ ...headerBase, top: 0, left: SCHOOL_COL_WIDTH + NAME_COL_WIDTH, zIndex: 40, width: GRADE_COL_WIDTH }}>学年</th>
+                <th rowSpan="2" style={{ ...headerBase, position: 'sticky', top: 0, left: 0, zIndex: 40, width: SCHOOL_COL_WIDTH }}>校舎名</th>
+                <th rowSpan="2" style={{ ...headerBase, position: 'sticky', top: 0, left: SCHOOL_COL_WIDTH, zIndex: 40, width: NAME_COL_WIDTH }}>生徒名</th>
+                <th rowSpan="2" style={{ ...headerBase, position: 'sticky', top: 0, left: SCHOOL_COL_WIDTH + NAME_COL_WIDTH, zIndex: 40, width: GRADE_COL_WIDTH }}>学年</th>
                 <th rowSpan="2" style={{ ...headerBase, top: 0, width: '60px' }}>全提出</th>
                 <th rowSpan="2" style={{ ...headerBase, top: 0, width: '200px' }}>テスト全体を振り返ってよかったこと</th>
                 <th rowSpan="2" style={{ ...headerBase, top: 0, width: '200px' }}>テスト全体を振り返っての改善点</th>
