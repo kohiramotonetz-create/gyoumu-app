@@ -1733,6 +1733,59 @@ function runInspectOneToOneSubjectDuplicateSummary() {
   console.log(JSON.stringify(result, null, 2));
 }
 
+function inspectOneToOneSubjectUnknownStudents_() {
+  const rows = assertOneToOneSubjectSheet_().getDataRange().getValues();
+  const contexts = getUserAuthContexts_();
+  const knownStudents = new Set(contexts.filter(user => user.role === "student").map(user => user.userId));
+  const accountSheets = assertAccountMigrationSheets_(false);
+  const accounts = getAccountMigrationDataRows_(accountSheets["アカウントマスター"]);
+  const studentRows = getAccountMigrationDataRows_(accountSheets["生徒マスター"]);
+  const accountById = Object.create(null);
+  accounts.forEach(row => {
+    const userId = normalizeUserId(row[0]);
+    if (!userId) return;
+    accountById[userId] = {
+      role: String(row[4] || "").trim(),
+      enabled: isEnabledValue(row[5]),
+      deleted: getMigrationComparableValue_(row[10]) !== ""
+    };
+  });
+  const studentMasterIds = new Set(studentRows.map(row => normalizeUserId(row[0])).filter(Boolean));
+  const unknownRows = [];
+  rows.slice(1).forEach((row, index) => {
+    if (!row.some(value => value !== "" && value != null)) return;
+    const rawUserId = String(row[0] == null ? "" : row[0]);
+    const normalizedUserId = normalizeUserId(rawUserId);
+    const subjectId = String(row[1] || "").trim();
+    if (!normalizedUserId || !subjectId || knownStudents.has(normalizedUserId)) return;
+    const account = accountById[normalizedUserId] || null;
+    let reason = "AUTH_CONTEXT_NOT_STUDENT";
+    if (!studentMasterIds.has(normalizedUserId)) reason = "NOT_IN_STUDENT_MASTER";
+    else if (!account) reason = "NOT_IN_ACCOUNT_MASTER";
+    else if (account.role !== "student") reason = "ACCOUNT_ROLE_NOT_STUDENT";
+    unknownRows.push({
+      rowNumber: index + 2,
+      rawUserId,
+      normalizedUserId,
+      subjectId,
+      enabled: isEnabledValue(row[2]),
+      studentMasterExists: studentMasterIds.has(normalizedUserId),
+      accountExists: Boolean(account),
+      accountRole: account ? account.role : "",
+      accountEnabled: account ? account.enabled : null,
+      accountDeleted: account ? account.deleted : null,
+      reason
+    });
+  });
+  return { unknownStudentCount: unknownRows.length, rows: unknownRows };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runInspectOneToOneSubjectUnknownStudents() {
+  const result = inspectOneToOneSubjectUnknownStudents_();
+  console.log(JSON.stringify(result, null, 2));
+}
+
 function getOneToOneSchoolUnitAxis_(grade, subjectId, fieldId) {
   const normalizedGrade = normalizeGrade(grade);
   if (!ONE_TO_ONE_SUBJECT_IDS.includes(subjectId)) throw new Error("科目が不正です");

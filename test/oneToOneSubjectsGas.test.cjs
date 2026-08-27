@@ -142,6 +142,43 @@ test('TRUE/FALSEに関係なく同一キーだけを重複とし完全空行を�
   assert.equal(result.unknownStudents, 0);
 });
 
+test('unknown診断は対象行だけを返しマスター・role・enabled・deleted状態を分類する', () => {
+  const headers = ['userId', 'subjectId', 'enabled', 'createdAt', 'updatedAt', 'updatedBy'];
+  context.__unknownRows = [
+    headers,
+    ['037071', 'math', true, '', '', ''],
+    ['37072', 'english', false, '', '', ''],
+    ['000003', 'science', true, '', '', ''],
+    ['000004', 'social', true, '', '', ''],
+    ['000005', 'japanese', false, '', '', '']
+  ];
+  context.assertOneToOneSubjectSheet_ = () => ({ getDataRange: () => ({ getValues: () => context.__unknownRows }) });
+  context.getUserAuthContexts_ = () => [
+    { userId: '037071', role: 'student', enabled: true, deleted: false },
+    { userId: '000005', role: 'student', enabled: false, deleted: true }
+  ];
+  context.__accountRows = [
+    ['037071', '', '', '', 'student', true, '', '', '', '', ''],
+    ['037072', '', '', '', 'student', false, '', '', '', '', 'deleted'],
+    ['000004', '', '', '', 'teacher', true, '', '', '', '', ''],
+    ['000005', '', '', '', 'student', false, '', '', '', '', 'deleted']
+  ];
+  context.__studentRows = [['037071'], ['037072'], ['000003'], ['000004'], ['000005']];
+  context.assertAccountMigrationSheets_ = () => ({ 'アカウントマスター': { rows: context.__accountRows }, '生徒マスター': { rows: context.__studentRows } });
+  context.getAccountMigrationDataRows_ = sheet => sheet.rows;
+  const result = vm.runInContext('inspectOneToOneSubjectUnknownStudents_()', context);
+  assert.equal(result.unknownStudentCount, 3);
+  assert.deepEqual(Array.from(result.rows, row => row.normalizedUserId), ['037072', '000003', '000004']);
+  assert.equal(result.rows[0].rawUserId, '37072');
+  assert.equal(result.rows[0].enabled, false);
+  assert.equal(result.rows[0].accountEnabled, false);
+  assert.equal(result.rows[0].accountDeleted, true);
+  assert.equal(result.rows[0].reason, 'AUTH_CONTEXT_NOT_STUDENT');
+  assert.equal(result.rows[1].reason, 'NOT_IN_ACCOUNT_MASTER');
+  assert.equal(result.rows[2].reason, 'ACCOUNT_ROLE_NOT_STUDENT');
+  assert.equal(result.rows.some(row => row.normalizedUserId === '000005'), false);
+});
+
 test('未登録生徒を拒否し、登録済み生徒の空設定は空配列で返す', () => {
   context.findOneToOneSubjectStudent_ = userId => userId === '001200' ? { userId: '001200', role: 'student' } : null;
   context.__sheetRows = [['userId', 'subjectId', 'enabled', 'createdAt', 'updatedAt', 'updatedBy']];
