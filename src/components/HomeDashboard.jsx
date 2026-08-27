@@ -1,0 +1,98 @@
+import VersionLabel from './common/VersionLabel.jsx'
+
+const Icon = ({ name, size = 24, strokeWidth = 2 }) => {
+  const paths = {
+    alert: <><path d="M10.3 3.7 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
+    chart: <><path d="M3 3v18h18"/><path d="M7 16v-5"/><path d="M12 16V7"/><path d="M17 16v-8"/></>,
+    clipboard: <><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5"/><path d="m9 13 2 2 4-4"/></>,
+    users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
+    message: <><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 9h8M8 13h5"/></>,
+    help: <><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.5 2.5 0 1 1 3.3 2.4c-.7.3-1 .8-1 1.6"/><path d="M12 17h.01"/></>,
+    arrow: <><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></>,
+    chevron: <path d="m9 18 6-6-6-6"/>,
+    megaphone: <><path d="m3 11 18-5v12L3 14z"/><path d="M11.6 16.4 13 21H7l-1.5-6"/></>,
+    sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></>,
+  }
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>
+}
+
+const variants = {
+  danger: { icon: 'message', label: 'サマリー項目', unit: '件' },
+  warning: { icon: 'users', label: 'サマリー項目', unit: '名' },
+  success: { icon: 'clipboard', label: 'サマリー項目', unit: '名' },
+  info: { icon: 'clipboard', label: 'サマリー項目', unit: '名' },
+}
+
+function SummaryCard({ variant }) {
+  const item = variants[variant]
+  return <article className={`home-summary home-summary--${variant}`}>
+    <div className="home-summary__body">
+      <div className="home-summary__icon"><Icon name={item.icon} size={38} /></div>
+      <div className="home-summary__content">
+        <div className="home-summary__title"><span>{item.label}</span><Icon name="help" size={19} /></div>
+        <div className="home-summary__metric"><strong>--</strong><span>{item.unit}</span></div>
+        <p>表示する情報は未設定です</p>
+      </div>
+    </div>
+    <div className="home-card-link" aria-disabled="true"><Icon name="arrow" size={18} /> 詳細は未設定です</div>
+  </article>
+}
+
+export default function HomeDashboard({ userName }) {
+  const now = new Date()
+  const dateText = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }).format(now)
+  return <div className="home-dashboard">
+    <section className="home-greeting">
+      <h1>おはようございます、{userName} 先生！ <span className="home-greeting__sun"><Icon name="sun" size={29} /></span></h1>
+      <div className="home-greeting__meta">
+        <span>{dateText}</span>
+        <span className="home-greeting__updated"><Icon name="calendar" size={18} /> 最終データ更新：未取得</span>
+      </div>
+    </section>
+
+    <section className="home-summary-grid" aria-label="サマリー">
+      {Object.keys(variants).map(variant => <SummaryCard key={variant} variant={variant} />)}
+    </section>
+
+    <section className="home-panel-grid">
+      <article className="home-panel home-actions">
+        <header><Icon name="alert" size={30} /><h2>対応が必要な項目</h2></header>
+        <div className="home-actions__list">
+          {['確認項目 1', '確認項目 2', '確認項目 3'].map((label, index) => <div className="home-action-row" key={label}>
+            <span className={`home-status-dot home-status-dot--${index + 1}`} />
+            <span>{label}</span><strong>--</strong><Icon name="chevron" size={20} />
+          </div>)}
+        </div>
+        <div className="home-panel-link" aria-disabled="true">表示する情報は未設定です <Icon name="arrow" size={18} /></div>
+      </article>
+
+      <article className="home-panel home-progress">
+        <header><Icon name="chart" size={30} /><h2>進捗状況</h2></header>
+        <div className="home-progress__content">
+          <div className="home-donut"><div><span>全体進捗率</span><strong>--<small>%</small></strong><em>データ未設定</em></div></div>
+          <div className="home-legend">
+            {[['順調', 'success'], ['要注意', 'warning'], ['遅れ', 'danger']].map(([label, color]) => <div key={label}>
+              <span className={`home-legend__dot home-legend__dot--${color}`} /><b>{label}</b><strong>--名</strong><span>（--%）</span>
+            </div>)}
+          </div>
+        </div>
+        <div className="home-panel-link" aria-disabled="true">表示する情報は未設定です <Icon name="arrow" size={18} /></div>
+      </article>
+    </section>
+
+    <section className="home-panel home-announcements">
+      <header><div><Icon name="megaphone" size={29} /><h2>お知らせ</h2></div><span className="home-header-link" aria-disabled="true">すべてのお知らせを見る <Icon name="arrow" size={18} /></span></header>
+      <div className="home-announcement-grid">
+        {[0, 1, 2].map(index => <article className="home-announcement-card" key={index}>
+          <div className="home-announcement-card__meta">{index === 0 && <span>NEW</span>}<time>--/--</time></div>
+          <div className="home-announcement-card__title"><strong>お知らせはありません</strong><Icon name="chevron" size={19} /></div>
+          <p>表示する情報は未設定です。</p>
+        </article>)}
+      </div>
+    </section>
+    <VersionLabel />
+  </div>
+}
+
+export { Icon }
