@@ -5,6 +5,7 @@ import axios from 'axios';
 import FilterButtonGroup from './FilterButtonGroup'; 
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
+import StudentProfileLink from './common/StudentProfileLink.jsx';
 
 const KoToreProgressTracker = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) => {
   const [selectedSchool, setSelectedSchool] = useState('');
@@ -187,7 +188,7 @@ const KoToreProgressTracker = ({ styles, GAS_URL, API_KEY, assignedSchools = [] 
                 <tr key={i} style={{ height: '40px' }}>
                   {/* 左側固定列スタイルを適用 */}
                   <td style={stickyColSchool}>{row.school}</td>
-                  <td style={stickyColName}>{row.name}</td>
+                  <td style={stickyColName}><StudentProfileLink userId={row.userId} source="kotore-progress">{row.name}</StudentProfileLink></td>
                   {row.completions.map((done, j) => (
                     <td key={j} style={{ ...cellBase, minWidth: '55px' }}>
                       {done ? <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '16px' }}>☑</span> : <span style={{ color: '#ccc' }}>□</span>}

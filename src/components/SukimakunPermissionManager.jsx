@@ -4,6 +4,7 @@ import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
 import { getSukimakunPresetContentIds, replaceStudentContentIds } from '../utils/sukimakunPermissions.js';
 import { compareStudentsByKana } from '../utils/studentAccountOrdering.js';
+import StudentProfileLink from './common/StudentProfileLink.jsx';
 
 const READ_API_TIMEOUT_MS = 30000;
 const WRITE_API_TIMEOUT_MS = 15000;
@@ -301,7 +302,7 @@ export default function SukimakunPermissionManager({
                   return (
                     <tr key={student.userId} style={{ height: '58px', background: rowBackground }}>
                       <td style={{ position: 'sticky', left: 0, zIndex: 5, width: `${NAME_COLUMN_WIDTH}px`, minWidth: `${NAME_COLUMN_WIDTH}px`, padding: '8px 10px', borderRight: '1px solid #d1d5db', borderBottom: '1px solid #e5e7eb', background: rowBackground, boxSizing: 'border-box' }}>
-                        <div style={{ fontWeight: 'bold', color: student.name ? '#1f2937' : '#9a3412' }}>{getStudentDisplayName(student)}</div>
+                        <div style={{ fontWeight: 'bold', color: student.name ? '#1f2937' : '#9a3412' }}><StudentProfileLink userId={student.userId} source="sukimakun-permissions">{getStudentDisplayName(student)}</StudentProfileLink></div>
                         {!student.permissionsInitialized && <span style={{ display: 'inline-block', marginTop: '3px', padding: '2px 6px', borderRadius: '999px', background: '#fef3c7', color: '#92400e', fontSize: '11px' }}>未設定・現在は全許可</span>}
                       </td>
                       <td style={{ position: 'sticky', left: `${NAME_COLUMN_WIDTH}px`, zIndex: 5, width: `${ID_COLUMN_WIDTH}px`, minWidth: `${ID_COLUMN_WIDTH}px`, padding: '8px', borderRight: '1px solid #d1d5db', borderBottom: '1px solid #e5e7eb', background: rowBackground, color: '#64748b', fontSize: '12px', textAlign: 'center', boxSizing: 'border-box' }}>

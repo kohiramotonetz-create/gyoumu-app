@@ -5,6 +5,7 @@ import axios from 'axios';
 import FilterButtonGroup from './FilterButtonGroup'; 
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
+import StudentProfileLink from './common/StudentProfileLink.jsx';
 
 const SchoolProgressManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) => {
   const [selectedSchool, setSelectedSchool] = useState('');
@@ -177,7 +178,7 @@ const SchoolProgressManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] 
                   <td style={stickyColSchool}>
                     {row.school && !row.school.includes('U') ? row.school : (row.school || selectedSchool)}
                   </td>
-                  <td style={stickyColName}>{row.name}</td>
+                  <td style={stickyColName}><StudentProfileLink userId={row.userId} source="school-progress">{row.name}</StudentProfileLink></td>
                   {row.completions.map((done, j) => (
                     <td key={j} style={{ border: '1px solid #ddd', textAlign: 'center', padding: '4px', minWidth: '45px', boxSizing: 'border-box' }}>
                       {done ? <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '15px' }}>☑</span> : <span style={{ color: '#ccc' }}>□</span>}

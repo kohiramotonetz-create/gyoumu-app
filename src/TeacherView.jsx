@@ -15,7 +15,9 @@ import CampTrainingManager from './components/CampTrainingManager.jsx'
 import OneToOneProgressManager from './components/OneToOneProgressManager.jsx'
 import AcademicResultsManager from './components/AcademicResultsManager.jsx'
 import VersionLabel from './components/common/VersionLabel.jsx'
+import StudentProfileView from './components/StudentProfileView.jsx'
 import { ALL_SCHOOLS } from './constants/organization.js'
+import { parseStudentProfileHash } from './utils/studentProfileNavigation.js'
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
@@ -25,6 +27,7 @@ const CAMP_MENU_ITEM = { id: 'camp-training', label: '合宿メニュー', icon:
 export default function TeacherView({ userName, role, unit, school, assignedSchools, sessionToken, handleLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeContent, setActiveContent] = useState('notices');
+  const [profileRoute, setProfileRoute] = useState(() => parseStudentProfileHash(window.location.hash));
   const [notifications, setNotifications] = useState([]);
   const schools = ALL_SCHOOLS;
   const availableAssignedSchools = Array.isArray(assignedSchools) && assignedSchools.length > 0
@@ -33,6 +36,16 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   const [selectedSchool, setSelectedSchool] = useState('すべて');
   const [openPdf, setOpenPdf] = useState(null);
   const timeoutRef = useRef(null);
+
+  useEffect(() => {
+    const syncHash = () => {
+      const route = parseStudentProfileHash(window.location.hash);
+      setProfileRoute(route);
+      if (!route && window.history.state?.studentProfileSource) setActiveContent(window.history.state.studentProfileSource);
+    };
+    window.addEventListener('hashchange', syncHash);
+    return () => window.removeEventListener('hashchange', syncHash);
+  }, []);
 
   const resetTimer = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -158,7 +171,10 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
                 style={styles.menuItem(activeContent === item.id)} 
                 onClick={() => { 
                   if (item.isLink) { window.open(item.url, '_blank'); } 
-                  else { setActiveContent(item.id); }
+                  else {
+                    setActiveContent(item.id);
+                    if (profileRoute) window.location.hash = '';
+                  }
                 }}
               >
                 <span style={{ marginRight: '10px' }}>{item.icon}</span>{item.label}
@@ -170,6 +186,8 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
 
         <main style={styles.main}>
           <div style={styles.contentArea}>
+            {profileRoute && <StudentProfileView userId={profileRoute.userId} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={handleLogout} onBack={() => { if (window.history.length > 1) window.history.back(); else window.location.hash = ''; }} />}
+            {!profileRoute && <>
             {activeContent === 'notices' && (
               <NoticeManager notices={[]} styles={styles} />
             )}
@@ -286,6 +304,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
                 assignedSchools={availableAssignedSchools}
               />
             )}
+            </>}
           </div>
         </main>
       </div>

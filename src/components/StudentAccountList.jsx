@@ -4,6 +4,7 @@ import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
 import StudentAccountDetail from './StudentAccountDetail.jsx';
 import { compareStudentAccounts } from '../utils/studentAccountOrdering.js';
+import StudentProfileLink from './common/StudentProfileLink.jsx';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const hasDeletedAt = account => account.deletedAt != null && String(account.deletedAt).trim() !== '';
@@ -93,7 +94,7 @@ export default function StudentAccountList({ GAS_URL, API_KEY, sessionToken, sty
           <thead><tr style={{ background: '#f8fafc' }}>{['ID', '氏名', 'フリガナ', '校舎', '学年', '状態', '詳細'].map(label => <th key={label} style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #d1d5db', whiteSpace: 'nowrap' }}>{label}</th>)}</tr></thead>
           <tbody>{filteredAccounts.map(account => {
             const accountStatus = statusLabels[getAccountStatus(account)];
-            return <tr key={account.userId}><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{account.userId}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{account.name}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{account.nameKana}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{account.school}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{account.grade}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}><span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 999, color: accountStatus.color, background: accountStatus.background, whiteSpace: 'nowrap' }}>{accountStatus.label}</span></td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}><button type="button" onClick={() => setSelectedAccount(account)}>詳細</button></td></tr>;
+            return <tr key={account.userId}><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{account.userId}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}><StudentProfileLink userId={account.userId} source="create-account">{account.name}</StudentProfileLink></td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{account.nameKana}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{account.school}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{account.grade}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}><span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 999, color: accountStatus.color, background: accountStatus.background, whiteSpace: 'nowrap' }}>{accountStatus.label}</span></td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}><button type="button" onClick={() => setSelectedAccount(account)}>詳細</button></td></tr>;
           })}</tbody>
         </table>
       </div>}

@@ -2759,6 +2759,118 @@ function handleAcademicResultAction_(data) {
   throw new Error("Unknown academic result action");
 }
 
+function requireStudentProfileSession_(sessionToken) {
+  const session = validateManagementSession(sessionToken, true, true);
+  if (!["admin", "head-teacher", "teacher"].includes(session.role)) throw new Error("生徒プロフィールの閲覧権限がありません");
+  return session;
+}
+
+function assertStudentProfileAccess_(session, rawUserId) {
+  const userId = normalizeUserId(rawUserId);
+  if (!/^\d{6}$/.test(userId)) throw new Error("生徒が見つかりません");
+  const student = session.userContexts.find(user => user.userId === userId && user.role === "student");
+  if (!student || student.deleted || !student.enabled) throw new Error("生徒が見つかりません");
+  if (session.role !== "admin") {
+    const actor = session.userContexts.find(user => user.userId === session.userId && user.enabled && !user.deleted);
+    if (!actor || !actor.assignedSchools.includes(student.school)) throw new Error("この生徒を閲覧する権限がありません");
+  }
+  return student;
+}
+
+function getStudentProfileSummary_(student, session) {
+  return { result: "success", student: { userId: student.userId, name: student.name, nameKana: student.nameKana, school: student.school, grade: student.grade, enabled: student.enabled }, oneToOneSubjectIds: getOneToOneSubjects(student.userId).subjectIds, sessionExpiresAt: session.sessionExpiresAt };
+}
+
+function getStudentProfileKoTore_(student, masterUnits) {
+  if (!Array.isArray(masterUnits)) throw new Error("個トレ単元マスターが不正です");
+  const axes = Object.create(null);
+  masterUnits.filter(unit => normalizeGrade(unit.grade) === normalizeGrade(student.grade)).forEach(unit => {
+    const subject = String(unit.subject || "").trim();
+    const textName = String(unit.textName || "").trim();
+    const page = String(unit.page || "").trim();
+    if (!subject || !textName || !page) return;
+    const key = `${subject}\t${textName}`;
+    if (!axes[key]) axes[key] = [];
+    axes[key].push({ subject, textName, chapter: String(unit.chapter || "").trim(), unitName: String(unit.unitName || "").trim(), page, unitOrder: axes[key].length + 1 });
+  });
+  const spreadsheet = openSpreadsheetByProperty("KOTORE_PROGRESS_SPREADSHEET_ID");
+  const sheet = spreadsheet.getSheetByName("progress") || spreadsheet.getSheets()[0];
+  const rows = sheet.getDataRange().getValues().slice(1).filter(row => normalizeUserId(row[2]) === student.userId);
+  const normalizeProgressText = value => String(value || "").toLowerCase().replace(/[.\s]/g, "");
+  const items = Object.keys(axes).map(key => {
+    const axis = axes[key];
+    const matchingRows = rows.filter(row => `${String(row[5] || "").trim()}\t${String(row[6] || "").trim()}` === key);
+    if (!matchingRows.length) return null;
+    const history = matchingRows.map(row => normalizeProgressText(row[7])).join(",");
+    const current = axis.filter(unit => history.includes(normalizeProgressText(unit.page))).at(-1);
+    const dates = matchingRows.map(row => row[0] instanceof Date ? row[0] : new Date(row[0])).filter(date => !isNaN(date.getTime()));
+    const lastRecordedAt = dates.length ? new Date(Math.max(...dates.map(date => date.getTime()))) : null;
+    return current ? { subject: current.subject, textName: current.textName, page: current.page, unitName: current.unitName, chapter: current.chapter, unitOrder: current.unitOrder, lastRecordedAt: lastRecordedAt ? Utilities.formatDate(lastRecordedAt, "Asia/Tokyo", "M月d日") : "" } : null;
+  }).filter(Boolean);
+  return { result: "success", items };
+}
+
+function getStudentProfileSukimakun_(student) {
+  const contents = getSukimakunContents(true);
+  const contentById = Object.create(null);
+  contents.forEach(content => { contentById[content.contentId] = content; });
+  const activeContents = contents.filter(content => content.enabled);
+  const permission = getSukimakunPermissionState(student.userId, activeContents);
+  const allowed = new Set(permission.allowedContentIds);
+  const aggregate = Object.create(null);
+  let legacyLogCount = 0;
+  const logSpreadsheet = openSpreadsheetByProperty("APP_USAGE_SPREADSHEET_ID");
+  logSpreadsheet.getSheets().forEach(sheet => {
+    const values = sheet.getDataRange().getValues();
+    if (values.length < 2) return;
+    values.slice(1).forEach(row => {
+      if (normalizeUserId(row[2]) !== student.userId) return;
+      const contentId = String(row[11] || "").trim();
+      if (!contentId) { legacyLogCount++; return; }
+      if (!contentById[contentId]) return;
+      const score = Number(row[6]);
+      const total = Number(row[7]);
+      if (!Number.isFinite(score) || !Number.isFinite(total) || total <= 0 || score < 0 || score > total) return;
+      const usedAt = row[0] instanceof Date ? row[0] : new Date(row[0]);
+      if (!aggregate[contentId]) aggregate[contentId] = { contentId, attemptCount: 0, cumulativeScore: 0, cumulativeTotal: 0, latestAt: null };
+      const item = aggregate[contentId];
+      item.attemptCount++; item.cumulativeScore += score; item.cumulativeTotal += total;
+      if (!item.latestAt || usedAt > item.latestAt) { item.latestAt = usedAt; item.latestScore = score; item.latestTotal = total; item.latestMode = String(row[5] || "").trim(); }
+    });
+  });
+  const serialize = item => ({ contentId: item.contentId, displayName: contentById[item.contentId].displayName, lastUsedAt: item.latestAt instanceof Date && !isNaN(item.latestAt.getTime()) ? Utilities.formatDate(item.latestAt, "Asia/Tokyo", "M月d日 HH:mm") : "", latestScore: item.latestScore == null ? "" : item.latestScore, latestTotal: item.latestTotal == null ? "" : item.latestTotal, latestRate: item.latestTotal ? Math.round(item.latestScore * 1000 / item.latestTotal) / 10 : null, attemptCount: item.attemptCount || 0, cumulativeScore: item.cumulativeScore || 0, cumulativeTotal: item.cumulativeTotal || 0, cumulativeRate: item.cumulativeTotal ? Math.round(item.cumulativeScore * 1000 / item.cumulativeTotal) / 10 : null, latestMode: item.latestMode || "" });
+  const history = Object.keys(aggregate).map(id => serialize(aggregate[id])).sort((a, b) => contents.findIndex(item => item.contentId === a.contentId) - contents.findIndex(item => item.contentId === b.contentId));
+  const byContentId = Object.create(null);
+  history.forEach(item => { byContentId[item.contentId] = item; });
+  const currentContents = activeContents.filter(content => allowed.has(content.contentId)).map(content => byContentId[content.contentId] || serialize({ contentId: content.contentId, attemptCount: 0, cumulativeScore: 0, cumulativeTotal: 0 }));
+  return { result: "success", currentContents, pastContents: history.filter(item => !allowed.has(item.contentId)), legacyLogCount, dataSinceContentIdEnabled: true };
+}
+
+function getStudentProfileOneToOne_(student) {
+  const subjectIds = getOneToOneSubjects(student.userId).subjectIds;
+  const subjects = subjectIds.map(subjectId => {
+    const raw = getOneToOneProgressState_(student.userId, subjectId);
+    if (subjectId === "social") {
+      const fields = Object.create(null);
+      Object.keys(raw.fields).forEach(fieldId => { fields[fieldId] = serializeOneToOneProgressState_(raw.fields[fieldId]); });
+      return { subjectId, state: { fields } };
+    }
+    return { subjectId, state: serializeOneToOneProgressState_(raw) };
+  });
+  return { result: "success", subjects };
+}
+
+function handleStudentProfileAction_(data) {
+  const session = requireStudentProfileSession_(data.sessionToken);
+  const student = assertStudentProfileAccess_(session, data.userId);
+  if (data.action === "getStudentProfileSummary") return getStudentProfileSummary_(student, session);
+  if (data.action === "getStudentProfileKoTore") return getStudentProfileKoTore_(student, data.masterUnits);
+  if (data.action === "getStudentProfileSukimakun") return getStudentProfileSukimakun_(student);
+  if (data.action === "getStudentProfileOneToOne") return getStudentProfileOneToOne_(student);
+  if (data.action === "getStudentProfileAcademicResults") return Object.assign({ result: "success" }, getAcademicResultsForStudent_(student.userId, { includeDisabled: true }));
+  throw new Error("Unknown student profile action");
+}
+
 function doPost(e) {
   let data;
   try {
@@ -2772,6 +2884,18 @@ function doPost(e) {
 
   if (!data.apiKey || data.apiKey !== validApiKey) {
     return responseJSON({ result: "error", message: "認証エラー" });
+  }
+
+  const studentProfileActions = ["getStudentProfileSummary", "getStudentProfileKoTore", "getStudentProfileSukimakun", "getStudentProfileOneToOne", "getStudentProfileAcademicResults"];
+  if (studentProfileActions.includes(data.action)) {
+    try { return responseJSON(handleStudentProfileAction_(data)); }
+    catch (error) {
+      const message = String(error && error.message || "プロフィールを取得できませんでした");
+      const accessDenied = /この生徒を閲覧する権限がありません/.test(message);
+      const authorizationError = !accessDenied && (isManagementAuthorizationError(error) || /閲覧権限|担当外|権限がありません/.test(message));
+      const notFound = /見つかりません/.test(message);
+      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : accessDenied ? "ACCESS_DENIED" : notFound ? "NOT_FOUND" : "VALIDATION_ERROR", message: authorizationError ? "管理セッションが無効または期限切れです" : accessDenied ? "この生徒を閲覧する権限がありません" : notFound ? "生徒が見つかりません" : "プロフィールを取得できませんでした" });
+    }
   }
 
   // AI判定は既存アプリ認証キーで保護し、GeminiキーはScript Propertiesから取得する。
