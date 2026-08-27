@@ -6,6 +6,19 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 
 ## Version History
 
+### v4.3.0 - 2026-08-27
+
+- テーマ: 生徒プロフィール連携に向けた学習状況データ基盤
+- 含まれるIssue:
+  - Issue #016 1対1受講科目管理
+  - Issue #017 1対1進捗チェック
+  - Issue #019 スキマ君ログ contentId正式保存対応
+  - Issue #020 学校成績管理
+- 主な変更: 生徒ごとの1対1受講科目、学校／ネッツの1対1進捗比較、`userId + contentId`でスキマ君ログを安全に識別する基盤、学校成績の正本管理を整備した。
+- Frontend影響: 1対1受講科目・進捗チェック・学校成績管理の各画面を追加。共通`VersionLabel`の表示を`Version 4.3.0`へ更新した。
+- GAS／データ影響: 1対1受講科目・進捗・学校成績の専用シートとAPIを追加。Issue #019はstudent-app-log-gas側で今後のログへ`contentId`を保存する関連基盤であり、gyoumu-appのGAS変更は含まない。
+- Issue #018 生徒プロフィール: 未実装。次の開発対象であり、本Versionに完成機能としては含めない。
+
 ### v4.2.1 - 2026-08-08
 
 - テーマ: Version表示共通化
@@ -16,9 +29,6 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - Issue #012 スキマ君利用設定 中学生・高校生モード一括変更
   - Issue #014 nameKana姓名間スペースの全角統一
   - Issue #015 生徒表示順をカナ五十音順へ統一
-  - Issue #016 1対1受講科目管理
-  - Issue #017 1対1進捗チェック
-  - Issue #020 学校成績管理
 - 主な変更: `version.js`をVersion番号の正本とし、共通`VersionLabel`からログイン画面、生徒画面、講師・管理者画面の右下へ`Version 4.2.1`を表示する構造へ統一。
 - Frontend影響: Version表示のみ。既存画面、認証、権限、APIの仕様変更なし。
 - GAS影響: なし。
