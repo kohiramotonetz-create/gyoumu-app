@@ -16,7 +16,7 @@ test('学校成績年度は2024年度から現在年度+1まで自動生成し�
 test('アプリ利用チェックと学校成績管理は同じ学年候補・値・順序を使う', () => {
   const appUsage = fs.readFileSync(new URL('../src/components/AppUsageTracker.jsx', import.meta.url), 'utf8');
   const manager = fs.readFileSync(new URL('../src/components/AcademicResultsManager.jsx', import.meta.url), 'utf8');
-  assert.match(appUsage, /<GradeSelect style=\{styles\.select\} value=\{selectedGrade\} onChange=\{setSelectedGrade\} \/>/);
+  assert.match(appUsage, /<GradeSelect value=\{selectedGrade\}/);
   assert.match(manager, /<GradeSelect style=\{fieldControl\} value=\{grades\}/);
   assert.doesNotMatch(manager, /includeGroups=\{false\}/);
   assert.match(manager, /grade: grades\.join\(','\)/);

@@ -2128,6 +2128,19 @@ function compareStudentsBySchoolGradeAndKana_(left, right) {
     || compareStudentsByKana_(left, right);
 }
 
+function normalizeAppUsageRequestedSchools_(value) {
+  const source = Array.isArray(value) ? value : String(value || "").split(",");
+  return Array.from(new Set(source
+    .map(school => String(school || "").trim())
+    .filter(Boolean)));
+}
+
+function matchesAppUsageStudent_(school, grade, role, requestedSchoolSet, targetGradeSet) {
+  return String(role || "").trim().toLowerCase() === "student"
+    && requestedSchoolSet.has(String(school || "").trim())
+    && targetGradeSet.has(String(grade || "").trim());
+}
+
 function validateName_(value, label) {
   const text = String(value || "").trim().replace(/\s+/g, " ");
   if (!text || text.length > 100) throw new Error(`${label} is invalid`);
@@ -3861,9 +3874,12 @@ function doPost(e) {
     try {
       const appSS = openSpreadsheetByProperty("APP_USAGE_SPREADSHEET_ID");
       const appSheets = appSS.getSheets();
-      const targetSchool = data.school; 
+      const requestedSchools = normalizeAppUsageRequestedSchools_(data.school);
+      if (requestedSchools.length === 0) throw new Error("校舎を選択してください");
+      const requestedSchoolSet = new Set(requestedSchools);
       const targetGradeStr = data.grade; 
-      const targetGrades = targetGradeStr ? targetGradeStr.split(',') : []; 
+      const targetGrades = targetGradeStr ? targetGradeStr.split(',').map(value => String(value || "").trim()).filter(Boolean) : [];
+      const targetGradeSet = new Set(targetGrades);
       const appNames = [];
       const studentMap = {};
 
@@ -3874,7 +3890,7 @@ function doPost(e) {
         const sName = String(row[4]).trim();
         const sUserId = normalizeUserId(row[1]);
 
-        if (sSchool === targetSchool && targetGrades.includes(sGrade) && sRole === "student") {
+        if (matchesAppUsageStudent_(sSchool, sGrade, sRole, requestedSchoolSet, targetGradeSet)) {
           studentMap[sName] = {
             school: sSchool,
             userId: sUserId,
