@@ -113,6 +113,8 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - 安全性: 有効subjectIdのみを返し、`userId × subjectId`重複はエラーにする。更新はDocumentLock、全件検証、一括書込み、失敗時復元を行う。未登録生徒と不正subjectIdを拒否する。
 - GAS・データ: 既存`gas/.clasp.json`の対象プロジェクトへclasp push済み。利用者が`setupOneToOneSubjectSheet()`を実行して本番シートを作成し、A列の文字列形式を確認した。検査用1行で重複・不正subjectId・未登録生徒が各0件であることを確認後、GAS Webアプリを新Versionとして再デプロイ済み。
 - 実動作確認: ローカルgyoumu-appから、スプレッドシート登録済み科目の取得・チェック表示、科目追加・解除・保存・再取得、他生徒へ影響しないことを利用者が確認済み。
+- 診断helper: 読み取り専用の`runInspectOneToOneSubjectDataSummary()`、`runInspectOneToOneSubjectDuplicateSummary()`、`runInspectOneToOneSubjectUnknownStudents()`を整備。完全空行を集計対象から除外し、`enabled=FALSE`を正常データとして扱いながら、正規化後の`userId × subjectId`重複、不完全行、不正subjectId、未登録userIdを個別に確認できる。
+- 本番データ確認: 利用者による重複行・未登録userId行の手動整理後、92行について重複・不完全行・不正subjectId・未登録userIdがすべて0件であることを確認済み。診断helperは本番データを書き換えない。
 - 影響範囲: gyoumu-appのadmin向け生徒詳細とGAS。student-app、ログイン、SSO、スキマ君権限、進捗履歴は変更しない。
 - Version: 変更なし（Version 4.2.1）。
 
