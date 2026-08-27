@@ -51,6 +51,7 @@ test('GAS検証用生成物はCSVのunitId・件数と一致する', () => {
 test('一覧は1生徒ブロックに学校・ネッツ2行と分離入力・履歴操作を持つ', () => {
   const source = fs.readFileSync(new URL('../src/components/OneToOneProgressManager.jsx', import.meta.url), 'utf8');
   const displaySource = fs.readFileSync(new URL('../src/components/common/OneToOneProgressDisplay.jsx', import.meta.url), 'utf8');
+  const axisSource = fs.readFileSync(new URL('../src/components/common/ProgressAxisLine.jsx', import.meta.url), 'utf8');
   assert.match(source, /<section key=\{student\.userId\}/);
   assert.match(source, /label="学校"/);
   assert.match(source, /label="ネッツ"/);
@@ -62,9 +63,9 @@ test('一覧は1生徒ブロックに学校・ネッツ2行と分離入力・履
   assert.match(source, /学校：.*ネッツ：/s);
   assert.match(source, /SOCIAL_FIELDS\.map/);
   assert.match(source, /学校とネッツの共通単元軸/);
-  assert.match(displaySource, /currentUnit\.unitName/);
-  assert.match(displaySource, /<strong>現在：<\/strong>/);
-  assert.match(displaySource, /<span>未登録<\/span>/);
+  assert.match(displaySource, /unit\.unitName/);
+  assert.match(axisSource, /<strong>現在：<\/strong>/);
+  assert.match(axisSource, /<span>未登録<\/span>/);
   assert.doesNotMatch(source, /onUnitClick=\{unit => setNotice/);
   assert.match(source, /無効化済み/);
   assert.doesNotMatch(source, /\{event\.status\}<\/strong>/);

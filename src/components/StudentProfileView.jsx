@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { ONE_TO_ONE_SUBJECTS } from '../utils/oneToOneSubjects.js';
 import { OneToOneSubjectProgress } from './common/OneToOneProgressDisplay.jsx';
+import ProgressAxisLine from './common/ProgressAxisLine.jsx';
 import { parseKoToreUnitsCsv } from '../utils/kotoreProfile.js';
+import { ACADEMIC_PROFILE_SUBJECTS, buildAcademicChartData } from '../utils/academicProfile.js';
 
 const actions = {
   kotore: 'getStudentProfileKoTore',
@@ -11,7 +13,6 @@ const actions = {
   academic: 'getStudentProfileAcademicResults'
 };
 const labels = Object.fromEntries(ONE_TO_ONE_SUBJECTS.map(item => [item.subjectId, item.label]));
-const scoreLabels = { japanese: '国語', math: '数学', english: '英語', science: '理科', social: '社会', music: '音楽', health: '保健', art: '美術', technologyHomeEconomics: '技家' };
 const card = { background: '#fff', border: '1px solid #dbe3ea', borderRadius: 10, padding: 18, boxShadow: '0 1px 3px #0001' };
 
 export default function StudentProfileView({ userId, GAS_URL, API_KEY, sessionToken, onBack, onSessionExpired }) {
@@ -70,12 +71,25 @@ export default function StudentProfileView({ userId, GAS_URL, API_KEY, sessionTo
     <button type="button" onClick={onBack} style={{ justifySelf: 'start' }}>← 元の一覧へ</button>
     <header style={{ ...card, background: '#f8fafc' }}><h1 style={{ margin: 0 }}>{student.name}</h1><p style={{ margin: '6px 0' }}>{student.nameKana}</p><p style={{ margin: 0 }}>{student.grade} / {student.school}</p><small>ID: {student.userId}</small><h2 style={{ fontSize: 15 }}>1対1受講科目</h2><p>{summary.oneToOneSubjectIds.length ? summary.oneToOneSubjectIds.map(id => labels[id] || id).join(' / ') : '未登録'}</p></header>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', gap: 16 }}>
-      {section('kotore', '個トレ進捗', data => data.items?.length ? data.items.map(item => <article key={`${item.subject}:${item.textName}`} style={{ padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}><strong>{item.subject}</strong><div>{item.textName}</div><div>現在：{item.page || '未登録'} {item.unitName}</div><small>最終登録：{item.lastRecordedAt || '-'}</small></article>) : <p>進捗は未登録です。</p>)}
-      {section('sukimakun', 'スキマ君進捗', data => <><ContentList title="現在利用可能" items={data.currentContents} />{data.pastContents?.length > 0 && <details><summary>過去の利用履歴</summary><ContentList items={data.pastContents} /></details>}{data.legacyLogCount > 0 && <small>コンテンツ識別前の旧ログ {data.legacyLogCount}件は集計対象外です。</small>}</>)}
+      {section('kotore', '個トレ進捗', data => data.items?.length ? data.items.map(item => <KoToreProgress key={`${item.subject}:${item.textName}`} item={item} />) : <p>進捗は未登録です。</p>)}
+      {section('sukimakun', 'スキマ君進捗', data => <ContentList items={data.currentContents} />)}
     </div>
     {section('oneToOne', '1対1進捗', data => data.subjects?.length ? data.subjects.map(item => <article key={item.subjectId} style={{ marginBottom: 18 }}><h3>{labels[item.subjectId] || item.subjectId}</h3><OneToOneSubjectProgress subjectId={item.subjectId} state={item.state} /></article>) : <p>受講科目は未登録です。</p>)}
-    {section('academic', '学校成績', data => data.schoolYears?.length ? data.schoolYears.map(year => <section key={year.schoolYear}><h3>{year.schoolYear}年度</h3>{year.tests.map(test => <article key={test.testId} style={{ overflowX: 'auto', marginBottom: 16 }}><strong>{test.testName}</strong><table style={{ borderCollapse: 'collapse', minWidth: 720, width: '100%', marginTop: 8 }}><tbody><tr>{Object.keys(scoreLabels).map(key => <th key={key} style={{ padding: 6, border: '1px solid #ddd' }}>{scoreLabels[key]}</th>)}<th style={{ border: '1px solid #ddd' }}>合計</th></tr><tr>{Object.keys(scoreLabels).map(key => <td key={key} style={{ padding: 6, textAlign: 'center', border: '1px solid #ddd' }}>{test.scores[key] === '' ? '－' : test.scores[key]}</td>)}<td style={{ textAlign: 'center', border: '1px solid #ddd' }}>{test.total == null ? '－' : `${test.total} / ${test.maxScore * 9}`}</td></tr></tbody></table></article>)}</section>) : <p>成績は未登録です。</p>)}
+    {section('academic', '学校成績', data => data.schoolYears?.length ? data.schoolYears.map(year => <section key={year.schoolYear}><h3>{year.schoolYear}年度</h3>{year.tests.map(test => <AcademicTestResult key={test.testId} test={test} />)}</section>) : <p>成績は未登録です。</p>)}
   </div>;
+}
+
+function KoToreProgress({ item }) {
+  return <article style={{ padding: '8px 0 14px', borderBottom: '1px solid #e5e7eb' }}><strong>{item.subject}</strong><div>{item.textName}</div><div style={{ overflowX: 'auto', scrollbarWidth: 'thin' }}><ProgressAxisLine axis={item.axis} currentOrder={item.unitOrder} color="#7c3aed" formatUnit={unit => `${unit.page} ${unit.unitName}`} renderCurrent={unit => <><span>{unit.page}</span><strong>{unit.unitName}</strong></>} /></div><small>最終登録：{item.lastRecordedAt || '-'}</small></article>;
+}
+
+function AcademicTestResult({ test }) {
+  return <article style={{ marginBottom: 22 }}><strong>{test.testName}</strong><div style={{ overflowX: 'auto' }}><table style={{ borderCollapse: 'collapse', minWidth: 720, width: '100%', marginTop: 8 }}><tbody><tr>{ACADEMIC_PROFILE_SUBJECTS.map(([key, label]) => <th key={key} style={{ padding: 6, border: '1px solid #ddd' }}>{label}</th>)}<th style={{ border: '1px solid #ddd' }}>合計</th></tr><tr>{ACADEMIC_PROFILE_SUBJECTS.map(([key]) => <td key={key} style={{ padding: 6, textAlign: 'center', border: '1px solid #ddd' }}>{test.scores[key] === '' ? '－' : test.scores[key]}</td>)}<td style={{ textAlign: 'center', border: '1px solid #ddd' }}>{test.total == null ? '－' : `${test.total} / ${test.maxScore * 9}`}</td></tr></tbody></table></div><AcademicScoreChart test={test} /></article>;
+}
+
+function AcademicScoreChart({ test }) {
+  const items = buildAcademicChartData(test);
+  return <div style={{ overflowX: 'auto', scrollbarWidth: 'thin', marginTop: 12 }}><div role="img" aria-label={`${test.testName}の科目別得点。満点${test.maxScore}点`} style={{ minWidth: 620, height: 230, display: 'grid', gridTemplateColumns: '42px repeat(9, 1fr)', gap: 8, alignItems: 'end', borderBottom: '1px solid #94a3b8', padding: '12px 8px 0' }}><div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', color: '#64748b', fontSize: 11 }}><span>{test.maxScore}</span><span>0</span></div>{items.map(item => <div key={item.key} style={{ height: '100%', display: 'grid', gridTemplateRows: '1fr 24px', textAlign: 'center' }}><div style={{ display: 'flex', alignItems: 'end', justifyContent: 'center' }}>{item.score == null ? <span style={{ alignSelf: 'end', color: '#94a3b8', fontSize: 11, paddingBottom: 4 }}>未入力</span> : <div title={`${item.label} ${item.score}点`} style={{ width: '70%', minWidth: 28, height: `${Math.max(0, Math.min(100, item.score / item.maxScore * 100))}%`, minHeight: item.score === 0 ? 2 : undefined, borderRadius: '5px 5px 0 0', background: '#93c5fd', border: '1px solid #60a5fa', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', color: '#1e3a8a', fontSize: 11, fontWeight: 600 }}><span style={{ transform: 'translateY(-17px)' }}>{item.score}</span></div>}</div><strong style={{ fontSize: 11 }}>{item.label}</strong></div>)}</div></div>;
 }
 
 function ContentList({ title, items = [] }) {

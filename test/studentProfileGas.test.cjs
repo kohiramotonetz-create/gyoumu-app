@@ -53,3 +53,43 @@ test('プロフィールactionは既存正本処理を再利用する', () => {
   assert.match(source, /String\(row\[11\]/);
   assert.doesNotMatch(source.slice(source.indexOf('function getStudentProfileSukimakun_'), source.indexOf('function getStudentProfileOneToOne_')), /row\[3\].*student/);
 });
+
+test('個トレはunits.csv軸を教材ごとに返し復習後も最大到達から後退しない', () => {
+  context.openSpreadsheetByProperty = () => ({ getSheetByName: () => ({ getDataRange: () => ({ getValues: () => [[], [new Date('2026-08-27T00:00:00Z'), '木太南', '037071', '', '中１', '数学', '教材A', 'p.3'], [new Date('2026-08-28T00:00:00Z'), '木太南', '037071', '', '中１', '数学', '教材A', 'p.1']] }) }) });
+  context.Utilities = { formatDate: date => date.toISOString().slice(5, 10) };
+  context.__student = contexts[3];
+  context.__units = [
+    { grade: '中１', subject: '数学', textName: '教材A', chapter: '1章', unitName: '単元1', page: 'p.1' },
+    { grade: '中１', subject: '数学', textName: '教材A', chapter: '1章', unitName: '単元2', page: 'p.2' },
+    { grade: '中１', subject: '数学', textName: '教材A', chapter: '2章', unitName: '単元3', page: 'p.3' },
+    { grade: '中１', subject: '数学', textName: '教材B', chapter: '1章', unitName: '別単元', page: 'p.1' }
+  ];
+  const result = vm.runInContext('getStudentProfileKoTore_(__student, __units)', context);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].unitOrder, 3);
+  assert.equal(result.items[0].page, 'p.3');
+  assert.equal(result.items[0].unitName, '単元3');
+  assert.deepEqual(Array.from(result.items[0].axis, item => [item.chapter, item.page]), [['1章', 'p.1'], ['1章', 'p.2'], ['2章', 'p.3']]);
+});
+
+test('スキマ君はallowedContentIdsだけをマスター順で返し、履歴なしも保持する', () => {
+  context.getSukimakunContents = () => [
+    { contentId: 'allowed_empty', displayName: '利用可能・未利用', enabled: true, sortOrder: 1 },
+    { contentId: 'allowed_used', displayName: '利用可能・利用済み', enabled: true, sortOrder: 2 },
+    { contentId: 'permission_off', displayName: '権限OFF', enabled: true, sortOrder: 3 }
+  ];
+  context.getSukimakunPermissionState = () => ({ permissionsInitialized: true, allowedContentIds: ['allowed_empty', 'allowed_used'] });
+  context.openSpreadsheetByProperty = () => ({ getSheets: () => [{ getDataRange: () => ({ getValues: () => [[],
+    [new Date('2026-08-27T09:30:00Z'), '', '037071', '同名を使用しない', '', '通常', 8, 10, '', '', '', 'allowed_used'],
+    [new Date('2026-08-27T10:00:00Z'), '', '037071', '', '', '通常', 9, 10, '', '', '', 'permission_off'],
+    [new Date('2026-08-27T11:00:00Z'), '', '037071', '', '', '通常', 1, 1, '', '', '', '']
+  ] }) }] });
+  context.Utilities = { formatDate: date => date.toISOString() };
+  context.__student = contexts[3];
+  const result = vm.runInContext('getStudentProfileSukimakun_(__student)', context);
+  assert.deepEqual(Array.from(result.currentContents, item => item.contentId), ['allowed_empty', 'allowed_used']);
+  assert.equal(result.currentContents[0].attemptCount, 0);
+  assert.equal(result.currentContents[1].cumulativeRate, 80);
+  assert.equal('pastContents' in result, false);
+  assert.equal(result.legacyLogCount, 1);
+});

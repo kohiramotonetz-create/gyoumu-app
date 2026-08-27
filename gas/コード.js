@@ -2805,7 +2805,7 @@ function getStudentProfileKoTore_(student, masterUnits) {
     const current = axis.filter(unit => history.includes(normalizeProgressText(unit.page))).at(-1);
     const dates = matchingRows.map(row => row[0] instanceof Date ? row[0] : new Date(row[0])).filter(date => !isNaN(date.getTime()));
     const lastRecordedAt = dates.length ? new Date(Math.max(...dates.map(date => date.getTime()))) : null;
-    return current ? { subject: current.subject, textName: current.textName, page: current.page, unitName: current.unitName, chapter: current.chapter, unitOrder: current.unitOrder, lastRecordedAt: lastRecordedAt ? Utilities.formatDate(lastRecordedAt, "Asia/Tokyo", "M月d日") : "" } : null;
+    return current ? { subject: current.subject, textName: current.textName, page: current.page, unitName: current.unitName, chapter: current.chapter, unitOrder: current.unitOrder, axis, lastRecordedAt: lastRecordedAt ? Utilities.formatDate(lastRecordedAt, "Asia/Tokyo", "M月d日") : "" } : null;
   }).filter(Boolean);
   return { result: "success", items };
 }
@@ -2843,7 +2843,7 @@ function getStudentProfileSukimakun_(student) {
   const byContentId = Object.create(null);
   history.forEach(item => { byContentId[item.contentId] = item; });
   const currentContents = activeContents.filter(content => allowed.has(content.contentId)).map(content => byContentId[content.contentId] || serialize({ contentId: content.contentId, attemptCount: 0, cumulativeScore: 0, cumulativeTotal: 0 }));
-  return { result: "success", currentContents, pastContents: history.filter(item => !allowed.has(item.contentId)), legacyLogCount, dataSinceContentIdEnabled: true };
+  return { result: "success", currentContents, permissionsInitialized: permission.permissionsInitialized, legacyLogCount, dataSinceContentIdEnabled: true };
 }
 
 function getStudentProfileOneToOne_(student) {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { buildStudentProfileHash, parseStudentProfileHash } from '../src/utils/studentProfileNavigation.js';
 import { parseKoToreUnitsCsv } from '../src/utils/kotoreProfile.js';
+import { ACADEMIC_PROFILE_SUBJECTS, buildAcademicChartData } from '../src/utils/academicProfile.js';
 
 test('プロフィールHashは先頭0を維持してsourceを往復する', () => {
   const hash = buildStudentProfileHash('037071', 'kotore-progress');
@@ -42,4 +43,35 @@ test('Issue #017一覧とプロフィールは同じ進捗ラインを使う', (
   const profile = fs.readFileSync(new URL('../src/components/StudentProfileView.jsx', import.meta.url), 'utf8');
   assert.match(manager, /OneToOneProgressLine as ProgressLine/);
   assert.match(profile, /OneToOneSubjectProgress/);
+});
+
+test('個トレと1対1は章境界・横スクロールを持つ汎用進捗ラインを共用する', () => {
+  const profile = fs.readFileSync(new URL('../src/components/StudentProfileView.jsx', import.meta.url), 'utf8');
+  const oneToOne = fs.readFileSync(new URL('../src/components/common/OneToOneProgressDisplay.jsx', import.meta.url), 'utf8');
+  const axis = fs.readFileSync(new URL('../src/components/common/ProgressAxisLine.jsx', import.meta.url), 'utf8');
+  assert.match(profile, /ProgressAxisLine/);
+  assert.match(oneToOne, /ProgressAxisLine/);
+  assert.match(axis, /getChapterSegments/);
+  assert.match(profile, /overflowX: 'auto'/);
+  assert.match(profile, /unit\.page/);
+  assert.match(profile, /unit\.unitName/);
+});
+
+test('学校成績グラフは9科目順・テスト満点・0点・未入力を区別する', () => {
+  const scores = Object.fromEntries(ACADEMIC_PROFILE_SUBJECTS.map(([key], index) => [key, index === 0 ? 0 : index === 1 ? '' : index * 5]));
+  const hundred = buildAcademicChartData({ maxScore: 100, scores });
+  const fifty = buildAcademicChartData({ maxScore: 50, scores });
+  assert.deepEqual(hundred.map(item => item.label), ['国語', '数学', '英語', '理科', '社会', '音楽', '保健', '美術', '技家']);
+  assert.equal(hundred[0].score, 0);
+  assert.equal(hundred[1].score, null);
+  assert.equal(hundred.every(item => item.maxScore === 100), true);
+  assert.equal(fifty.every(item => item.maxScore === 50), true);
+});
+
+test('プロフィールUIは権限OFF履歴を表示せず、利用可能・履歴なし・成績表と棒グラフを表示する', () => {
+  const profile = fs.readFileSync(new URL('../src/components/StudentProfileView.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(profile, /pastContents|過去の利用履歴|legacyLogCount/);
+  assert.match(profile, /利用履歴はありません/);
+  assert.match(profile, /AcademicScoreChart/);
+  assert.match(profile, /<table/);
 });
