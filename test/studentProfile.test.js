@@ -60,7 +60,7 @@ test('個トレと1対1は章境界・横スクロールを持つ汎用進捗ラ
   assert.match(profile, /ProgressAxisLine/);
   assert.match(oneToOne, /ProgressAxisLine/);
   assert.match(axis, /getChapterSegments/);
-  assert.match(profile, /overflowX: 'auto'/);
+  assert.match(profile, /student-profile__axis-scroll/);
   assert.match(profile, /unit\.page/);
   assert.match(profile, /unit\.unitName/);
 });
@@ -82,4 +82,22 @@ test('プロフィールUIは権限OFF履歴を表示せず、利用可能・履
   assert.match(profile, /利用履歴はありません/);
   assert.match(profile, /AcademicScoreChart/);
   assert.match(profile, /<table/);
+});
+
+test('プロフィールはPC案1の配置とモバイル1カラムを使用する', () => {
+  const profile = fs.readFileSync(new URL('../src/components/StudentProfileView.jsx', import.meta.url), 'utf8');
+  const styles = fs.readFileSync(new URL('../src/components/StudentProfileView.css', import.meta.url), 'utf8');
+  const oneToOneIndex = profile.indexOf("section('oneToOne'");
+  const kotoreIndex = profile.indexOf("section('kotore'");
+  const sukimakunIndex = profile.indexOf("section('sukimakun'");
+  const academicIndex = profile.indexOf("section('academic'");
+  assert.equal(oneToOneIndex < kotoreIndex && kotoreIndex < sukimakunIndex && sukimakunIndex < academicIndex, true);
+  assert.match(profile, /student-profile__learning-grid/);
+  assert.match(profile, /student-profile__content-grid/);
+  assert.match(profile, /student-profile__academic-grid/);
+  assert.match(profile, /aria-pressed/);
+  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/);
+  assert.match(styles, /repeat\(auto-fit, minmax\(210px, 1fr\)\)/);
+  assert.match(styles, /@media \(max-width: 1100px\)/);
+  assert.match(styles, /overflow-x: auto/);
 });

@@ -185,7 +185,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
         </aside>
 
         <main style={styles.main}>
-          <div style={styles.contentArea}>
+          <div style={profileRoute ? { ...styles.contentArea, maxWidth: '1500px' } : styles.contentArea}>
             {profileRoute && <StudentProfileView userId={profileRoute.userId} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={handleLogout} onBack={() => { if (window.history.length > 1) window.history.back(); else window.location.hash = ''; }} />}
             {!profileRoute && <>
             {activeContent === 'notices' && (
