@@ -1884,17 +1884,39 @@ function normalizeLessonDate_(value) {
   return date;
 }
 
-function readOneToOneProgressState_(userId, subjectId, grade, sheets, fieldId) {
-  const normalizedFieldId = String(fieldId || "").trim();
-  const axis = getOneToOneSchoolUnitAxis_(grade, subjectId, normalizedFieldId);
-  const axisById = Object.create(null);
-  axis.forEach(unit => { axisById[unit.unitId] = unit; });
+function buildOneToOneProgressReadContext_(sheets) {
   const eventRows = sheets[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME].getDataRange().getValues();
   const unitRows = sheets[ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME].getDataRange().getValues();
-  const events = eventRows.slice(1).filter(row => normalizeUserId(row[1]) === userId && String(row[2]) === subjectId && String(row[13] || "") === normalizedFieldId).map(row => ({ eventId: String(row[0]), progressType: String(row[3]), lessonDate: row[4], recordedAt: row[5], recordedBy: String(row[6]), status: String(row[7]), correctedAt: row[8], correctedBy: String(row[9] || ""), correctionReason: String(row[10] || ""), replacementEventId: String(row[11] || ""), requestId: String(row[12] || ""), fieldId: String(row[13] || "") }));
-  const eventIds = new Set(events.map(event => event.eventId));
-  const details = unitRows.slice(1).filter(row => eventIds.has(String(row[0]))).map(row => ({ eventId: String(row[0]), unitId: String(row[1]), unitOrder: Number(row[2]), textName: String(row[3] || ""), chapter: String(row[4] || ""), section: String(row[5] || ""), unitName: String(row[6] || ""), page: String(row[7] || "") }));
-  events.forEach(event => { event.units = details.filter(unit => unit.eventId === event.eventId).sort((a, b) => a.unitOrder - b.unitOrder); });
+  const unitsByEventId = Object.create(null);
+  unitRows.slice(1).forEach(row => {
+    const eventId = String(row[0]);
+    if (!eventId) return;
+    if (!unitsByEventId[eventId]) unitsByEventId[eventId] = [];
+    unitsByEventId[eventId].push({ eventId, unitId: String(row[1]), unitOrder: Number(row[2]), textName: String(row[3] || ""), chapter: String(row[4] || ""), section: String(row[5] || ""), unitName: String(row[6] || ""), page: String(row[7] || "") });
+  });
+  Object.keys(unitsByEventId).forEach(eventId => unitsByEventId[eventId].sort((a, b) => a.unitOrder - b.unitOrder));
+  const eventsByUserSubjectField = Object.create(null);
+  eventRows.slice(1).forEach(row => {
+    const eventId = String(row[0]);
+    const userId = normalizeUserId(row[1]);
+    const subjectId = String(row[2]);
+    const fieldId = String(row[13] || "");
+    if (!eventId || !userId || !subjectId) return;
+    const key = `${userId}\t${subjectId}\t${fieldId}`;
+    if (!eventsByUserSubjectField[key]) eventsByUserSubjectField[key] = [];
+    eventsByUserSubjectField[key].push({ eventId, progressType: String(row[3]), lessonDate: row[4], recordedAt: row[5], recordedBy: String(row[6]), status: String(row[7]), correctedAt: row[8], correctedBy: String(row[9] || ""), correctionReason: String(row[10] || ""), replacementEventId: String(row[11] || ""), requestId: String(row[12] || ""), fieldId, units: unitsByEventId[eventId] || [] });
+  });
+  return { eventRows, unitRows, eventsByUserSubjectField, unitsByEventId };
+}
+
+function readOneToOneProgressState_(userId, subjectId, grade, sheets, fieldId, readContext, sharedAxis) {
+  const normalizedFieldId = String(fieldId || "").trim();
+  const axis = sharedAxis || getOneToOneSchoolUnitAxis_(grade, subjectId, normalizedFieldId);
+  const axisById = Object.create(null);
+  axis.forEach(unit => { axisById[unit.unitId] = unit; });
+  const context = readContext || buildOneToOneProgressReadContext_(sheets);
+  const key = `${userId}\t${subjectId}\t${normalizedFieldId}`;
+  const events = (context.eventsByUserSubjectField[key] || []).slice();
   const current = type => {
     const orders = events.filter(event => event.status === "ACTIVE" && event.progressType === type).flatMap(event => event.units.map(unit => axisById[unit.unitId] ? axisById[unit.unitId].unitOrder : unit.unitOrder));
     if (!orders.length) return null;
@@ -2031,12 +2053,13 @@ function handleOneToOneProgressAction_(data) {
     const subjectId = String(data.subjectId || "").trim();
     const subjectState = buildOneToOneSubjectStateMap_(assertOneToOneSubjectSheet_().getDataRange().getValues()).states;
     const sheets = assertOneToOneProgressSheets_();
+    const readContext = buildOneToOneProgressReadContext_(sheets);
     const fields = subjectId === "social" ? ONE_TO_ONE_SOCIAL_FIELDS : [{ fieldId: "", label: "" }];
     const fieldAxes = fields.map(field => ({ fieldId: field.fieldId, label: field.label, axis: getOneToOneSchoolUnitAxis_(grade, subjectId, field.fieldId) }));
     const students = session.userContexts.filter(user => user.role === "student" && user.enabled && !user.deleted && schools.includes(user.school) && normalizeGrade(user.grade) === grade && (subjectState[user.userId] || []).includes(subjectId)).map(user => {
       const progressByField = Object.create(null);
-      fields.forEach(field => {
-        const state = readOneToOneProgressState_(user.userId, subjectId, user.grade, sheets, field.fieldId);
+      fields.forEach((field, fieldIndex) => {
+        const state = readOneToOneProgressState_(user.userId, subjectId, user.grade, sheets, field.fieldId, readContext, fieldAxes[fieldIndex].axis);
         progressByField[field.fieldId || "default"] = { schoolCurrentUnitId: state.schoolCurrent && state.schoolCurrent.unitId || null, netzCurrentUnitId: state.netzCurrent && state.netzCurrent.unitId || null };
       });
       const normal = progressByField.default || {};

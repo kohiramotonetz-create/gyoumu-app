@@ -29,6 +29,26 @@ test('ACTIVE履歴だけで学校・ネッツ最大位置を計算しVOIDを除�
   assert.equal(state.netzCurrent.unitOrder, 6);
 });
 
+test('Matrix用読込contextは進捗シートを1回ずつ読み複数生徒で共有する', () => {
+  const axis = vm.runInContext('getOneToOneSchoolUnitAxis_("\u4e2d\uff12", "math")', context);
+  const eventHeaders = ['eventId','userId','subjectId','progressType','lessonDate','recordedAt','recordedBy','status','correctedAt','correctedBy','correctionReason','replacementEventId','requestId','fieldId'];
+  const unitHeaders = ['eventId','unitId','unitOrder','textNameSnapshot','chapterSnapshot','sectionSnapshot','unitNameSnapshot','pageSnapshot'];
+  let eventReads = 0;
+  let unitReads = 0;
+  context.__sharedSheets = {
+    '1対1進捗イベント': { getDataRange: () => ({ getValues: () => { eventReads += 1; return [eventHeaders, ['e1','001200','math','school','',new Date(),'t','ACTIVE','','','','','r1',''], ['e2','001201','math','netz','',new Date(),'t','ACTIVE','','','','','r2','']]; } }) },
+    '1対1進捗単元': { getDataRange: () => ({ getValues: () => { unitReads += 1; return [unitHeaders, ['e1',axis[2].unitId,3,'','','','',''], ['e2',axis[4].unitId,5,'','','','','']]; } }) }
+  };
+  context.__sharedAxis = axis;
+  context.__readContext = vm.runInContext('buildOneToOneProgressReadContext_(__sharedSheets)', context);
+  context.__firstState = vm.runInContext('readOneToOneProgressState_("001200", "math", "\u4e2d\uff12", __sharedSheets, "", __readContext, __sharedAxis)', context);
+  context.__secondState = vm.runInContext('readOneToOneProgressState_("001201", "math", "\u4e2d\uff12", __sharedSheets, "", __readContext, __sharedAxis)', context);
+  assert.equal(eventReads, 1);
+  assert.equal(unitReads, 1);
+  assert.equal(context.__firstState.schoolCurrent.unitOrder, 3);
+  assert.equal(context.__secondState.netzCurrent.unitOrder, 5);
+});
+
 test('teacher/head-teacher/adminは担当外を含む単一校舎の生徒を利用できる', () => {
   context.validateManagementSession = (_token, _extend, include) => ({ userId: 'teacher1', role: 'teacher', userContexts: include ? [{ userId: 'teacher1', assignedSchools: ['校舎A'] }] : undefined });
   const session = vm.runInContext('requireOneToOneProgressSession_("token", true)', context);
