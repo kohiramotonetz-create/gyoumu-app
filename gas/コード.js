@@ -1685,6 +1685,51 @@ function runInspectOneToOneSubjectDataSummary() {
   console.log(JSON.stringify(result, null, 2));
 }
 
+function inspectOneToOneSubjectDuplicateData_() {
+  const rows = assertOneToOneSubjectSheet_().getDataRange().getValues();
+  const grouped = Object.create(null);
+  rows.slice(1).forEach((row, index) => {
+    const rawUserId = String(row[0] == null ? "" : row[0]);
+    const rawSubjectId = String(row[1] == null ? "" : row[1]);
+    const userId = normalizeUserId(rawUserId);
+    const subjectId = rawSubjectId.trim();
+    if (!userId || !subjectId) return;
+    const key = `${userId}::${subjectId}`;
+    if (!grouped[key]) grouped[key] = { userId, subjectId, rows: [], enabledTrueCount: 0, enabledFalseCount: 0, rawUserIds: new Set(), rawSubjectIds: new Set() };
+    const item = grouped[key];
+    item.rows.push(index + 2);
+    if (isEnabledValue(row[2])) item.enabledTrueCount++; else item.enabledFalseCount++;
+    item.rawUserIds.add(rawUserId);
+    item.rawSubjectIds.add(rawSubjectId);
+  });
+  const duplicateKeys = Object.values(grouped).filter(item => item.rows.length > 1).map(item => ({
+    userId: item.userId,
+    subjectId: item.subjectId,
+    rowCount: item.rows.length,
+    duplicateRowCount: item.rows.length - 1,
+    enabledTrueCount: item.enabledTrueCount,
+    enabledFalseCount: item.enabledFalseCount,
+    rowNumbers: item.rows,
+    rawUserIdVariants: Array.from(item.rawUserIds),
+    rawSubjectIdVariants: Array.from(item.rawSubjectIds),
+    hasUserIdNormalizationCollision: item.rawUserIds.size > 1,
+    hasSubjectIdTrimCollision: item.rawSubjectIds.size > 1,
+    duplicateType: item.enabledTrueCount > 0 && item.enabledFalseCount > 0 ? "TRUE_FALSE_CONFLICT" : item.enabledTrueCount > 0 ? "ENABLED_TRUE_DUPLICATE" : "ENABLED_FALSE_DUPLICATE"
+  })).sort((left, right) => left.userId.localeCompare(right.userId) || ONE_TO_ONE_SUBJECT_IDS.indexOf(left.subjectId) - ONE_TO_ONE_SUBJECT_IDS.indexOf(right.subjectId) || left.subjectId.localeCompare(right.subjectId));
+  return {
+    dataRows: Math.max(0, rows.length - 1),
+    duplicateKeyCount: duplicateKeys.length,
+    duplicateRowCount: duplicateKeys.reduce((sum, item) => sum + item.duplicateRowCount, 0),
+    duplicateKeys
+  };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runInspectOneToOneSubjectDuplicateSummary() {
+  const result = inspectOneToOneSubjectDuplicateData_();
+  console.log(JSON.stringify(result, null, 2));
+}
+
 function getOneToOneSchoolUnitAxis_(grade, subjectId, fieldId) {
   const normalizedGrade = normalizeGrade(grade);
   if (!ONE_TO_ONE_SUBJECT_IDS.includes(subjectId)) throw new Error("科目が不正です");

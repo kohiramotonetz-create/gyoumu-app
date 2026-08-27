@@ -57,6 +57,32 @@ test('無効subjectIdは取得対象外、userId×subjectId重複は拒否する
   assert.throws(() => vm.runInContext('buildOneToOneSubjectStateMap_(__duplicateRows)', context), /重複/);
 });
 
+test('読み取り専用診断は完全重複・TRUE/FALSE競合・正規化後重複を分類する', () => {
+  context.__inspectRows = [
+    ['userId', 'subjectId', 'enabled', 'createdAt', 'updatedAt', 'updatedBy'],
+    ['037071', 'math', true, '', '', ''],
+    ['37071', 'math', true, '', '', ''],
+    ["'001200", ' english ', true, '', '', ''],
+    ['001200', 'english', false, '', '', ''],
+    ['000007', 'science', false, '', '', ''],
+    ['000007', 'science', false, '', '', ''],
+    ['000008', 'MATH', true, '', '', '']
+  ];
+  context.assertOneToOneSubjectSheet_ = () => ({ getDataRange: () => ({ getValues: () => context.__inspectRows }) });
+  const result = vm.runInContext('inspectOneToOneSubjectDuplicateData_()', context);
+  assert.equal(result.dataRows, 7);
+  assert.equal(result.duplicateKeyCount, 3);
+  assert.equal(result.duplicateRowCount, 3);
+  const normalizedUser = result.duplicateKeys.find(item => item.userId === '037071');
+  assert.equal(normalizedUser.duplicateType, 'ENABLED_TRUE_DUPLICATE');
+  assert.equal(normalizedUser.hasUserIdNormalizationCollision, true);
+  const conflict = result.duplicateKeys.find(item => item.userId === '001200');
+  assert.equal(conflict.duplicateType, 'TRUE_FALSE_CONFLICT');
+  assert.equal(conflict.hasSubjectIdTrimCollision, true);
+  const disabled = result.duplicateKeys.find(item => item.userId === '000007');
+  assert.equal(disabled.duplicateType, 'ENABLED_FALSE_DUPLICATE');
+});
+
 test('未登録生徒を拒否し、登録済み生徒の空設定は空配列で返す', () => {
   context.findOneToOneSubjectStudent_ = userId => userId === '001200' ? { userId: '001200', role: 'student' } : null;
   context.__sheetRows = [['userId', 'subjectId', 'enabled', 'createdAt', 'updatedAt', 'updatedBy']];
