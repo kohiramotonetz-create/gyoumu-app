@@ -1,49 +1,62 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
+import { AccountStatusBadge } from './AccountListUi.jsx';
+import { formatAccountDate, getAccountStatus } from '../utils/accountManagement.js';
 import { isValidNameKana, normalizeNameKana } from '../utils/nameKana.js';
 
 const REQUEST_TIMEOUT_MS = 15000;
-const isDeleted = account => account.deletedAt != null && String(account.deletedAt).trim() !== '';
-const formatDate = value => {
-  if (value == null || String(value).trim() === '') return '－';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('ja-JP');
-};
 
-export default function StaffAccountDetail({ account, GAS_URL, API_KEY, sessionToken, styles, onBack, onSaved }) {
+export default function StaffAccountDetail({ account, GAS_URL, API_KEY, sessionToken, onBack, onSaved, onDirtyChange }) {
   const initialForm = useMemo(() => ({
     name: String(account.name || ''), nameKana: String(account.nameKana || ''), role: String(account.role || 'teacher'), enabled: account.enabled === true,
     assignedSchools: (Array.isArray(account.assignedSchools) ? account.assignedSchools : []).map(school => ({ school, isPrimary: school === account.primarySchool })),
   }), [account]);
   const [form, setForm] = useState(initialForm);
+  const [editing, setEditing] = useState(false);
   const [schoolToAdd, setSchoolToAdd] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [status, setStatus] = useState({ type: '', message: '' });
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
-  const deleted = isDeleted(account);
-  const readOnly = deleted;
+  const deleted = getAccountStatus(account) === 'deleted';
   const dirty = JSON.stringify(form) !== JSON.stringify(initialForm);
-  const fieldStyle = { ...styles.select, width: '100%', boxSizing: 'border-box' };
 
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => {
+    const closeOnEscape = event => {
+      if (event.key !== 'Escape') return;
+      if (dirty && !window.confirm('変更内容が保存されていません。詳細を閉じますか？')) return;
+      onDirtyChange?.(false); onBack();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [dirty, onBack, onDirtyChange]);
+
+  const closePanel = () => {
+    if (dirty && !window.confirm('変更内容が保存されていません。詳細を閉じますか？')) return;
+    onDirtyChange?.(false); onBack();
+  };
+  const cancelEditing = () => {
+    if (dirty && !window.confirm('未保存の変更を破棄しますか？')) return;
+    setForm(initialForm); setSchoolToAdd(''); setFieldErrors({}); setStatus({ type: '', message: '' }); setEditing(false);
+  };
   const addSchool = () => {
     if (!schoolToAdd) return setFieldErrors(value => ({ ...value, assignedSchools: '担当校舎を選択してください。' }));
     if (form.assignedSchools.some(item => item.school === schoolToAdd)) return setFieldErrors(value => ({ ...value, assignedSchools: '同じ校舎は追加できません。' }));
     setForm(value => ({ ...value, assignedSchools: [...value.assignedSchools, { school: schoolToAdd, isPrimary: value.assignedSchools.length === 0 }] }));
-    setSchoolToAdd('');
-    setFieldErrors(value => ({ ...value, assignedSchools: '' }));
+    setSchoolToAdd(''); setFieldErrors(value => ({ ...value, assignedSchools: '' }));
   };
-  const removeSchool = school => setForm(value => ({ ...value, assignedSchools: value.assignedSchools.filter(item => item.school !== school) }));
+  const removeSchool = school => setForm(value => {
+    const remaining = value.assignedSchools.filter(item => item.school !== school);
+    if (remaining.length > 0 && !remaining.some(item => item.isPrimary)) remaining[0] = { ...remaining[0], isPrimary: true };
+    return { ...value, assignedSchools: remaining };
+  });
   const setPrimary = school => setForm(value => ({ ...value, assignedSchools: value.assignedSchools.map(item => ({ ...item, isPrimary: item.school === school })) }));
-  const returnToList = () => {
-    if (dirty && !window.confirm('変更内容が保存されていません。一覧へ戻りますか？')) return;
-    onBack();
-  };
 
   const save = async event => {
     event.preventDefault();
-    if (savingRef.current || readOnly || !dirty) return;
+    if (savingRef.current || deleted || !dirty) return;
     const normalizedName = form.name.trim();
     const normalizedKana = normalizeNameKana(form.nameKana);
     const errors = {};
@@ -53,42 +66,37 @@ export default function StaffAccountDetail({ account, GAS_URL, API_KEY, sessionT
     if (form.assignedSchools.length === 0 || form.assignedSchools.filter(item => item.isPrimary).length !== 1) errors.assignedSchools = '担当校舎を1校以上設定し、主担当を1校選択してください。';
     setFieldErrors(errors);
     if (Object.keys(errors).length) return;
-    savingRef.current = true;
-    setSaving(true);
-    setStatus({ type: '', message: '' });
+    savingRef.current = true; setSaving(true); setStatus({ type: '', message: '' });
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({ action: 'updateStaffAccount', apiKey: API_KEY, sessionToken, userId: account.userId, name: normalizedName, nameKana: normalizedKana, role: form.role, assignedSchools: form.assignedSchools, enabled: form.enabled }), { headers: { 'Content-Type': 'text/plain' }, timeout: REQUEST_TIMEOUT_MS });
-      if (response.data?.result !== 'success') {
-        const sessionExpired = response.data?.code === 'AUTHORIZATION_ERROR';
-        throw new Error(sessionExpired ? '管理セッションが切れています。再ログインしてください。' : response.data?.message || '保存に失敗しました。');
-      }
-      const primary = form.assignedSchools.find(item => item.isPrimary)?.school || '';
-      const updated = { ...account, name: normalizedName, nameKana: normalizedKana, role: form.role, assignedSchools: form.assignedSchools.map(item => item.school), primarySchool: primary, enabled: form.enabled };
+      if (response.data?.result !== 'success') throw new Error(response.data?.code === 'AUTHORIZATION_ERROR' ? '管理セッションが切れています。再ログインしてください。' : response.data?.message || '保存に失敗しました。');
+      const primarySchool = form.assignedSchools.find(item => item.isPrimary)?.school || '';
+      const updated = { ...account, name: normalizedName, nameKana: normalizedKana, role: form.role, assignedSchools: form.assignedSchools.map(item => item.school), primarySchool, enabled: form.enabled };
       setForm({ name: updated.name, nameKana: updated.nameKana, role: updated.role, assignedSchools: form.assignedSchools.map(item => ({ ...item })), enabled: updated.enabled });
-      onSaved(updated);
-      setStatus({ type: 'success', message: '保存しました。' });
-    } catch (error) {
-      const message = error?.code === 'ECONNABORTED' ? '通信がタイムアウトしました。' : error?.message === 'Network Error' ? '通信エラーが発生しました。' : error?.message || '保存に失敗しました。';
-      setStatus({ type: 'error', message });
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-    }
+      onSaved(updated); setStatus({ type: 'success', message: '保存しました。' });
+    } catch (requestError) {
+      setStatus({ type: 'error', message: requestError?.code === 'ECONNABORTED' ? '通信がタイムアウトしました。' : requestError?.message || '保存に失敗しました。' });
+    } finally { savingRef.current = false; setSaving(false); }
   };
 
-  return <section style={{ background: '#fff', padding: 24, borderRadius: 8 }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 20 }}><h2 style={{ ...styles.contentTitle, margin: 0 }}>講師詳細</h2><button type="button" onClick={returnToList}>一覧へ戻る</button></div>
-    {deleted && <div role="status" style={{ padding: 12, marginBottom: 16, color: '#991b1b', background: '#fef2f2' }}>削除済みアカウントのため編集できません。</div>}
-    {status.message && <div role={status.type === 'error' ? 'alert' : 'status'} style={{ padding: 12, marginBottom: 16, color: status.type === 'error' ? '#991b1b' : '#166534', background: status.type === 'error' ? '#fef2f2' : '#f0fdf4' }}>{status.message}</div>}
-    <form onSubmit={save} style={{ display: 'grid', gap: 16, maxWidth: 700 }}>
-      <div><strong>ID</strong><div style={{ padding: '10px 0' }}>{account.userId}</div></div>
-      <label>氏名<input value={form.name} disabled={readOnly} onChange={event => { setForm(value => ({ ...value, name: event.target.value })); setFieldErrors(value => ({ ...value, name: '' })); }} style={fieldStyle} />{fieldErrors.name && <div style={{ color: '#b91c1c' }}>{fieldErrors.name}</div>}</label>
-      <label>フリガナ<input value={form.nameKana} disabled={readOnly} onChange={event => { setForm(value => ({ ...value, nameKana: event.target.value })); setFieldErrors(value => ({ ...value, nameKana: '' })); }} onBlur={() => setForm(value => ({ ...value, nameKana: normalizeNameKana(value.nameKana) }))} style={fieldStyle} />{fieldErrors.nameKana && <div style={{ color: '#b91c1c' }}>{fieldErrors.nameKana}</div>}</label>
-      <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0 }}><legend>role</legend>{['teacher', 'head-teacher', 'admin'].map(item => <label key={item} style={{ marginRight: 20 }}><input type="radio" checked={form.role === item} onChange={() => setForm(value => ({ ...value, role: item }))} /> {item}</label>)}{fieldErrors.role && <div style={{ color: '#b91c1c' }}>{fieldErrors.role}</div>}</fieldset>
-      <div><strong>担当校舎</strong>{!readOnly && <div style={{ display: 'flex', gap: 8, marginTop: 8 }}><SchoolSelect value={schoolToAdd} onChange={event => setSchoolToAdd(event.target.value)} showAssignedOptions={false} style={fieldStyle} /><button type="button" onClick={addSchool}>追加</button></div>}{form.assignedSchools.map(item => <div key={item.school} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 8, borderBottom: '1px solid #e5e7eb' }}><span style={{ flex: 1 }}>{item.school}</span><label><input type="radio" name="staffPrimarySchool" checked={item.isPrimary} disabled={readOnly} onChange={() => setPrimary(item.school)} /> 主担当</label>{!readOnly && <button type="button" onClick={() => removeSchool(item.school)}>削除</button>}</div>)}{fieldErrors.assignedSchools && <div style={{ color: '#b91c1c' }}>{fieldErrors.assignedSchools}</div>}</div>
-      <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0 }}><legend>状態</legend><label style={{ marginRight: 20 }}><input type="radio" checked={form.enabled} onChange={() => setForm(value => ({ ...value, enabled: true }))} /> 有効</label><label><input type="radio" checked={!form.enabled} onChange={() => setForm(value => ({ ...value, enabled: false }))} /> 無効</label>{deleted && <div style={{ marginTop: 8, color: '#991b1b' }}>🔴 削除済み</div>}</fieldset>
-      <div><strong>作成日時</strong><div>{formatDate(account.createdAt)}</div></div><div><strong>更新日時</strong><div>{formatDate(account.updatedAt)}</div></div>
-      <button type="submit" disabled={readOnly || !dirty || saving} style={{ ...styles.doneBtn, opacity: readOnly || !dirty || saving ? 0.6 : 1 }}>{saving ? '保存中...' : '保存する'}</button>
-    </form>
-  </section>;
+  const secondarySchools = (account.assignedSchools || []).filter(school => school !== account.primarySchool);
+  return <aside className="account-detail-panel" aria-label={`${account.name}のアカウント詳細`}>
+    <header className="account-detail-header"><div><h2>{account.name}</h2><p>ID: {account.userId}</p></div><button type="button" className="account-icon-button" aria-label="詳細を閉じる" onClick={closePanel}>×</button></header>
+    {deleted ? <div className="account-inline-message account-inline-message--error" role="status">削除済みアカウントのため編集できません。</div> : null}
+    {status.message ? <div className={`account-inline-message account-inline-message--${status.type === 'error' ? 'error' : 'success'}`} role={status.type === 'error' ? 'alert' : 'status'}>{status.message}</div> : null}
+    {!editing ? <>
+      <section className="account-detail-section"><h3>基本情報</h3><dl className="account-detail-list"><div><dt>氏名</dt><dd>{account.name}</dd></div><div><dt>フリガナ</dt><dd>{account.nameKana || '－'}</dd></div><div><dt>role</dt><dd>{account.role}</dd></div><div><dt>主担当校舎</dt><dd>{account.primarySchool || '未設定'}</dd></div></dl></section>
+      <section className="account-detail-section"><h3>担当校舎</h3><dl className="account-detail-list"><div><dt>主担当</dt><dd>{account.primarySchool || '未設定'}</dd></div><div><dt>その他</dt><dd>{secondarySchools.join('、') || 'なし'}</dd></div></dl></section>
+      <section className="account-detail-section"><h3>アカウント状態</h3><AccountStatusBadge status={getAccountStatus(account)}/></section>
+      <section className="account-detail-section"><h3>管理情報</h3><dl className="account-detail-list"><div><dt>登録日時</dt><dd>{formatAccountDate(account.createdAt)}</dd></div><div><dt>更新日時</dt><dd>{formatAccountDate(account.updatedAt)}</dd></div></dl></section>
+      {!deleted ? <div className="account-detail-actions"><button type="button" className="account-secondary-button" onClick={() => setEditing(true)}>編集する</button></div> : null}
+    </> : <form className="account-detail-form" onSubmit={save}>
+      <label className="account-form-field">氏名<input className="account-control" value={form.name} aria-invalid={Boolean(fieldErrors.name)} onChange={event => { setForm(value => ({ ...value, name: event.target.value })); setFieldErrors(value => ({ ...value, name: '' })); }}/>{fieldErrors.name ? <span className="account-field-error">{fieldErrors.name}</span> : null}</label>
+      <label className="account-form-field">フリガナ<input className="account-control" value={form.nameKana} aria-invalid={Boolean(fieldErrors.nameKana)} onChange={event => { setForm(value => ({ ...value, nameKana: event.target.value })); setFieldErrors(value => ({ ...value, nameKana: '' })); }} onBlur={() => setForm(value => ({ ...value, nameKana: normalizeNameKana(value.nameKana) }))}/>{fieldErrors.nameKana ? <span className="account-field-error">{fieldErrors.nameKana}</span> : null}</label>
+      <label className="account-form-field">role<select className="account-control" value={form.role} onChange={event => setForm(value => ({ ...value, role: event.target.value }))}><option value="teacher">teacher</option><option value="head-teacher">head-teacher</option><option value="admin">admin</option></select>{fieldErrors.role ? <span className="account-field-error">{fieldErrors.role}</span> : null}</label>
+      <div className="account-form-field">担当校舎<div className="account-school-editor"><div className="account-school-editor__add"><SchoolSelect className="account-control" value={schoolToAdd} onChange={event => setSchoolToAdd(event.target.value)} showAssignedOptions={false}/><button type="button" className="account-secondary-button" onClick={addSchool}>追加</button></div>{form.assignedSchools.map(item => <div className="account-school-editor__row" key={item.school}><span>{item.school}</span><label><input type="radio" name="staffPrimarySchool" checked={item.isPrimary} onChange={() => setPrimary(item.school)}/>主担当</label><button type="button" className="account-icon-button" aria-label={`${item.school}を削除`} onClick={() => removeSchool(item.school)}>×</button></div>)}</div>{fieldErrors.assignedSchools ? <span className="account-field-error">{fieldErrors.assignedSchools}</span> : null}</div>
+      <fieldset className="account-detail-section"><legend>アカウント状態</legend><label className="account-check-row"><input type="radio" checked={form.enabled} onChange={() => setForm(value => ({ ...value, enabled: true }))}/>有効</label><label className="account-check-row"><input type="radio" checked={!form.enabled} onChange={() => setForm(value => ({ ...value, enabled: false }))}/>無効</label></fieldset>
+      <div className="account-detail-actions"><button type="submit" className="account-primary-button" disabled={!dirty || saving}>{saving ? '保存中…' : '保存する'}</button><button type="button" className="account-secondary-button" onClick={cancelEditing}>編集を終了</button></div>
+    </form>}
+  </aside>;
 }

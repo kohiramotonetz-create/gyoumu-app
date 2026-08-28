@@ -3,45 +3,34 @@ import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
 import StudentAccountDetail from './StudentAccountDetail.jsx';
-import { compareStudentAccounts } from '../utils/studentAccountOrdering.js';
 import StudentProfileLink from './common/StudentProfileLink.jsx';
+import { AccountPagination, AccountStatusBadge } from './AccountListUi.jsx';
+import { compareStudentAccounts } from '../utils/studentAccountOrdering.js';
+import { formatAccountDate, getAccountStatus, matchesAccountQuery, paginateAccounts } from '../utils/accountManagement.js';
 
 const REQUEST_TIMEOUT_MS = 15000;
-const hasDeletedAt = account => account.deletedAt != null && String(account.deletedAt).trim() !== '';
-const getAccountStatus = account => {
-  if (hasDeletedAt(account)) return 'deleted';
-  return account.enabled === true ? 'enabled' : 'disabled';
-};
 
-const statusLabels = {
-  enabled: { label: '🟢 有効', color: '#166534', background: '#f0fdf4' },
-  disabled: { label: '🟡 無効', color: '#854d0e', background: '#fefce8' },
-  deleted: { label: '🔴 削除済み', color: '#991b1b', background: '#fef2f2' },
-};
-
-export default function StudentAccountList({ GAS_URL, API_KEY, sessionToken, styles }) {
+export default function StudentAccountList({ GAS_URL, API_KEY, sessionToken, onCreate, onDirtyChange }) {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [school, setSchool] = useState('');
   const [grades, setGrades] = useState([]);
-  const [nameQuery, setNameQuery] = useState('');
+  const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
-  const [showDeleted, setShowDeleted] = useState(false);
-  const [selectedAccount, setSelectedAccount] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [selectedAccountId, setSelectedAccountId] = useState(null);
+  const [detailDirty, setDetailDirty] = useState(false);
 
   const fetchAccounts = useCallback(async signal => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.post(GAS_URL, JSON.stringify({
-        action: 'getStudentAccounts',
-        apiKey: API_KEY,
-        sessionToken,
-      }), { headers: { 'Content-Type': 'text/plain' }, timeout: REQUEST_TIMEOUT_MS, signal });
+      const response = await axios.post(GAS_URL, JSON.stringify({ action: 'getStudentAccounts', apiKey: API_KEY, sessionToken }), { headers: { 'Content-Type': 'text/plain' }, timeout: REQUEST_TIMEOUT_MS, signal });
       if (response.data?.result !== 'success' || !Array.isArray(response.data.accounts)) {
         const sessionExpired = response.data?.code === 'AUTHORIZATION_ERROR';
-        setError({ sessionExpired, message: sessionExpired ? '管理セッションが切れています。再ログインしてください。' : response.data?.message || '生徒一覧を取得できませんでした。' });
+        setError({ sessionExpired, message: sessionExpired ? '管理セッションが切れています。再ログインしてください。' : response.data?.message || '生徒情報を取得できませんでした。' });
         return;
       }
       setAccounts(response.data.accounts);
@@ -51,7 +40,7 @@ export default function StudentAccountList({ GAS_URL, API_KEY, sessionToken, sty
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [GAS_URL, API_KEY, sessionToken]);
+  }, [API_KEY, GAS_URL, sessionToken]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -59,45 +48,51 @@ export default function StudentAccountList({ GAS_URL, API_KEY, sessionToken, sty
     return () => controller.abort();
   }, [fetchAccounts]);
 
-  const filteredAccounts = useMemo(() => {
-    const selectedGrade = grades[0] || '';
-    const query = nameQuery.trim().toLocaleLowerCase('ja');
-    return accounts
-      .filter(account => showDeleted || !hasDeletedAt(account))
-      .filter(account => !school || account.school === school)
-      .filter(account => !selectedGrade || account.grade === selectedGrade)
-      .filter(account => !query || String(account.name || '').toLocaleLowerCase('ja').includes(query))
-      .filter(account => status === 'all' || getAccountStatus(account) === status)
-      .sort(compareStudentAccounts);
-  }, [accounts, grades, nameQuery, school, showDeleted, status]);
+  const filteredAccounts = useMemo(() => accounts
+    .filter(account => status === 'deleted' ? getAccountStatus(account) === 'deleted' : getAccountStatus(account) !== 'deleted')
+    .filter(account => !school || account.school === school)
+    .filter(account => grades.length === 0 || grades.includes(account.grade))
+    .filter(account => matchesAccountQuery(account, query))
+    .filter(account => status === 'all' || status === 'deleted' || getAccountStatus(account) === status)
+    .sort(compareStudentAccounts), [accounts, grades, query, school, status]);
+  const result = paginateAccounts(filteredAccounts, page, pageSize);
+  const selectedAccount = accounts.find(account => account.userId === selectedAccountId) || null;
 
-  const fieldStyle = { ...styles.select, width: '100%', boxSizing: 'border-box' };
+  const resetPage = () => setPage(1);
+  const setDirty = value => { setDetailDirty(value); onDirtyChange?.(value); };
+  const selectAccount = accountId => {
+    if (detailDirty && accountId !== selectedAccountId && !window.confirm('保存されていない変更があります。別の生徒を選択しますか？')) return;
+    setDirty(false);
+    setSelectedAccountId(accountId);
+  };
+  const closeDetail = () => { setDirty(false); setSelectedAccountId(null); };
+  const saveAccount = updated => setAccounts(items => items.map(item => item.userId === updated.userId ? updated : item));
 
-  if (selectedAccount) return <StudentAccountDetail account={selectedAccount} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} styles={styles} onBack={() => { setSelectedAccount(null); fetchAccounts(); }} onSaved={updated => { setSelectedAccount(updated); setAccounts(items => items.map(item => item.userId === updated.userId ? updated : item)); }} />;
-
-  return (
-    <section style={{ background: '#fff', padding: 24, borderRadius: 8 }}>
-      <h2 style={styles.contentTitle}>生徒一覧</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 12 }}>
-        <label>校舎<SchoolSelect value={school} onChange={event => setSchool(event.target.value)} showAssignedOptions={false} style={fieldStyle} /></label>
-        <label>学年<GradeSelect value={grades} onChange={setGrades} includeGroups={false} style={fieldStyle} /></label>
-        <label>氏名<input value={nameQuery} onChange={event => setNameQuery(event.target.value)} placeholder="氏名で検索" style={fieldStyle} /></label>
-        <label>状態<select value={status} onChange={event => setStatus(event.target.value)} style={fieldStyle}><option value="all">すべて</option><option value="enabled">有効</option><option value="disabled">無効</option><option value="deleted">削除済み</option></select></label>
+  return <div className={`account-list-layout ${selectedAccount ? 'account-list-layout--detail' : ''}`}>
+    <section className="account-list-panel" aria-label="生徒情報一覧">
+      <div className="account-filter-toolbar">
+        <label>校舎<SchoolSelect className="account-control" value={school} onChange={event => { setSchool(event.target.value); resetPage(); }} showAssignedOptions={false} placeholder="すべて" /></label>
+        <label>学年<GradeSelect className="account-control" value={grades} onChange={value => { setGrades(value); resetPage(); }} placeholder="すべて" /></label>
+        <label>状態<select className="account-control" value={status} onChange={event => { setStatus(event.target.value); resetPage(); }}><option value="all">すべて</option><option value="enabled">有効</option><option value="disabled">無効</option><option value="deleted">削除済み</option></select></label>
+        <label className="account-filter-toolbar__search">生徒名・ID検索<input className="account-control" value={query} onChange={event => { setQuery(event.target.value); resetPage(); }} placeholder="氏名・フリガナ・IDで検索"/><span aria-hidden="true">⌕</span></label>
       </div>
-      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 16 }}><input type="checkbox" checked={showDeleted} onChange={event => setShowDeleted(event.target.checked)} />削除済みも表示</label>
-
-      {loading && <div role="status" style={{ padding: 20, textAlign: 'center' }}>読込中...</div>}
-      {!loading && error && <div role="alert" style={{ padding: 16, color: '#991b1b', background: '#fef2f2', borderRadius: 6 }}>{error.message}{!error.sessionExpired && <button type="button" onClick={() => fetchAccounts()} style={{ ...styles.doneBtn, marginLeft: 12 }}>再試行</button>}</div>}
-      {!loading && !error && filteredAccounts.length === 0 && <div style={{ padding: 20, textAlign: 'center' }}>該当する生徒がいません。</div>}
-      {!loading && !error && filteredAccounts.length > 0 && <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 6 }}>
-        <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse' }}>
-          <thead><tr style={{ background: '#f8fafc' }}>{['ID', '氏名', 'フリガナ', '校舎', '学年', '状態', '詳細'].map(label => <th key={label} style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #d1d5db', whiteSpace: 'nowrap' }}>{label}</th>)}</tr></thead>
-          <tbody>{filteredAccounts.map(account => {
-            const accountStatus = statusLabels[getAccountStatus(account)];
-            return <tr key={account.userId}><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{account.userId}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}><StudentProfileLink userId={account.userId} source="create-account">{account.name}</StudentProfileLink></td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{account.nameKana}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{account.school}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{account.grade}</td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}><span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 999, color: accountStatus.color, background: accountStatus.background, whiteSpace: 'nowrap' }}>{accountStatus.label}</span></td><td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}><button type="button" onClick={() => setSelectedAccount(account)}>詳細</button></td></tr>;
-          })}</tbody>
-        </table>
-      </div>}
+      {onCreate ? <div className="account-list-actions"><button type="button" className="account-primary-button" onClick={onCreate}>＋ 生徒を追加</button></div> : null}
+      {loading ? <div className="account-loading" role="status">生徒情報を取得中です。</div> : null}
+      {!loading && error ? <div className="account-inline-message account-inline-message--error" role="alert">{error.message}{!error.sessionExpired ? <button type="button" className="account-secondary-button" onClick={() => fetchAccounts()}>再試行</button> : null}</div> : null}
+      {!loading && !error && accounts.length === 0 ? <div className="account-empty">登録済みの生徒アカウントがありません。</div> : null}
+      {!loading && !error && accounts.length > 0 && result.totalItems === 0 ? <div className="account-empty">条件に一致する生徒がいません。条件を変更してください。</div> : null}
+      {!loading && !error && result.totalItems > 0 ? <>
+        <div className="account-table-scroll"><table className="account-table">
+          <thead><tr><th scope="col">生徒名</th><th scope="col">ID</th><th scope="col">所属校舎</th><th scope="col">学年</th><th scope="col">状態</th><th scope="col">更新日時</th><th scope="col">操作</th></tr></thead>
+          <tbody>{result.items.map(account => <tr key={account.userId} className={selectedAccountId === account.userId ? 'account-table__row--selected' : ''}>
+            <td className="account-table__name"><StudentProfileLink userId={account.userId} source="create-account">{account.name}</StudentProfileLink></td>
+            <td>{account.userId}</td><td>{account.school}</td><td>{account.grade}</td><td><AccountStatusBadge status={getAccountStatus(account)} /></td><td>{formatAccountDate(account.updatedAt)}</td>
+            <td><button type="button" className="account-row-button" aria-label={`${account.name}の詳細を開く`} onClick={() => selectAccount(account.userId)}>›</button></td>
+          </tr>)}</tbody>
+        </table></div>
+        <AccountPagination result={result} onPageChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1); }} />
+      </> : null}
     </section>
-  );
+    {selectedAccount ? <StudentAccountDetail key={selectedAccount.userId} account={selectedAccount} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onBack={closeDetail} onSaved={saveAccount} onDirtyChange={setDirty} /> : null}
+  </div>;
 }

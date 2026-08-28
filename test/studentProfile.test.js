@@ -22,7 +22,7 @@ test('プロフィールは共通リンクとHash navigationを使用する', ()
 });
 
 test('初期5画面の生徒名はプロフィールリンクを共用する', () => {
-  const files = ['OneToOneProgressManager.jsx', 'KoToreProgressTracker.jsx', 'SchoolProgressManager.jsx', 'SukimakunPermissionManager.jsx', 'StudentAccountList.jsx'];
+  const files = ['OneToOneProgressResults.jsx', 'KoToreProgressTracker.jsx', 'SchoolProgressManager.jsx', 'SukimakunPermissionManager.jsx', 'StudentAccountList.jsx'];
   files.forEach(file => assert.match(fs.readFileSync(new URL(`../src/components/${file}`, import.meta.url), 'utf8'), /StudentProfileLink/));
 });
 
@@ -46,10 +46,12 @@ test('個トレAPIのaxisが欠けても同じ教材のCSV軸を補完する', (
   assert.equal(result.items[0].axis[0].unitOrder, 1);
 });
 
-test('Issue #017一覧とプロフィールは同じ進捗ラインを使う', () => {
+test('Issue #017一覧は専用timelineを使いプロフィールの既存進捗ラインを維持する', () => {
   const manager = fs.readFileSync(new URL('../src/components/OneToOneProgressManager.jsx', import.meta.url), 'utf8');
+  const results = fs.readFileSync(new URL('../src/components/OneToOneProgressResults.jsx', import.meta.url), 'utf8');
   const profile = fs.readFileSync(new URL('../src/components/StudentProfileView.jsx', import.meta.url), 'utf8');
-  assert.match(manager, /OneToOneProgressLine as ProgressLine/);
+  assert.match(manager, /OneToOneProgressResults/);
+  assert.match(results, /one-to-one-progress-lane/);
   assert.match(profile, /OneToOneSubjectProgress/);
 });
 
