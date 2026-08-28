@@ -71,6 +71,18 @@ test('一覧は1生徒ブロックに学校・ネッツ2行と分離入力・履
   assert.doesNotMatch(source, /\{event\.status\}<\/strong>/);
 });
 
+test('Matrix requestは診断IDとclient経過時間を付けtimeout時に診断IDを表示する', () => {
+  const source = fs.readFileSync(new URL('../src/components/OneToOneProgressManager.jsx', import.meta.url), 'utf8');
+  assert.match(source, /one_to_one_matrix_/);
+  assert.match(source, /diagnosticRequestId/);
+  assert.match(source, /performance\.now\(\)/);
+  assert.match(source, /clientElapsedMs/);
+  assert.match(source, /ECONNABORTED/);
+  assert.match(source, /診断ID:/);
+  assert.match(source, /timeout: 30000/);
+  assert.doesNotMatch(source, /timeout:\s*(?:60000|120000)/);
+});
+
 test('授業日は時刻変換せず日本語の日付として表示する', () => {
   assert.equal(formatLessonDateJa('2026-08-27'), '8月27日');
   assert.equal(formatLessonDateJa('2026-01-01'), '1月1日');

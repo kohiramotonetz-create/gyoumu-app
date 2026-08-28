@@ -12,6 +12,7 @@ import { ALL_SCHOOLS } from '../constants/organization.js';
 
 const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
 const makeRequestId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const makeMatrixDiagnosticRequestId = () => `one_to_one_matrix_${Date.now()}_${makeRequestId().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 36)}`;
 
 function HistoryUnits({ event }) {
   const units = [...event.units].sort((a, b) => a.unitOrder - b.unitOrder);
@@ -55,8 +56,19 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
     if (!school || !grade || !subjectId) return setNotice('校舎・学年・科目を選択してください。');
     setLoading(true); setNotice('');
     const schools = school === '全担当校舎' ? (role === 'admin' ? ALL_SCHOOLS : assignedSchools) : [school];
-    try { setData(await request('getOneToOneProgressMatrix', { school, schools, grade, subjectId })); }
-    catch (error) { setNotice(error.message); }
+    const diagnosticRequestId = makeMatrixDiagnosticRequestId();
+    const startedAt = performance.now();
+    console.info('[ONE_TO_ONE_MATRIX_CLIENT] START', { diagnosticRequestId });
+    try {
+      const result = await request('getOneToOneProgressMatrix', { school, schools, grade, subjectId, diagnosticRequestId });
+      console.info('[ONE_TO_ONE_MATRIX_CLIENT] RESPONSE', { diagnosticRequestId, clientElapsedMs: Math.round(performance.now() - startedAt), serverDiagnostics: result.diagnostics });
+      setData(result);
+    } catch (error) {
+      const clientElapsedMs = Math.round(performance.now() - startedAt);
+      const isTimeout = error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''));
+      console.error('[ONE_TO_ONE_MATRIX_CLIENT] ERROR', { diagnosticRequestId, clientElapsedMs, type: isTimeout ? 'TIMEOUT' : 'REQUEST_ERROR', message: error?.message });
+      setNotice(isTimeout ? `1対1進捗の取得に時間がかかっています。診断ID: ${diagnosticRequestId}` : error.message);
+    }
     finally { setLoading(false); }
   };
 

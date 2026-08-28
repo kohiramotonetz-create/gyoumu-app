@@ -1403,32 +1403,60 @@ function createManagementSession(userId, role) {
   return { sessionToken, sessionExpiresAt: expiresAt.toISOString() };
 }
 
-function validateManagementSession(sessionToken, extendExpiration, includeUserContexts) {
+function validateManagementSession(sessionToken, extendExpiration, includeUserContexts, diagnostics) {
+  const authStartedAt = Date.now();
+  const authDiagnostics = diagnostics || null;
+  if (authDiagnostics) {
+    authDiagnostics.sessionReadMs = 0;
+    authDiagnostics.sessionLookupMs = 0;
+    authDiagnostics.authContextLoadMs = 0;
+    authDiagnostics.sessionExtendMs = 0;
+    authDiagnostics.lockWaitMs = 0;
+    authDiagnostics.lockUsed = false;
+  }
   if (!sessionToken || typeof sessionToken !== "string") throw new Error("管理セッションが必要です");
+  let startedAt = Date.now();
   const sheet = getRequiredSheet(MANAGEMENT_SESSION_SHEET_NAME);
   const rows = sheet.getDataRange().getValues();
+  if (authDiagnostics) authDiagnostics.sessionReadMs = Date.now() - startedAt;
   const now = new Date();
+  startedAt = Date.now();
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][0] || "") !== sessionToken) continue;
     const expiresAt = new Date(rows[i][3]);
+    if (authDiagnostics) authDiagnostics.sessionLookupMs = Date.now() - startedAt;
     if (!(expiresAt instanceof Date) || isNaN(expiresAt.getTime()) || now >= expiresAt) {
       sheet.deleteRow(i + 1);
+      if (authDiagnostics) authDiagnostics.authTotalMs = Date.now() - authStartedAt;
       throw new Error("管理セッションが無効または期限切れです");
     }
+    startedAt = Date.now();
     const userContexts = getUserAuthContexts_();
+    if (authDiagnostics) authDiagnostics.authContextLoadMs = Date.now() - startedAt;
     const normalizedUserId = normalizeUserId(rows[i][1]);
     const user = userContexts.find(item => item.userId === normalizedUserId && item.enabled && !item.deleted);
-    if (!user) throw new Error("管理セッションの利用者が存在しません");
+    if (!user) {
+      if (authDiagnostics) authDiagnostics.authTotalMs = Date.now() - authStartedAt;
+      throw new Error("管理セッションの利用者が存在しません");
+    }
     if (extendExpiration) {
       const nextExpiresAt = new Date(now.getTime() + MANAGEMENT_SESSION_DURATION_MS);
+      startedAt = Date.now();
       sheet.getRange(i + 1, 4).setValue(nextExpiresAt);
+      if (authDiagnostics) authDiagnostics.sessionExtendMs = Date.now() - startedAt;
       const result = { userId: user.userId, role: user.role, sessionExpiresAt: nextExpiresAt.toISOString() };
       if (includeUserContexts) result.userContexts = userContexts;
+      if (authDiagnostics) authDiagnostics.authTotalMs = Date.now() - authStartedAt;
       return result;
     }
     const result = { userId: user.userId, role: user.role, sessionExpiresAt: expiresAt.toISOString() };
     if (includeUserContexts) result.userContexts = userContexts;
+    if (authDiagnostics) authDiagnostics.authTotalMs = Date.now() - authStartedAt;
     return result;
+  }
+  if (authDiagnostics) {
+    authDiagnostics.sessionLookupMs = Date.now() - startedAt;
+    authDiagnostics.authTotalMs = Date.now() - authStartedAt;
   }
   throw new Error("管理セッションが無効または期限切れです");
 }
@@ -1841,8 +1869,21 @@ function runSetupOneToOneProgressSheetsSummary() {
   console.log(JSON.stringify(setupOneToOneProgressSheets(), null, 2));
 }
 
-function requireOneToOneProgressSession_(sessionToken, includeUserContexts) {
-  const session = validateManagementSession(sessionToken, true, includeUserContexts);
+function normalizeOneToOneMatrixDiagnosticRequestId_(value) {
+  const text = String(value || "").trim();
+  if (/^[a-zA-Z0-9_-]{1,100}$/.test(text)) return text;
+  return `one_to_one_matrix_server_${Utilities.getUuid().replace(/-/g, "")}`;
+}
+
+function logOneToOneMatrixTrace_(trace, stage, details) {
+  if (!trace) return;
+  const fields = details || {};
+  const suffix = Object.keys(fields).map(key => `${key}=${fields[key]}`).join(" ");
+  console.log(`[ONE_TO_ONE_MATRIX][requestId=${trace.requestId}] ${stage}${suffix ? ` ${suffix}` : ""}`);
+}
+
+function requireOneToOneProgressSession_(sessionToken, includeUserContexts, diagnostics) {
+  const session = validateManagementSession(sessionToken, true, includeUserContexts, diagnostics);
   if (!["admin", "head-teacher", "teacher"].includes(session.role)) throw new Error("1対1進捗の利用権限がありません");
   return session;
 }
@@ -1884,9 +1925,7 @@ function normalizeLessonDate_(value) {
   return date;
 }
 
-function buildOneToOneProgressReadContext_(sheets) {
-  const eventRows = sheets[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME].getDataRange().getValues();
-  const unitRows = sheets[ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME].getDataRange().getValues();
+function buildOneToOneProgressReadContextFromRows_(eventRows, unitRows) {
   const unitsByEventId = Object.create(null);
   unitRows.slice(1).forEach(row => {
     const eventId = String(row[0]);
@@ -1907,6 +1946,119 @@ function buildOneToOneProgressReadContext_(sheets) {
     eventsByUserSubjectField[key].push({ eventId, progressType: String(row[3]), lessonDate: row[4], recordedAt: row[5], recordedBy: String(row[6]), status: String(row[7]), correctedAt: row[8], correctedBy: String(row[9] || ""), correctionReason: String(row[10] || ""), replacementEventId: String(row[11] || ""), requestId: String(row[12] || ""), fieldId, units: unitsByEventId[eventId] || [] });
   });
   return { eventRows, unitRows, eventsByUserSubjectField, unitsByEventId };
+}
+
+function buildOneToOneProgressReadContext_(sheets) {
+  const eventRows = sheets[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME].getDataRange().getValues();
+  const unitRows = sheets[ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME].getDataRange().getValues();
+  return buildOneToOneProgressReadContextFromRows_(eventRows, unitRows);
+}
+
+function inspectOneToOneProgressSheetRows_(sheet, rows) {
+  const dataRows = rows.slice(1);
+  return {
+    lastRow: sheet.getLastRow(),
+    dataRangeRows: rows.length,
+    actualDataRows: dataRows.filter(row => row.some(value => String(value == null ? "" : value).trim() !== "")).length
+  };
+}
+
+function inspectOneToOneProgressPerformance_() {
+  const totalStartedAt = Date.now();
+  const timings = Object.create(null);
+
+  let startedAt = Date.now();
+  const userContexts = getUserAuthContexts_();
+  timings.authContextLoadMs = Date.now() - startedAt;
+  const activeStudents = userContexts.filter(user => user.role === "student" && user.enabled && !user.deleted);
+
+  startedAt = Date.now();
+  const subjectSheet = assertOneToOneSubjectSheet_();
+  const subjectRows = subjectSheet.getDataRange().getValues();
+  timings.subjectLoadMs = Date.now() - startedAt;
+  startedAt = Date.now();
+  const subjectState = buildOneToOneSubjectStateMap_(subjectRows).states;
+  timings.subjectIndexBuildMs = Date.now() - startedAt;
+
+  const sheets = assertOneToOneProgressSheets_();
+  const eventSheet = sheets[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME];
+  const unitSheet = sheets[ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME];
+  startedAt = Date.now();
+  const eventRows = eventSheet.getDataRange().getValues();
+  timings.eventLoadMs = Date.now() - startedAt;
+  startedAt = Date.now();
+  const unitRows = unitSheet.getDataRange().getValues();
+  timings.progressUnitLoadMs = Date.now() - startedAt;
+  startedAt = Date.now();
+  const readContext = buildOneToOneProgressReadContextFromRows_(eventRows, unitRows);
+  timings.indexBuildMs = Date.now() - startedAt;
+
+  const scenarioKeys = Object.create(null);
+  activeStudents.forEach(student => {
+    (subjectState[student.userId] || []).forEach(subjectId => {
+      const grade = normalizeGrade(student.grade);
+      if (grade && ONE_TO_ONE_SUBJECT_IDS.includes(subjectId)) scenarioKeys[`${grade}\t${subjectId}`] = { grade, subjectId };
+    });
+  });
+  const scenarios = [];
+  Object.keys(scenarioKeys).sort().forEach(key => {
+    const scenario = scenarioKeys[key];
+    const scenarioStudents = activeStudents.filter(student => normalizeGrade(student.grade) === scenario.grade && (subjectState[student.userId] || []).includes(scenario.subjectId));
+    const fields = scenario.subjectId === "social" ? ONE_TO_ONE_SOCIAL_FIELDS : [{ fieldId: "", label: "" }];
+    let axisStartedAt = Date.now();
+    let fieldAxes;
+    try {
+      fieldAxes = fields.map(field => ({ fieldId: field.fieldId, label: field.label, axis: getOneToOneSchoolUnitAxis_(scenario.grade, scenario.subjectId, field.fieldId) }));
+    } catch (error) {
+      scenarios.push({ grade: scenario.grade, subjectId: scenario.subjectId, studentCount: scenarioStudents.length, error: String(error && error.message || error) });
+      return;
+    }
+    const axisBuildMs = Date.now() - axisStartedAt;
+    startedAt = Date.now();
+    const students = scenarioStudents.map(student => {
+      const progressByField = Object.create(null);
+      fields.forEach((field, fieldIndex) => {
+        const state = readOneToOneProgressState_(student.userId, scenario.subjectId, student.grade, sheets, field.fieldId, readContext, fieldAxes[fieldIndex].axis);
+        progressByField[field.fieldId || "default"] = { schoolCurrentUnitId: state.schoolCurrent && state.schoolCurrent.unitId || null, netzCurrentUnitId: state.netzCurrent && state.netzCurrent.unitId || null };
+      });
+      const normal = progressByField.default || {};
+      return { userId: student.userId, name: student.name, nameKana: student.nameKana, school: student.school, grade: student.grade, schoolCurrentUnitId: normal.schoolCurrentUnitId || null, netzCurrentUnitId: normal.netzCurrentUnitId || null, progressByField };
+    }).sort(compareStudentsByKana_);
+    const stateBuildMs = Date.now() - startedAt;
+    const response = { result: "success", schools: [], axis: scenario.subjectId === "social" ? [] : fieldAxes[0].axis, fieldAxes, students, sessionExpiresAt: "" };
+    startedAt = Date.now();
+    const estimatedResponseBytes = JSON.stringify(response).length;
+    const responseBuildMs = Date.now() - startedAt;
+    scenarios.push({ grade: scenario.grade, subjectId: scenario.subjectId, studentCount: students.length, fieldCount: fields.length, axisUnitCount: fieldAxes.reduce((sum, field) => sum + field.axis.length, 0), axisBuildMs, stateBuildMs, responseBuildMs, estimatedResponseBytes });
+  });
+  timings.axisBuildMs = scenarios.reduce((sum, scenario) => sum + (scenario.axisBuildMs || 0), 0);
+  timings.stateBuildMs = scenarios.reduce((sum, scenario) => sum + (scenario.stateBuildMs || 0), 0);
+  timings.responseBuildMs = scenarios.reduce((sum, scenario) => sum + (scenario.responseBuildMs || 0), 0);
+  timings.totalMs = Date.now() - totalStartedAt;
+  const comparable = scenarios.filter(scenario => typeof scenario.stateBuildMs === "number");
+  const slowestScenario = comparable.slice().sort((left, right) => (right.axisBuildMs + right.stateBuildMs + right.responseBuildMs) - (left.axisBuildMs + left.stateBuildMs + left.responseBuildMs))[0] || null;
+  return {
+    scope: "ALL_ACTIVE_STUDENTS_BY_GRADE_AND_SUBJECT",
+    note: "管理セッションシートの読込・期限延長書込とHTTP通信時間は含みません",
+    studentCount: activeStudents.length,
+    sheets: {
+      subjects: inspectOneToOneProgressSheetRows_(subjectSheet, subjectRows),
+      events: inspectOneToOneProgressSheetRows_(eventSheet, eventRows),
+      progressUnits: inspectOneToOneProgressSheetRows_(unitSheet, unitRows)
+    },
+    indexedEventKeyCount: Object.keys(readContext.eventsByUserSubjectField).length,
+    indexedEventIdCount: Object.keys(readContext.unitsByEventId).length,
+    estimatedResponseBytes: scenarios.reduce((sum, scenario) => sum + (scenario.estimatedResponseBytes || 0), 0),
+    timings,
+    slowestScenario,
+    scenarios
+  };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runInspectOneToOneProgressPerformance() {
+  const result = inspectOneToOneProgressPerformance_();
+  console.log(JSON.stringify(result, null, 2));
 }
 
 function readOneToOneProgressState_(userId, subjectId, grade, sheets, fieldId, readContext, sharedAxis) {
@@ -2046,8 +2198,19 @@ function serializeOneToOneProgressState_(state) {
 }
 
 function handleOneToOneProgressAction_(data) {
-  const session = requireOneToOneProgressSession_(data.sessionToken, true);
+  const trace = data.__oneToOneMatrixTrace || null;
+  if (trace) logOneToOneMatrixTrace_(trace, "AUTH_START", { elapsedMs: Date.now() - trace.startedAt });
+  let session;
+  try {
+    session = requireOneToOneProgressSession_(data.sessionToken, true, trace && trace.timings);
+  } catch (error) {
+    if (trace) logOneToOneMatrixTrace_(trace, "AUTH_ERROR", { authTotalMs: trace.timings.authTotalMs == null ? Date.now() - trace.startedAt : trace.timings.authTotalMs });
+    throw error;
+  }
+  if (trace) logOneToOneMatrixTrace_(trace, "AUTH_DONE", trace.timings);
   if (data.action === "getOneToOneProgressMatrix") {
+    const matrixStartedAt = Date.now();
+    if (trace) logOneToOneMatrixTrace_(trace, "MATRIX_START", { elapsedMs: matrixStartedAt - trace.startedAt });
     const schools = resolveOneToOneProgressSchools_(data, session);
     const grade = normalizeGrade(data.grade);
     const subjectId = String(data.subjectId || "").trim();
@@ -2065,6 +2228,10 @@ function handleOneToOneProgressAction_(data) {
       const normal = progressByField.default || {};
       return { userId: user.userId, name: user.name, nameKana: user.nameKana, school: user.school, grade: user.grade, schoolCurrentUnitId: normal.schoolCurrentUnitId || null, netzCurrentUnitId: normal.netzCurrentUnitId || null, progressByField };
     }).sort(compareStudentsByKana_);
+    if (trace) {
+      trace.timings.matrixElapsedMs = Date.now() - matrixStartedAt;
+      logOneToOneMatrixTrace_(trace, "MATRIX_DONE", { matrixElapsedMs: trace.timings.matrixElapsedMs, studentCount: students.length });
+    }
     return { result: "success", schools, axis: subjectId === "social" ? [] : fieldAxes[0].axis, fieldAxes, students, sessionExpiresAt: session.sessionExpiresAt };
   }
   const userId = normalizeUserId(data.userId);
@@ -3073,6 +3240,20 @@ function handleStudentProfileAction_(data) {
   throw new Error("Unknown student profile action");
 }
 
+function responseOneToOneMatrixTrace_(payload, trace) {
+  const responseStartedAt = Date.now();
+  logOneToOneMatrixTrace_(trace, "RESPONSE_START", { elapsedMs: responseStartedAt - trace.startedAt });
+  const diagnostics = Object.assign({ requestId: trace.requestId }, trace.timings, { responseElapsedMs: 0, serverTotalMs: 0 });
+  const result = Object.assign({}, payload, { diagnostics });
+  JSON.stringify(result);
+  trace.timings.responseElapsedMs = Date.now() - responseStartedAt;
+  trace.timings.serverTotalMs = Date.now() - trace.startedAt;
+  result.diagnostics = Object.assign({ requestId: trace.requestId }, trace.timings);
+  const response = responseJSON(result);
+  logOneToOneMatrixTrace_(trace, "RESPONSE_DONE", { responseElapsedMs: trace.timings.responseElapsedMs, serverTotalMs: trace.timings.serverTotalMs });
+  return response;
+}
+
 function doPost(e) {
   let data;
   try {
@@ -3081,11 +3262,22 @@ function doPost(e) {
     return responseJSON({ result: "error", message: "Invalid JSON" });
   }
 
+  const oneToOneMatrixTrace = data.action === "getOneToOneProgressMatrix" ? {
+    requestId: normalizeOneToOneMatrixDiagnosticRequestId_(data.diagnosticRequestId),
+    startedAt: Date.now(),
+    timings: Object.create(null)
+  } : null;
+  if (oneToOneMatrixTrace) {
+    data.__oneToOneMatrixTrace = oneToOneMatrixTrace;
+    logOneToOneMatrixTrace_(oneToOneMatrixTrace, "START");
+  }
+
   const props = PropertiesService.getScriptProperties();
   const validApiKey = props.getProperty('MY_API_KEY');
 
   if (!data.apiKey || data.apiKey !== validApiKey) {
-    return responseJSON({ result: "error", message: "認証エラー" });
+    const error = { result: "error", message: "認証エラー" };
+    return oneToOneMatrixTrace ? responseOneToOneMatrixTrace_(error, oneToOneMatrixTrace) : responseJSON(error);
   }
 
   const studentProfileActions = ["getStudentProfileSummary", "getStudentProfileKoTore", "getStudentProfileSukimakun", "getStudentProfileOneToOne", "getStudentProfileAcademicResults"];
@@ -3129,10 +3321,12 @@ function doPost(e) {
   const oneToOneProgressActions = ["getOneToOneProgressMatrix", "getOneToOneProgressDetail", "addOneToOneSchoolProgress", "addOneToOneNetzProgress", "correctOneToOneProgressEvent", "voidOneToOneProgressEvent"];
   if (oneToOneProgressActions.includes(data.action)) {
     try {
-      return responseJSON(handleOneToOneProgressAction_(data));
+      const result = handleOneToOneProgressAction_(data);
+      return oneToOneMatrixTrace ? responseOneToOneMatrixTrace_(result, oneToOneMatrixTrace) : responseJSON(result);
     } catch (error) {
       const code = getOneToOneProgressErrorCode_(error);
-      return responseJSON({ result: "error", code, message: code === "AUTHORIZATION_ERROR" ? "この1対1進捗を利用する権限がありません" : String(error && error.message || "入力内容が不正です") });
+      const result = { result: "error", code, message: code === "AUTHORIZATION_ERROR" ? "この1対1進捗を利用する権限がありません" : String(error && error.message || "入力内容が不正です") };
+      return oneToOneMatrixTrace ? responseOneToOneMatrixTrace_(result, oneToOneMatrixTrace) : responseJSON(result);
     }
   }
 

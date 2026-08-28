@@ -100,6 +100,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - 認証・権限: teacherにも期限付き管理セッションを発行するが、既存admin専用actionは引き続き`requireAdminSession()`で保護する。Issue #017はteacher・head-teacher・adminが担当外を含む単一校舎を閲覧・登録できる。担当校舎はアクセス権ではなく、teacher・head-teacherが複数校舎を同時選択する場合の範囲と初期選択・優先表示にだけ使用する。adminは全校舎の単一・複数選択が可能。履歴のVOID化・訂正はadminだけに限定し、受講科目・対象生徒・単元整合性はGAS側で引き続き検証する。担当外校舎や入力不正はセッション失効へ分類せず、無効・期限切れ管理セッション等の認証失敗だけをログアウト対象とする。
 - 校舎アクセス修正確認: 担当外校舎の単一閲覧・学校／ネッツ進捗登録、担当校舎内の複数選択、担当外を含む複数選択の業務エラー化、担当外生徒プロフィール閲覧を、GAS Webアプリ再デプロイ後の実画面で確認済み。
 - 一覧性能改善: `getOneToOneProgressMatrix`が対象生徒・社会分野ごとに進捗イベントと進捗単元の全行を再読込していたN+1を解消。Matrix request内で各シートを1回ずつ読み、`userId × subjectId × fieldId`と`eventId`のメモリ索引を全生徒で共有する。20人の場合の進捗データreadは通常科目で40→2回、社会3分野で120→2回となる。一覧は現在位置summaryのみを返し、履歴・入力詳細は従来どおり操作時にlazy loadする。clasp push、GAS Webアプリ再デプロイ、ローカル実動作確認を完了し、一覧操作待ち時間の改善を確認済み。
+- timeout診断: `getOneToOneProgressMatrix`へ一意な診断IDを付与し、React開始・応答・timeoutと、GAS到達・認証・Matrix・responseの各区間を同じIDで追跡できるようにした。管理セッションのread・lookup・認証context・期限延長writeを個別計測し、個人情報・session tokenをログへ出さない。Axios timeoutは30秒のまま維持し、本番データと進捗計算は変更しない。GAS Webアプリ再デプロイと実環境での再現確認は未実施。
 - API: 一覧、詳細、学校登録、ネッツ登録、admin訂正・無効化の専用actionを追加。`requestId`で同一イベントの二重登録を防止し、Issue #018から再利用できる`getOneToOneProgressState_()`を追加する。既存学校進捗・個トレ進捗APIとデータは変更しない。
 - 本番確認: `setupOneToOneProgressSheets()`実行とGAS再デプロイ済み。木太南 太郎（`037071`）の中1数学で学校最大単元5、ネッツ最大単元3、単元1の復習後も最大位置3を維持すること、授業日・履歴・admin操作・最終進捗ラインUIを利用者が確認済み。
 - Version: 変更なし（Version 4.2.1）。
