@@ -49,6 +49,45 @@ const ACADEMIC_TEST_HEADERS = ["testId", "schoolYear", "testName", "testType", "
 const ACADEMIC_SUBJECTS = ["japanese", "math", "english", "science", "social", "music", "health", "art", "technologyHomeEconomics"];
 const ACADEMIC_RESULT_HEADERS = ["testId", "userId"].concat(ACADEMIC_SUBJECTS, ["createdAt", "updatedAt", "updatedBy"]);
 const ACADEMIC_TEST_TYPES = ["regular", "diagnostic", "other"];
+const KOTORE_CONTENT_SHEET_NAME = "個トレコンテンツ";
+const KOTORE_CONTENT_IMAGE_SHEET_NAME = "個トレコンテンツ画像";
+const PASSWORD_ENTRY_SHEET_NAME = "各種パスワード";
+const KOTORE_CONTENT_LEGACY_HEADERS = ["contentId", "contentType", "title", "draftMarkdown", "publishedMarkdown", "importance", "status", "publishStart", "publishEnd", "createdAt", "createdBy", "updatedAt", "updatedBy", "publishedAt", "publishedBy", "deletedAt"];
+const KOTORE_CONTENT_HEADERS = KOTORE_CONTENT_LEGACY_HEADERS.concat(["draftTitle", "draftImportance", "draftPublishStart", "draftPublishEnd"]);
+const KOTORE_CONTENT_IMAGE_HEADERS = ["imageId", "driveFileId", "originalName", "mimeType", "sizeBytes", "createdAt", "createdBy", "deletedAt", "deletedBy"];
+const PASSWORD_ENTRY_HEADERS = ["passwordEntryId", "category", "serviceName", "school", "url", "loginId", "password", "note", "creatorRule", "sortOrder", "enabled", "createdAt", "createdBy", "updatedAt", "updatedBy", "deletedAt"];
+const KOTORE_CONTENT_TYPES = ["notice", "guide", "menu-guide"];
+const KOTORE_CONTENT_IMPORTANCE = ["normal", "important"];
+const KOTORE_FIXED_CONTENT_IDS = { guide: "kotore-guide", "menu-guide": "kotore-menu-guide" };
+const KOTORE_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const KOTORE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const PASSWORD_MIGRATION_STATUS_PROPERTY = "PASSWORD_MIGRATION_STATUS";
+const PASSWORD_INTEGRITY_MANIFEST_PROPERTY = "PASSWORD_INTEGRITY_MANIFEST";
+const PASSWORD_INTEGRITY_SCHEMA_VERSION = 1;
+const PASSWORD_MIGRATION_STATUSES = ["NOT_MIGRATED", "MIGRATING", "MIGRATED", "FAILED"];
+// Reactのsrc/constants/data.jsに残す従来値と同じ移行元。移行成功後も削除せず、read-back照合に使用する。
+const LEGACY_PASSWORD_MIGRATION_SOURCE = [
+  { passwordEntryId: "password-legacy-service-0001", category: "service", serviceName: "atama＋ ポータル", school: "", url: "https://cloud.atama.plus/portal/login", loginId: "netz校舎番号４桁_admin", password: "1TO1netz", note: "管理者用", creatorRule: "", sortOrder: 0 },
+  { passwordEntryId: "password-legacy-service-0002", category: "service", serviceName: "atama＋ コーチ", school: "", url: "https://cloud.atama.plus/coach/login", loginId: "netzt講師番号６桁", password: "講師番号２回", note: "講師個人用", creatorRule: "", sortOrder: 1 },
+  { passwordEntryId: "password-legacy-service-0003", category: "service", serviceName: "aim@for school", school: "", url: "https://aim-at.com/school/login", loginId: "netz教室番号", password: "1TO1netz", note: "", creatorRule: "", sortOrder: 2 },
+  { passwordEntryId: "password-legacy-service-0004", category: "service", serviceName: "駿台Diverse (コーチ)", school: "", url: "https://coach.diverse.sundai.ac.jp/", loginId: "受講校舎番号４ケタ@edu-netz.com", password: "coach00!", note: "", creatorRule: "", sortOrder: 3 },
+  { passwordEntryId: "password-legacy-service-0005", category: "service", serviceName: "Lepton (教室用)", school: "", url: "https://www.lepton.co.jp/member/login/", loginId: "T00007134", password: "netznetz", note: "", creatorRule: "", sortOrder: 4 },
+  { passwordEntryId: "password-legacy-service-0006", category: "service", serviceName: "情報AIドリル(栗林)", school: "情報AIドリル(栗林)", url: "", loginId: "KKS900148", password: "u1UhZAHv", note: "", creatorRule: "", sortOrder: 5 },
+  { passwordEntryId: "password-legacy-service-0007", category: "service", serviceName: "情報AIドリル(木太南)", school: "情報AIドリル(木太南)", url: "", loginId: "KKS900150", password: "3MNq6h4F", note: "", creatorRule: "", sortOrder: 6 },
+  { passwordEntryId: "password-legacy-service-0008", category: "service", serviceName: "情報AIドリル(水田)", school: "情報AIドリル(水田)", url: "", loginId: "KKS900149", password: "QZhUxf6M", note: "", creatorRule: "", sortOrder: 7 },
+  { passwordEntryId: "password-legacy-service-0009", category: "service", serviceName: "情報AIドリル(番町)", school: "情報AIドリル(番町)", url: "", loginId: "KKS900147", password: "p9HWdTHb", note: "", creatorRule: "", sortOrder: 8 },
+  { passwordEntryId: "password-legacy-service-0010", category: "service", serviceName: "四谷大塚(栗林)", school: "四谷大塚(栗林)", url: "", loginId: "T88790037", password: "", note: "", creatorRule: "", sortOrder: 9 },
+  { passwordEntryId: "password-legacy-service-0011", category: "service", serviceName: "四谷大塚(木太南)", school: "四谷大塚(木太南)", url: "", loginId: "T88790093", password: "", note: "", creatorRule: "", sortOrder: 10 },
+  { passwordEntryId: "password-legacy-service-0012", category: "service", serviceName: "四谷大塚(水田)", school: "四谷大塚(水田)", url: "", loginId: "T88790063", password: "", note: "", creatorRule: "", sortOrder: 11 },
+  { passwordEntryId: "password-legacy-service-0013", category: "service", serviceName: "四谷大塚(番町)", school: "四谷大塚(番町)", url: "", loginId: "T88790131", password: "", note: "", creatorRule: "", sortOrder: 12 },
+  { passwordEntryId: "password-legacy-student-rule-0001", category: "student-rule", serviceName: "atama＋", school: "", url: "https://cloud.atama.plus/student/login", loginId: "netzs生徒番号6ケタ", password: "誕生月日4桁", note: "サービス登録", creatorRule: "各教室", sortOrder: 13 },
+  { passwordEntryId: "password-legacy-student-rule-0002", category: "student-rule", serviceName: "aim＠", school: "", url: "https://aim-at.com/student/login", loginId: "netzs生徒番号6ケタ", password: "netz生徒番号6ケタ", note: "サービス登録", creatorRule: "自動（毎日）", sortOrder: 14 },
+  { passwordEntryId: "password-legacy-student-rule-0003", category: "student-rule", serviceName: "駿台Diverse", school: "", url: "https://student.diverse.sundai.ac.jp/login", loginId: "生徒番号@edu-netz.com", password: "-", note: "サービス登録", creatorRule: "自動（毎日）", sortOrder: 15 },
+  { passwordEntryId: "password-legacy-student-rule-0004", category: "student-rule", serviceName: "PROC (中プロ)", school: "", url: "https://proc-code.com/login", loginId: "生徒番号6ケタ@netz-proc", password: "1TO1netz", note: "サービス登録", creatorRule: "教務ユニット", sortOrder: 16 },
+];
+const KOTORE_CONTENT_TEXT_COLUMNS = [0, 1, 2, 3, 4, 5, 6, 10, 12, 14, 16, 17];
+const KOTORE_IMAGE_TEXT_COLUMNS = [0, 1, 2, 3, 6, 8];
+const PASSWORD_ENTRY_TEXT_COLUMNS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 14];
 // student-appのSUKIMAKUN_CONTENTSおよびstudent-app-log-gasの診断用正本と一致する1:1対応だけをlegacy読取に使用する。
 const SUKIMAKUN_LEGACY_LOG_SHEET_BY_CONTENT_ID = {
   junior_english_quiz: "1問ずつテスト(自習)", kakitan: "書き単", irregular_verbs: "英単語(不規則変化)",
@@ -3257,6 +3296,721 @@ function handleStudentProfileAction_(data) {
   throw new Error("Unknown student profile action");
 }
 
+/* eslint-disable no-undef */
+function createKotoreApiError_(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function requireKotoreStaffSession_(sessionToken) {
+  const session = validateManagementSession(sessionToken, true);
+  if (!["admin", "head-teacher", "teacher"].includes(session.role)) throw createKotoreApiError_("AUTHORIZATION_ERROR", "閲覧権限がありません");
+  return session;
+}
+
+function getOptionalSheet_(sheetName) {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+}
+
+function requireSheetWithHeaders_(sheetName, expectedHeaders) {
+  const sheet = getOptionalSheet_(sheetName);
+  if (!sheet) throw createKotoreApiError_("SETUP_REQUIRED", `${sheetName}のセットアップが必要です`);
+  const actual = sheet.getRange(1, 1, 1, expectedHeaders.length).getValues()[0].map(value => String(value || "").trim());
+  if (actual.some((header, index) => header !== expectedHeaders[index])) throw createKotoreApiError_("DATA_ERROR", `${sheetName}のヘッダーが正式仕様と一致しません`);
+  return sheet;
+}
+
+function createSheetWithHeaders_(sheetName, expectedHeaders) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const existing = spreadsheet.getSheetByName(sheetName);
+  if (existing) return requireSheetWithHeaders_(sheetName, expectedHeaders);
+  const sheet = spreadsheet.insertSheet(sheetName);
+  writeSheetRows_(sheet, 1, [expectedHeaders], expectedHeaders.map((_, index) => index));
+  sheet.setFrozenRows(1);
+  return sheet;
+}
+
+function setSheetTextColumns_(sheet, startRow, rowCount, zeroBasedColumns) {
+  if (!rowCount) return;
+  zeroBasedColumns.forEach(column => sheet.getRange(startRow, column + 1, rowCount, 1).setNumberFormat("@"));
+}
+
+function writeSheetRows_(sheet, startRow, rows, textColumns) {
+  if (!rows.length) return;
+  setSheetTextColumns_(sheet, startRow, rows.length, textColumns);
+  sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+function assertUniqueKotoreContentIds_(contents) {
+  const seen = new Set();
+  contents.forEach(content => {
+    if (!content.contentId || seen.has(content.contentId)) throw createKotoreApiError_("DATA_ERROR", "個トレコンテンツのcontentIdが重複または未設定です");
+    seen.add(content.contentId);
+  });
+}
+
+function serializeDateOrEmpty_(value) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  return isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function normalizeOptionalIsoDate_(value, fieldName) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const date = new Date(text);
+  if (isNaN(date.getTime())) throw createKotoreApiError_("VALIDATION_ERROR", `${fieldName}を正しく指定してください`);
+  return date;
+}
+
+function normalizeKotoreContentInput_(data) {
+  const contentType = String(data.contentType || "").trim();
+  const title = String(data.title || "").trim();
+  const draftMarkdown = String(data.draftMarkdown || "");
+  const importance = String(data.importance || "normal").trim();
+  if (!KOTORE_CONTENT_TYPES.includes(contentType)) throw createKotoreApiError_("VALIDATION_ERROR", "コンテンツ種別が不正です");
+  if (!title || title.length > 120) throw createKotoreApiError_("VALIDATION_ERROR", "タイトルは1文字以上120文字以内で入力してください");
+  if (draftMarkdown.length > 100000) throw createKotoreApiError_("VALIDATION_ERROR", "本文は100,000文字以内で入力してください");
+  if (!KOTORE_CONTENT_IMPORTANCE.includes(importance)) throw createKotoreApiError_("VALIDATION_ERROR", "重要度が不正です");
+  const publishStart = normalizeOptionalIsoDate_(data.publishStart, "公開開始");
+  const publishEnd = normalizeOptionalIsoDate_(data.publishEnd, "公開終了");
+  if (publishStart && publishEnd && publishStart >= publishEnd) throw createKotoreApiError_("VALIDATION_ERROR", "公開終了は公開開始より後にしてください");
+  return { contentType, draftTitle: title, draftMarkdown, draftImportance: importance, draftPublishStart: publishStart, draftPublishEnd: publishEnd };
+}
+
+function rowToKotoreContent_(row, rowNumber, includeDraft) {
+  const content = {
+    contentId: String(row[0] || "").trim(), contentType: String(row[1] || "").trim(), publishedTitle: String(row[2] || "").trim(),
+    publishedMarkdown: String(row[4] || ""), publishedImportance: String(row[5] || "normal"), status: String(row[6] || "draft"),
+    publishedPublishStart: serializeDateOrEmpty_(row[7]), publishedPublishEnd: serializeDateOrEmpty_(row[8]), createdAt: serializeDateOrEmpty_(row[9]),
+    createdBy: String(row[10] || "").trim(), updatedAt: serializeDateOrEmpty_(row[11]), updatedBy: String(row[12] || "").trim(),
+    publishedAt: serializeDateOrEmpty_(row[13]), publishedBy: String(row[14] || "").trim(), deletedAt: serializeDateOrEmpty_(row[15]), rowNumber,
+  };
+  if (includeDraft) {
+    const hasDraftMetadata = Boolean(String(row[16] || "").trim());
+    content.draftTitle = String(hasDraftMetadata ? row[16] : content.publishedTitle || "").trim();
+    content.draftMarkdown = String(row[3] || "");
+    content.draftImportance = String(hasDraftMetadata ? row[17] || "normal" : content.publishedImportance || "normal");
+    content.draftPublishStart = hasDraftMetadata ? serializeDateOrEmpty_(row[18]) : content.publishedPublishStart;
+    content.draftPublishEnd = hasDraftMetadata ? serializeDateOrEmpty_(row[19]) : content.publishedPublishEnd;
+    content.title = content.draftTitle;
+    content.importance = content.draftImportance;
+    content.publishStart = content.draftPublishStart;
+    content.publishEnd = content.draftPublishEnd;
+  }
+  return content;
+}
+
+function readKotoreContents_(includeDraft) {
+  if (!getOptionalSheet_(KOTORE_CONTENT_SHEET_NAME)) return [];
+  const sheet = requireSheetWithHeaders_(KOTORE_CONTENT_SHEET_NAME, KOTORE_CONTENT_HEADERS);
+  if (sheet.getLastRow() < 2) return [];
+  const contents = sheet.getRange(2, 1, sheet.getLastRow() - 1, KOTORE_CONTENT_HEADERS.length).getValues().map((row, index) => rowToKotoreContent_(row, index + 2, includeDraft));
+  assertUniqueKotoreContentIds_(contents);
+  return contents;
+}
+
+function getPublishedKotoreContents_(data) {
+  const session = requireKotoreStaffSession_(data.sessionToken);
+  const requestedTypes = Array.isArray(data.contentTypes) ? data.contentTypes.map(value => String(value || "").trim()) : KOTORE_CONTENT_TYPES;
+  if (requestedTypes.some(value => !KOTORE_CONTENT_TYPES.includes(value))) throw createKotoreApiError_("VALIDATION_ERROR", "コンテンツ種別が不正です");
+  const now = new Date();
+  const published = readKotoreContents_(false).filter(content => !content.deletedAt && content.status === "published" && requestedTypes.includes(content.contentType) && (!content.publishedPublishStart || new Date(content.publishedPublishStart) <= now) && (!content.publishedPublishEnd || now < new Date(content.publishedPublishEnd)));
+  const publicContent = content => ({ contentId: content.contentId, contentType: content.contentType, title: content.publishedTitle, publishedMarkdown: content.publishedMarkdown, importance: content.publishedImportance, publishedAt: content.publishedAt, updatedAt: content.updatedAt });
+  return {
+    result: "success",
+    notices: published.filter(content => content.contentType === "notice").sort((a, b) => String(b.publishedAt).localeCompare(String(a.publishedAt))).map(publicContent),
+    guide: published.find(content => content.contentType === "guide") ? publicContent(published.find(content => content.contentType === "guide")) : null,
+    menuGuide: published.find(content => content.contentType === "menu-guide") ? publicContent(published.find(content => content.contentType === "menu-guide")) : null,
+    serverTime: now.toISOString(), sessionExpiresAt: session.sessionExpiresAt,
+  };
+}
+
+function listKotoreContentsAdmin_(data) {
+  const session = requireAdminSession(data.sessionToken);
+  const contentType = String(data.contentType || "").trim();
+  if (!KOTORE_CONTENT_TYPES.includes(contentType)) throw createKotoreApiError_("VALIDATION_ERROR", "コンテンツ種別が不正です");
+  return { result: "success", contents: readKotoreContents_(true).filter(content => content.contentType === contentType && !content.deletedAt).map(content => { const copy = Object.assign({}, content); delete copy.rowNumber; return copy; }), sessionExpiresAt: session.sessionExpiresAt };
+}
+
+function getKotoreContentAdmin_(data) {
+  const session = requireAdminSession(data.sessionToken);
+  const content = readKotoreContents_(true).find(item => item.contentId === String(data.contentId || "").trim() && !item.deletedAt);
+  if (!content) throw createKotoreApiError_("NOT_FOUND", "対象コンテンツが見つかりません");
+  const result = Object.assign({}, content); delete result.rowNumber;
+  return { result: "success", content: result, sessionExpiresAt: session.sessionExpiresAt };
+}
+
+function contentToRow_(content) {
+  return [content.contentId, content.contentType, content.publishedTitle || "", content.draftMarkdown, content.publishedMarkdown, content.publishedImportance || "normal", content.status, content.publishedPublishStart || "", content.publishedPublishEnd || "", content.createdAt, content.createdBy, content.updatedAt, content.updatedBy, content.publishedAt || "", content.publishedBy || "", content.deletedAt || "", content.draftTitle, content.draftImportance, content.draftPublishStart || "", content.draftPublishEnd || ""];
+}
+
+function mutateKotoreContent_(data, publish) {
+  const admin = requireAdminSession(data.sessionToken);
+  const input = normalizeKotoreContentInput_(data);
+  const lock = LockService.getDocumentLock();
+  try {
+    lock.waitLock(10000);
+    const sheet = createSheetWithHeaders_(KOTORE_CONTENT_SHEET_NAME, KOTORE_CONTENT_HEADERS);
+    const contents = readKotoreContents_(true);
+    const requestedId = String(data.contentId || "").trim();
+    const fixedId = KOTORE_FIXED_CONTENT_IDS[input.contentType] || "";
+    const contentId = fixedId || requestedId || `kotore-notice-${Utilities.getUuid()}`;
+    let existing = contents.find(content => content.contentId === contentId && !content.deletedAt);
+    if (!existing && requestedId && !fixedId) throw createKotoreApiError_("NOT_FOUND", "対象コンテンツが見つかりません");
+    if (existing && existing.contentType !== input.contentType) throw createKotoreApiError_("VALIDATION_ERROR", "コンテンツ種別が一致しません");
+    const expectedUpdatedAt = String(data.expectedUpdatedAt || "").trim();
+    if (existing && (!expectedUpdatedAt || expectedUpdatedAt !== existing.updatedAt)) throw createKotoreApiError_("CONFLICT", "別の更新が反映されています");
+    const now = new Date();
+    const content = existing ? Object.assign({}, existing) : { contentId, contentType: input.contentType, createdAt: now, createdBy: admin.userId, publishedTitle: "", publishedMarkdown: "", publishedImportance: "normal", publishedPublishStart: "", publishedPublishEnd: "", status: "draft", publishedAt: "", publishedBy: "", deletedAt: "" };
+    Object.assign(content, input, { updatedAt: now, updatedBy: admin.userId });
+    if (publish) Object.assign(content, { publishedTitle: input.draftTitle, publishedMarkdown: input.draftMarkdown, publishedImportance: input.draftImportance, publishedPublishStart: input.draftPublishStart, publishedPublishEnd: input.draftPublishEnd, status: "published", publishedAt: now, publishedBy: admin.userId });
+    const row = contentToRow_(content);
+    const targetRow = existing ? existing.rowNumber : sheet.getLastRow() + 1;
+    const snapshot = existing ? sheet.getRange(targetRow, 1, 1, KOTORE_CONTENT_HEADERS.length).getValues() : null;
+    try { writeSheetRows_(sheet, targetRow, [row], KOTORE_CONTENT_TEXT_COLUMNS); }
+    catch (error) { if (snapshot) { try { sheet.getRange(targetRow, 1, 1, snapshot[0].length).setValues(snapshot); } catch { /* best-effort rollback */ } } throw error; }
+    const serialized = rowToKotoreContent_(row, targetRow, true); delete serialized.rowNumber;
+    return { result: "success", content: serialized, sessionExpiresAt: admin.sessionExpiresAt };
+  } finally { if (lock.hasLock()) lock.releaseLock(); }
+}
+
+function deleteKotoreNotice_(data) {
+  const admin = requireAdminSession(data.sessionToken);
+  const lock = LockService.getDocumentLock();
+  try {
+    lock.waitLock(10000);
+    const sheet = requireSheetWithHeaders_(KOTORE_CONTENT_SHEET_NAME, KOTORE_CONTENT_HEADERS);
+    const content = readKotoreContents_(true).find(item => item.contentId === String(data.contentId || "").trim() && !item.deletedAt);
+    if (!content || content.contentType !== "notice") throw createKotoreApiError_("NOT_FOUND", "対象のお知らせが見つかりません");
+    if (!data.expectedUpdatedAt || String(data.expectedUpdatedAt) !== content.updatedAt) throw createKotoreApiError_("CONFLICT", "別の更新が反映されています");
+    const now = new Date(); content.deletedAt = now; content.updatedAt = now; content.updatedBy = admin.userId; content.status = "deleted";
+    const range = sheet.getRange(content.rowNumber, 1, 1, KOTORE_CONTENT_HEADERS.length);
+    const snapshot = range.getValues();
+    try { setSheetTextColumns_(sheet, content.rowNumber, 1, KOTORE_CONTENT_TEXT_COLUMNS); range.setValues([contentToRow_(content)]); }
+    catch (error) { try { range.setValues(snapshot); } catch { /* best-effort rollback */ } throw error; }
+    return { result: "success", contentId: content.contentId, sessionExpiresAt: admin.sessionExpiresAt };
+  } finally { if (lock.hasLock()) lock.releaseLock(); }
+}
+
+function getKotoreContentErrorCode_(error) {
+  if (isManagementAuthorizationError(error)) return "AUTHORIZATION_ERROR";
+  return error && error.code || "DATA_ERROR";
+}
+
+function getKotoreClientErrorMessage_(error, code, fallback) {
+  if (code === "AUTHORIZATION_ERROR") return "管理セッションが無効または期限切れです";
+  return error && error.code ? String(error.message || fallback) : fallback;
+}
+
+function handleKotoreContentAction_(data) {
+  if (data.action === "getPublishedKotoreContents") return getPublishedKotoreContents_(data);
+  if (data.action === "listKotoreContentsAdmin") return listKotoreContentsAdmin_(data);
+  if (data.action === "getKotoreContentAdmin") return getKotoreContentAdmin_(data);
+  if (data.action === "saveKotoreContentDraft") return mutateKotoreContent_(data, false);
+  if (data.action === "publishKotoreContent") return mutateKotoreContent_(data, true);
+  if (data.action === "deleteKotoreNotice") return deleteKotoreNotice_(data);
+  throw createKotoreApiError_("NOT_FOUND", "Unknown kotore content action");
+}
+
+function rowToKotoreImage_(row, rowNumber) {
+  return { imageId: String(row[0] || "").trim(), driveFileId: String(row[1] || "").trim(), originalName: String(row[2] || "").trim(), mimeType: String(row[3] || "").trim(), sizeBytes: Number(row[4]) || 0, createdAt: serializeDateOrEmpty_(row[5]), createdBy: String(row[6] || "").trim(), deletedAt: serializeDateOrEmpty_(row[7]), deletedBy: String(row[8] || "").trim(), rowNumber };
+}
+
+function readKotoreImages_() {
+  if (!getOptionalSheet_(KOTORE_CONTENT_IMAGE_SHEET_NAME)) return [];
+  const sheet = requireSheetWithHeaders_(KOTORE_CONTENT_IMAGE_SHEET_NAME, KOTORE_CONTENT_IMAGE_HEADERS);
+  if (sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, KOTORE_CONTENT_IMAGE_HEADERS.length).getValues().map((row, index) => rowToKotoreImage_(row, index + 2));
+}
+
+function sanitizeKotoreImageName_(name) {
+  return String(name || "image").split("").filter(char => char.charCodeAt(0) >= 32).join("").replace(/[\\/:*?"<>|]/g, "_").trim().slice(0, 180) || "image";
+}
+
+function detectKotoreImageMimeType_(bytes) {
+  const unsigned = index => (Number(bytes[index]) + 256) % 256;
+  if (bytes.length >= 8 && [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((value, index) => unsigned(index) === value)) return "image/png";
+  if (bytes.length >= 3 && unsigned(0) === 0xff && unsigned(1) === 0xd8 && unsigned(2) === 0xff) return "image/jpeg";
+  if (bytes.length >= 6) {
+    const gif = String.fromCharCode(...Array.from({ length: 6 }, (_, index) => unsigned(index)));
+    if (gif === "GIF87a" || gif === "GIF89a") return "image/gif";
+  }
+  if (bytes.length >= 12) {
+    const riff = String.fromCharCode(...Array.from({ length: 4 }, (_, index) => unsigned(index)));
+    const webp = String.fromCharCode(...Array.from({ length: 4 }, (_, index) => unsigned(index + 8)));
+    if (riff === "RIFF" && webp === "WEBP") return "image/webp";
+  }
+  return "";
+}
+
+function handleKotoreImageAction_(data) {
+  if (data.action === "getKotoreContentImage") {
+    const session = requireKotoreStaffSession_(data.sessionToken);
+    const image = readKotoreImages_().find(item => item.imageId === String(data.imageId || "").trim() && !item.deletedAt);
+    if (!image) throw createKotoreApiError_("NOT_FOUND", "画像が見つかりません");
+    const blob = DriveApp.getFileById(image.driveFileId).getBlob();
+    return { result: "success", imageId: image.imageId, mimeType: image.mimeType, base64: Utilities.base64Encode(blob.getBytes()), sessionExpiresAt: session.sessionExpiresAt };
+  }
+  const admin = requireAdminSession(data.sessionToken);
+  if (data.action === "listKotoreContentImagesAdmin") return { result: "success", images: readKotoreImages_().filter(item => !item.deletedAt).map(item => ({ imageId: item.imageId, originalName: item.originalName, mimeType: item.mimeType, sizeBytes: item.sizeBytes, createdAt: item.createdAt })), sessionExpiresAt: admin.sessionExpiresAt };
+  if (data.action === "uploadKotoreContentImage") {
+    const mimeType = String(data.mimeType || "").trim();
+    const base64 = String(data.base64 || "");
+    const declaredSize = Number(data.sizeBytes);
+    if (!KOTORE_IMAGE_MIME_TYPES.includes(mimeType) || !base64 || !Number.isFinite(declaredSize) || declaredSize <= 0 || declaredSize > KOTORE_IMAGE_MAX_BYTES) throw createKotoreApiError_("VALIDATION_ERROR", "画像形式またはサイズが不正です");
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64) || base64.length % 4 !== 0) throw createKotoreApiError_("VALIDATION_ERROR", "画像データが不正です");
+    const estimatedSize = (base64.length * 3 / 4) - (base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0);
+    if (estimatedSize > KOTORE_IMAGE_MAX_BYTES || Math.abs(estimatedSize - declaredSize) > 3) throw createKotoreApiError_("VALIDATION_ERROR", "画像サイズが一致しません");
+    const bytes = Utilities.base64Decode(base64);
+    if (bytes.length <= 0 || bytes.length > KOTORE_IMAGE_MAX_BYTES || Math.abs(bytes.length - declaredSize) > 3) throw createKotoreApiError_("VALIDATION_ERROR", "画像サイズが一致しません");
+    if (detectKotoreImageMimeType_(bytes) !== mimeType) throw createKotoreApiError_("VALIDATION_ERROR", "画像形式とファイル内容が一致しません");
+    const imageId = `kotore-image-${Utilities.getUuid()}`;
+    const originalName = sanitizeKotoreImageName_(data.originalName);
+    const folder = DriveApp.getFolderById(getRequiredScriptProperty("KOTORE_CONTENT_IMAGE_FOLDER_ID"));
+    const metadataLock = LockService.getDocumentLock();
+    let sheet;
+    try {
+      metadataLock.waitLock(10000);
+      sheet = createSheetWithHeaders_(KOTORE_CONTENT_IMAGE_SHEET_NAME, KOTORE_CONTENT_IMAGE_HEADERS);
+    } finally { if (metadataLock.hasLock()) metadataLock.releaseLock(); }
+    const file = folder.createFile(Utilities.newBlob(bytes, mimeType, originalName));
+    try {
+      const lock = LockService.getDocumentLock();
+      try {
+        lock.waitLock(10000);
+        const now = new Date();
+        writeSheetRows_(sheet, sheet.getLastRow() + 1, [[imageId, file.getId(), originalName, mimeType, bytes.length, now, admin.userId, "", ""]], KOTORE_IMAGE_TEXT_COLUMNS);
+        return { result: "success", image: { imageId, originalName, mimeType, sizeBytes: bytes.length, createdAt: now.toISOString() }, sessionExpiresAt: admin.sessionExpiresAt };
+      } finally { if (lock.hasLock()) lock.releaseLock(); }
+    } catch (error) {
+      try { file.setTrashed(true); }
+      catch { throw createKotoreApiError_("DATA_ERROR", "画像情報の保存とDriveファイルの後処理に失敗しました"); }
+      throw error;
+    }
+  }
+  if (data.action === "deleteKotoreContentImage") {
+    const lock = LockService.getDocumentLock();
+    try {
+      lock.waitLock(10000);
+      const image = readKotoreImages_().find(item => item.imageId === String(data.imageId || "").trim() && !item.deletedAt);
+      if (!image) throw createKotoreApiError_("NOT_FOUND", "画像が見つかりません");
+      const reference = `kotore-image://${image.imageId}`;
+      if (readKotoreContents_(true).some(content => !content.deletedAt && (content.draftMarkdown.includes(reference) || content.publishedMarkdown.includes(reference)))) throw createKotoreApiError_("CONFLICT", "コンテンツから参照中の画像は削除できません");
+      const sheet = requireSheetWithHeaders_(KOTORE_CONTENT_IMAGE_SHEET_NAME, KOTORE_CONTENT_IMAGE_HEADERS);
+      const now = new Date(); sheet.getRange(image.rowNumber, 9).setNumberFormat("@"); sheet.getRange(image.rowNumber, 8, 1, 2).setValues([[now, admin.userId]]);
+      try { DriveApp.getFileById(image.driveFileId).setTrashed(true); } catch { /* logical deletion remains authoritative */ }
+      return { result: "success", imageId: image.imageId, sessionExpiresAt: admin.sessionExpiresAt };
+    } finally { if (lock.hasLock()) lock.releaseLock(); }
+  }
+  throw createKotoreApiError_("NOT_FOUND", "Unknown kotore image action");
+}
+
+function rowToPasswordEntry_(row, rowNumber) {
+  return { passwordEntryId: String(row[0] || "").trim(), category: String(row[1] || "service").trim(), serviceName: String(row[2] || "").trim(), school: String(row[3] || "").trim(), url: String(row[4] || "").trim(), loginId: String(row[5] || ""), password: String(row[6] || ""), note: String(row[7] || ""), creatorRule: String(row[8] || ""), sortOrder: Number(row[9]) || 0, enabled: isEnabledValue(row[10]), createdAt: serializeDateOrEmpty_(row[11]), createdBy: String(row[12] || "").trim(), updatedAt: serializeDateOrEmpty_(row[13]), updatedBy: String(row[14] || "").trim(), deletedAt: serializeDateOrEmpty_(row[15]), rowNumber };
+}
+
+function validateRawPasswordEntryRow_(row) {
+  const passwordEntryId = String(row[0] == null ? "" : row[0]).trim();
+  const category = String(row[1] == null ? "" : row[1]).trim();
+  const serviceName = String(row[2] == null ? "" : row[2]).trim();
+  const rawSortOrder = row[9];
+  const sortOrderText = String(rawSortOrder == null ? "" : rawSortOrder).trim();
+  const sortOrder = Number(rawSortOrder);
+  const rawEnabled = row[10];
+  const enabledText = String(rawEnabled == null ? "" : rawEnabled).trim().toUpperCase();
+  const rawDeletedAt = row[15];
+  const isEmptyDeletedAt = rawDeletedAt === "" || rawDeletedAt === null || rawDeletedAt === undefined;
+
+  if (!/^password-[A-Za-z0-9_-]+$/.test(passwordEntryId)) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの項目IDが不正です");
+  if (!["service", "student-rule"].includes(category) || !serviceName) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの必須項目が欠損しています");
+  if (!sortOrderText || !Number.isFinite(sortOrder) || !Number.isInteger(sortOrder) || sortOrder < 0) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの並び順が不正です");
+  if (!(rawEnabled === true || rawEnabled === false || enabledText === "TRUE" || enabledText === "FALSE")) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの有効状態が不正です");
+  if (!isEmptyDeletedAt && (!(rawDeletedAt instanceof Date || typeof rawDeletedAt === "string") || !serializeDateOrEmpty_(rawDeletedAt))) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの削除日時が不正です");
+  return row;
+}
+
+function getPasswordMigrationStatus_() {
+  const value = String(PropertiesService.getScriptProperties().getProperty(PASSWORD_MIGRATION_STATUS_PROPERTY) || "NOT_MIGRATED").trim();
+  return PASSWORD_MIGRATION_STATUSES.includes(value) ? value : "FAILED";
+}
+
+function setPasswordMigrationStatus_(status) {
+  if (!PASSWORD_MIGRATION_STATUSES.includes(status)) throw new Error("Invalid password migration status");
+  PropertiesService.getScriptProperties().setProperty(PASSWORD_MIGRATION_STATUS_PROPERTY, status);
+}
+
+function getPasswordIntegrityManifestRaw_() {
+  return PropertiesService.getScriptProperties().getProperty(PASSWORD_INTEGRITY_MANIFEST_PROPERTY);
+}
+
+function buildPasswordIntegrityManifest_(entries, completedAt) {
+  const activeOrders = new Set();
+  const ids = new Set();
+  const normalized = entries.map(entry => {
+    const passwordEntryId = String(entry.passwordEntryId || "").trim();
+    const category = String(entry.category || "").trim();
+    const serviceName = String(entry.serviceName || "").trim();
+    const sortOrder = Number(entry.sortOrder);
+    const enabled = Boolean(entry.enabled);
+    const deleted = Boolean(entry.deletedAt);
+    if (!/^password-[A-Za-z0-9_-]+$/.test(passwordEntryId) || ids.has(passwordEntryId)) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの項目IDが不正または重複しています");
+    if (!["service", "student-rule"].includes(category) || !serviceName) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの必須項目が欠損しています");
+    if (!Number.isInteger(sortOrder) || sortOrder < 0) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの並び順が不正です");
+    if (enabled && !deleted) {
+      if (activeOrders.has(sortOrder)) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの並び順が重複しています");
+      activeOrders.add(sortOrder);
+    }
+    ids.add(passwordEntryId);
+    return { passwordEntryId, sortOrder, enabled, deleted };
+  }).sort((a, b) => a.passwordEntryId.localeCompare(b.passwordEntryId));
+  if (!normalized.length) throw createKotoreApiError_("DATA_ERROR", "移行済みの各種パスワードにデータがありません");
+  return {
+    schemaVersion: PASSWORD_INTEGRITY_SCHEMA_VERSION,
+    expectedCount: normalized.length,
+    entries: normalized,
+    migrationCompletedAt: String(completedAt || new Date().toISOString()),
+    integrityUpdatedAt: new Date().toISOString(),
+  };
+}
+
+function parsePasswordIntegrityManifest_(raw) {
+  if (!raw) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの整合性情報が見つかりません");
+  let manifest;
+  try { manifest = JSON.parse(raw); }
+  catch { throw createKotoreApiError_("DATA_ERROR", "各種パスワードの整合性情報が不正です"); }
+  if (!manifest || manifest.schemaVersion !== PASSWORD_INTEGRITY_SCHEMA_VERSION || !Number.isInteger(manifest.expectedCount) || manifest.expectedCount <= 0 || !Array.isArray(manifest.entries) || manifest.entries.length !== manifest.expectedCount || !manifest.migrationCompletedAt) throw createKotoreApiError_("DATA_ERROR", "各種パスワードの整合性情報が不正です");
+  return manifest;
+}
+
+function assertPasswordIntegrity_(entries, manifest) {
+  const current = buildPasswordIntegrityManifest_(entries, manifest.migrationCompletedAt);
+  const comparable = value => JSON.stringify({ schemaVersion: value.schemaVersion, expectedCount: value.expectedCount, entries: value.entries });
+  if (comparable(current) !== comparable(manifest)) throw createKotoreApiError_("DATA_ERROR", "各種パスワードのデータと整合性情報が一致しません");
+  return entries;
+}
+
+function savePasswordIntegrityManifest_(entries, completedAt) {
+  const manifest = buildPasswordIntegrityManifest_(entries, completedAt);
+  PropertiesService.getScriptProperties().setProperty(PASSWORD_INTEGRITY_MANIFEST_PROPERTY, JSON.stringify(manifest));
+  return manifest;
+}
+
+function restorePasswordIntegrityManifest_(raw) {
+  const properties = PropertiesService.getScriptProperties();
+  if (raw) properties.setProperty(PASSWORD_INTEGRITY_MANIFEST_PROPERTY, raw);
+  else properties.deleteProperty(PASSWORD_INTEGRITY_MANIFEST_PROPERTY);
+}
+
+function assertPasswordMigrationCompleted_() {
+  const status = getPasswordMigrationStatus_();
+  if (status !== "MIGRATED") throw createKotoreApiError_("MIGRATION_REQUIRED", "各種パスワードの移行確認が完了していません");
+  return status;
+}
+
+function readPasswordEntries_() {
+  const sheet = requireSheetWithHeaders_(PASSWORD_ENTRY_SHEET_NAME, PASSWORD_ENTRY_HEADERS);
+  if (sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, PASSWORD_ENTRY_HEADERS.length).getValues().map((row, index) => rowToPasswordEntry_(validateRawPasswordEntryRow_(row), index + 2));
+}
+
+function readValidatedMigratedPasswordEntries_() {
+  assertPasswordMigrationCompleted_();
+  const manifest = parsePasswordIntegrityManifest_(getPasswordIntegrityManifestRaw_());
+  return assertPasswordIntegrity_(readPasswordEntries_(), manifest);
+}
+
+function rollbackPasswordMutation_(sheet, snapshot, manifestRaw) {
+  try {
+    restorePasswordMigrationSnapshot_(sheet, snapshot);
+    restorePasswordIntegrityManifest_(manifestRaw);
+  } catch {
+    throw createKotoreApiError_("DATA_ERROR", "パスワード項目の更新に失敗し、更新前状態の復元にも失敗しました");
+  }
+}
+
+function serializePasswordEntry_(entry) {
+  const copy = Object.assign({}, entry); delete copy.rowNumber; return copy;
+}
+
+function normalizePasswordEntryInput_(entry) {
+  const source = entry || {};
+  const sortOrder = source.sortOrder === undefined || source.sortOrder === null || source.sortOrder === "" ? 0 : Number(source.sortOrder);
+  const result = { category: String(source.category || "service").trim(), serviceName: String(source.serviceName || "").trim(), school: String(source.school || "").trim(), url: String(source.url || "").trim(), loginId: String(source.loginId || ""), password: String(source.password || ""), note: String(source.note || ""), creatorRule: String(source.creatorRule || ""), sortOrder };
+  if (!["service", "student-rule"].includes(result.category) || !result.serviceName || result.serviceName.length > 120 || result.school.length > 100 || result.url.length > 2000 || result.loginId.length > 250 || result.password.length > 500 || result.note.length > 1000 || result.creatorRule.length > 250 || !Number.isInteger(result.sortOrder) || result.sortOrder < 0) throw createKotoreApiError_("VALIDATION_ERROR", "パスワード項目の入力内容が不正です");
+  if (result.url && !/^https?:\/\/[^\s]+$/i.test(result.url)) throw createKotoreApiError_("VALIDATION_ERROR", "URLはhttpまたはhttpsで指定してください");
+  return result;
+}
+
+function passwordEntryToRow_(entry) {
+  return [entry.passwordEntryId, entry.category, entry.serviceName, entry.school, entry.url, entry.loginId, entry.password, entry.note, entry.creatorRule, entry.sortOrder, entry.enabled, entry.createdAt, entry.createdBy, entry.updatedAt, entry.updatedBy, entry.deletedAt || ""];
+}
+
+function handlePasswordEntryAction_(data) {
+  if (data.action === "getPasswordEntries") {
+    const session = requireKotoreStaffSession_(data.sessionToken);
+    const migrationStatus = getPasswordMigrationStatus_();
+    if (migrationStatus !== "MIGRATED") return { result: "success", source: "legacy", migrationStatus, entries: [], readOnly: true, sessionExpiresAt: session.sessionExpiresAt };
+    if (!getOptionalSheet_(PASSWORD_ENTRY_SHEET_NAME)) throw createKotoreApiError_("DATA_ERROR", "移行済みの各種パスワードシートが見つかりません");
+    return { result: "success", source: "spreadsheet", migrationStatus, entries: readValidatedMigratedPasswordEntries_().filter(entry => entry.enabled && !entry.deletedAt).sort((a, b) => a.sortOrder - b.sortOrder).map(serializePasswordEntry_), readOnly: false, sessionExpiresAt: session.sessionExpiresAt };
+  }
+  const admin = requireAdminSession(data.sessionToken);
+  assertPasswordMigrationCompleted_();
+  const lock = LockService.getDocumentLock();
+  try {
+    lock.waitLock(10000);
+    assertPasswordMigrationCompleted_();
+    const sheet = requireSheetWithHeaders_(PASSWORD_ENTRY_SHEET_NAME, PASSWORD_ENTRY_HEADERS);
+    const entries = readValidatedMigratedPasswordEntries_();
+    const dataSnapshot = sheet.getRange(2, 1, sheet.getLastRow() - 1, PASSWORD_ENTRY_HEADERS.length).getValues();
+    const manifestSnapshot = getPasswordIntegrityManifestRaw_();
+    const completedAt = parsePasswordIntegrityManifest_(manifestSnapshot).migrationCompletedAt;
+    if (data.action === "createPasswordEntry" || data.action === "updatePasswordEntry") {
+      const input = normalizePasswordEntryInput_(data.entry);
+      const requestedId = String(data.entry && data.entry.passwordEntryId || "").trim();
+      if (data.action === "updatePasswordEntry" && !requestedId) throw createKotoreApiError_("VALIDATION_ERROR", "更新対象IDを指定してください");
+      if (data.action === "createPasswordEntry" && requestedId) throw createKotoreApiError_("VALIDATION_ERROR", "新規作成時に既存IDは指定できません");
+      const existing = requestedId ? entries.find(entry => entry.passwordEntryId === requestedId && !entry.deletedAt) : null;
+      if (requestedId && !existing) throw createKotoreApiError_("NOT_FOUND", "対象項目が見つかりません");
+      if (existing && (!data.expectedUpdatedAt || String(data.expectedUpdatedAt) !== existing.updatedAt)) throw createKotoreApiError_("CONFLICT", "別の更新が反映されています");
+      const now = new Date();
+      const entry = existing ? Object.assign({}, existing, input, { updatedAt: now, updatedBy: admin.userId }) : Object.assign({ passwordEntryId: `password-entry-${Utilities.getUuid()}`, enabled: true, createdAt: now, createdBy: admin.userId, updatedAt: now, updatedBy: admin.userId, deletedAt: "" }, input);
+      const targetRow = existing ? existing.rowNumber : sheet.getLastRow() + 1;
+      const range = sheet.getRange(targetRow, 1, 1, PASSWORD_ENTRY_HEADERS.length);
+      try {
+        setSheetTextColumns_(sheet, targetRow, 1, PASSWORD_ENTRY_TEXT_COLUMNS); range.setValues([passwordEntryToRow_(entry)]);
+        savePasswordIntegrityManifest_(readPasswordEntries_(), completedAt);
+      } catch (error) { rollbackPasswordMutation_(sheet, dataSnapshot, manifestSnapshot); throw error; }
+      return { result: "success", entry: serializePasswordEntry_(rowToPasswordEntry_(passwordEntryToRow_(entry), targetRow)), sessionExpiresAt: admin.sessionExpiresAt };
+    }
+    if (data.action === "deletePasswordEntry") {
+      const entry = entries.find(item => item.passwordEntryId === String(data.passwordEntryId || "").trim() && !item.deletedAt);
+      if (!entry) throw createKotoreApiError_("NOT_FOUND", "対象項目が見つかりません");
+      if (!data.expectedUpdatedAt || String(data.expectedUpdatedAt) !== entry.updatedAt) throw createKotoreApiError_("CONFLICT", "別の更新が反映されています");
+      const now = new Date(); entry.enabled = false; entry.deletedAt = now; entry.updatedAt = now; entry.updatedBy = admin.userId;
+      const range = sheet.getRange(entry.rowNumber, 1, 1, PASSWORD_ENTRY_HEADERS.length);
+      try {
+        setSheetTextColumns_(sheet, entry.rowNumber, 1, PASSWORD_ENTRY_TEXT_COLUMNS); range.setValues([passwordEntryToRow_(entry)]);
+        savePasswordIntegrityManifest_(readPasswordEntries_(), completedAt);
+      } catch (error) { rollbackPasswordMutation_(sheet, dataSnapshot, manifestSnapshot); throw error; }
+      return { result: "success", passwordEntryId: entry.passwordEntryId, sessionExpiresAt: admin.sessionExpiresAt };
+    }
+    if (data.action === "reorderPasswordEntries") {
+      const ids = Array.isArray(data.passwordEntryIds) ? data.passwordEntryIds.map(value => String(value || "").trim()) : [];
+      const active = entries.filter(entry => entry.enabled && !entry.deletedAt);
+      if (ids.length !== active.length || new Set(ids).size !== ids.length || active.some(entry => !ids.includes(entry.passwordEntryId))) throw createKotoreApiError_("VALIDATION_ERROR", "並び順の対象が一致しません");
+      const expectedUpdatedAtById = data.expectedUpdatedAtById && typeof data.expectedUpdatedAtById === "object" ? data.expectedUpdatedAtById : {};
+      if (active.some(entry => String(expectedUpdatedAtById[entry.passwordEntryId] || "") !== entry.updatedAt)) throw createKotoreApiError_("CONFLICT", "別の更新が反映されています");
+      const now = new Date();
+      const range = sheet.getRange(2, 1, entries.length, PASSWORD_ENTRY_HEADERS.length);
+      const nextRows = dataSnapshot.map(row => row.slice());
+      ids.forEach((id, index) => { const entry = active.find(item => item.passwordEntryId === id); entry.sortOrder = index + 1; entry.updatedAt = now; entry.updatedBy = admin.userId; nextRows[entry.rowNumber - 2] = passwordEntryToRow_(entry); });
+      try {
+        setSheetTextColumns_(sheet, 2, nextRows.length, PASSWORD_ENTRY_TEXT_COLUMNS); range.setValues(nextRows);
+        savePasswordIntegrityManifest_(readPasswordEntries_(), completedAt);
+      } catch (error) { rollbackPasswordMutation_(sheet, dataSnapshot, manifestSnapshot); throw error; }
+      return { result: "success", passwordEntryIds: ids, sessionExpiresAt: admin.sessionExpiresAt };
+    }
+    throw createKotoreApiError_("NOT_FOUND", "Unknown password entry action");
+  } finally { if (lock.hasLock()) lock.releaseLock(); }
+}
+
+function previewKotoreContentSetup() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  return { contentSheetExists: Boolean(spreadsheet.getSheetByName(KOTORE_CONTENT_SHEET_NAME)), imageSheetExists: Boolean(spreadsheet.getSheetByName(KOTORE_CONTENT_IMAGE_SHEET_NAME)), imageFolderPropertyConfigured: Boolean(PropertiesService.getScriptProperties().getProperty("KOTORE_CONTENT_IMAGE_FOLDER_ID")) };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runPreviewKotoreContentSetupSummary() { console.log(JSON.stringify(previewKotoreContentSetup(), null, 2)); }
+
+function setupKotoreContentSheets() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const specs = [{ name: KOTORE_CONTENT_SHEET_NAME, headers: KOTORE_CONTENT_HEADERS }, { name: KOTORE_CONTENT_IMAGE_SHEET_NAME, headers: KOTORE_CONTENT_IMAGE_HEADERS }];
+  const created = [];
+  specs.forEach(spec => {
+    const sheet = spreadsheet.getSheetByName(spec.name);
+    if (!sheet || sheet.getLastRow() === 0) return;
+    const actual = sheet.getRange(1, 1, 1, spec.headers.length).getValues()[0].map(value => String(value || "").trim());
+    const legacyContentHeader = spec.name === KOTORE_CONTENT_SHEET_NAME && KOTORE_CONTENT_LEGACY_HEADERS.every((header, index) => actual[index] === header) && actual.slice(KOTORE_CONTENT_LEGACY_HEADERS.length).every(header => !header);
+    if (!legacyContentHeader && actual.some((header, index) => header !== spec.headers[index])) throw new Error(`${spec.name}の既存ヘッダーが正式仕様と一致しません`);
+  });
+  const currentContentSheet = spreadsheet.getSheetByName(KOTORE_CONTENT_SHEET_NAME);
+  if (currentContentSheet && currentContentSheet.getLastRow() > 1) {
+    const ids = currentContentSheet.getRange(2, 1, currentContentSheet.getLastRow() - 1, 1).getValues().flat().map(value => String(value || "").trim());
+    if (ids.some(id => !id) || new Set(ids).size !== ids.length) throw createKotoreApiError_("DATA_ERROR", "個トレコンテンツのcontentIdが重複または未設定です");
+  }
+  specs.forEach(spec => {
+    let sheet = spreadsheet.getSheetByName(spec.name);
+    if (!sheet) { sheet = spreadsheet.insertSheet(spec.name); created.push(spec.name); }
+    sheet.getRange(1, 1, 1, spec.headers.length).setValues([spec.headers]); sheet.setFrozenRows(1);
+  });
+  const contentSheet = spreadsheet.getSheetByName(KOTORE_CONTENT_SHEET_NAME);
+  const existingIdValues = contentSheet.getLastRow() > 1 ? contentSheet.getRange(2, 1, contentSheet.getLastRow() - 1, 1).getValues().flat().map(value => String(value || "").trim()) : [];
+  const existingIds = new Set(existingIdValues);
+  if (existingIdValues.some(id => !id) || existingIds.size !== existingIdValues.length) throw createKotoreApiError_("DATA_ERROR", "個トレコンテンツのcontentIdが重複または未設定です");
+  const now = new Date();
+  Object.keys(KOTORE_FIXED_CONTENT_IDS).forEach(type => {
+    const id = KOTORE_FIXED_CONTENT_IDS[type];
+    if (!existingIds.has(id)) {
+      const title = type === "guide" ? "個トレの仕方" : "個トレメニューの使い方";
+      writeSheetRows_(contentSheet, contentSheet.getLastRow() + 1, [[id, type, "", "", "", "normal", "draft", "", "", now, "system:setup", now, "system:setup", "", "", "", title, "normal", "", ""]], KOTORE_CONTENT_TEXT_COLUMNS);
+      existingIds.add(id);
+    }
+  });
+  return { createdSheets: created, fixedPagesInitialized: Object.keys(KOTORE_FIXED_CONTENT_IDS).length };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runSetupKotoreContentSheetsSummary() { console.log(JSON.stringify(setupKotoreContentSheets(), null, 2)); }
+
+function previewPasswordMigration() {
+  const sheet = getOptionalSheet_(PASSWORD_ENTRY_SHEET_NAME);
+  return { sheetExists: Boolean(sheet), currentDataRows: sheet ? Math.max(0, sheet.getLastRow() - 1) : 0, sourceConfigured: true, sourceCount: LEGACY_PASSWORD_MIGRATION_SOURCE.length, migrationStatus: getPasswordMigrationStatus_() };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runPreviewPasswordMigrationSummary() { console.log(JSON.stringify(previewPasswordMigration(), null, 2)); }
+
+function setupPasswordManagementSheets() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = spreadsheet.getSheetByName(PASSWORD_ENTRY_SHEET_NAME);
+  const created = !sheet;
+  if (!sheet) {
+    if (getPasswordMigrationStatus_() === "MIGRATED") throw new Error("移行済みの各種パスワードシートが見つかりません");
+    sheet = spreadsheet.insertSheet(PASSWORD_ENTRY_SHEET_NAME);
+  }
+  else if (sheet.getLastRow() > 0) {
+    const actual = sheet.getRange(1, 1, 1, PASSWORD_ENTRY_HEADERS.length).getValues()[0].map(value => String(value || "").trim());
+    if (actual.some((header, index) => header !== PASSWORD_ENTRY_HEADERS[index])) throw new Error("各種パスワードの既存ヘッダーが正式仕様と一致しません");
+  }
+  sheet.getRange(1, 1, 1, PASSWORD_ENTRY_HEADERS.length).setValues([PASSWORD_ENTRY_HEADERS]); sheet.setFrozenRows(1);
+  if (!PropertiesService.getScriptProperties().getProperty(PASSWORD_MIGRATION_STATUS_PROPERTY)) setPasswordMigrationStatus_("NOT_MIGRATED");
+  return { created, dataRows: Math.max(0, sheet.getLastRow() - 1), migrationStatus: getPasswordMigrationStatus_() };
+}
+
+// eslint-disable-next-line no-unused-vars
+function runSetupPasswordManagementSheetsSummary() { console.log(JSON.stringify(setupPasswordManagementSheets(), null, 2)); }
+
+function buildPasswordMigrationEntries_(source, now) {
+  if (!Array.isArray(source)) throw createKotoreApiError_("VALIDATION_ERROR", "PASSWORD_MIGRATION_JSON must be an array");
+  if (!source.length) throw createKotoreApiError_("VALIDATION_ERROR", "PASSWORD_MIGRATION_JSONに移行対象がありません");
+  const ids = new Set();
+  const orders = new Set();
+  return source.map((item, index) => {
+    const input = normalizePasswordEntryInput_(item);
+    const requestedId = String(item && item.passwordEntryId || "").trim();
+    const passwordEntryId = requestedId || `password-migration-${String(index + 1).padStart(4, "0")}`;
+    const hasSortOrder = item && Object.prototype.hasOwnProperty.call(item, "sortOrder") && item.sortOrder !== "" && item.sortOrder !== null;
+    const sortOrder = hasSortOrder ? Number(item.sortOrder) : index;
+    if (!/^password-[A-Za-z0-9_-]+$/.test(passwordEntryId) || ids.has(passwordEntryId)) throw createKotoreApiError_("VALIDATION_ERROR", "移行元のパスワード項目IDが不正または重複しています");
+    if (!Number.isInteger(sortOrder) || sortOrder < 0 || orders.has(sortOrder)) throw createKotoreApiError_("VALIDATION_ERROR", "移行元の並び順が不正または重複しています");
+    ids.add(passwordEntryId); orders.add(sortOrder);
+    return Object.assign({}, input, { passwordEntryId, sortOrder, enabled: true, createdAt: now, createdBy: "system:migration", updatedAt: now, updatedBy: "system:migration", deletedAt: "" });
+  });
+}
+
+function getLegacyPasswordMigrationSource_() {
+  return LEGACY_PASSWORD_MIGRATION_SOURCE.map(item => Object.assign({}, item));
+}
+
+function preservePasswordMigrationSource_(source) {
+  const properties = PropertiesService.getScriptProperties();
+  const expected = JSON.stringify(source);
+  const existing = properties.getProperty("PASSWORD_MIGRATION_JSON");
+  if (existing) {
+    let parsed;
+    try { parsed = JSON.parse(existing); }
+    catch { throw createKotoreApiError_("VALIDATION_ERROR", "PASSWORD_MIGRATION_JSON is invalid JSON"); }
+    if (JSON.stringify(parsed) !== expected) throw createKotoreApiError_("VALIDATION_ERROR", "PASSWORD_MIGRATION_JSONが現在の従来データと一致しません");
+  } else properties.setProperty("PASSWORD_MIGRATION_JSON", expected);
+}
+
+function passwordMigrationComparable_(entry) {
+  return [entry.passwordEntryId, entry.category, entry.serviceName, entry.school, entry.url, entry.loginId, entry.password, entry.note, entry.creatorRule, entry.sortOrder, Boolean(entry.enabled)];
+}
+
+function assertPasswordMigrationReadBack_(expected, actual) {
+  if (expected.length !== actual.length) throw createKotoreApiError_("DATA_ERROR", "移行後の件数が一致しません");
+  expected.forEach((entry, index) => {
+    if (JSON.stringify(passwordMigrationComparable_(entry)) !== JSON.stringify(passwordMigrationComparable_(actual[index]))) throw createKotoreApiError_("DATA_ERROR", `移行後の内容が一致しません（${index + 1}件目）`);
+  });
+}
+
+function isPasswordMigrationPrefix_(expected, actual) {
+  if (actual.length > expected.length) return false;
+  return actual.every((entry, index) => JSON.stringify(passwordMigrationComparable_(entry)) === JSON.stringify(passwordMigrationComparable_(expected[index])));
+}
+
+function clearPasswordDataRows_(sheet) {
+  const count = Math.max(0, sheet.getLastRow() - 1);
+  if (count) sheet.getRange(2, 1, count, PASSWORD_ENTRY_HEADERS.length).clearContent();
+}
+
+function restorePasswordMigrationSnapshot_(sheet, snapshot) {
+  clearPasswordDataRows_(sheet);
+  if (snapshot.length) writeSheetRows_(sheet, 2, snapshot, PASSWORD_ENTRY_TEXT_COLUMNS);
+}
+
+function migratePasswordConstants() {
+  const lock = LockService.getDocumentLock();
+  let sheet = null;
+  let snapshot = [];
+  let writeStarted = false;
+  let migrationStarted = false;
+  try {
+    lock.waitLock(10000);
+    const currentStatus = getPasswordMigrationStatus_();
+    if (currentStatus === "MIGRATED") throw createKotoreApiError_("CONFLICT", "各種パスワードは移行済みです");
+    const source = getLegacyPasswordMigrationSource_();
+    setPasswordMigrationStatus_("MIGRATING");
+    migrationStarted = true;
+    PropertiesService.getScriptProperties().deleteProperty(PASSWORD_INTEGRITY_MANIFEST_PROPERTY);
+    buildPasswordMigrationEntries_(source, new Date());
+    preservePasswordMigrationSource_(source);
+    sheet = requireSheetWithHeaders_(PASSWORD_ENTRY_SHEET_NAME, PASSWORD_ENTRY_HEADERS);
+    snapshot = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, PASSWORD_ENTRY_HEADERS.length).getValues() : [];
+    const now = new Date();
+    const entries = buildPasswordMigrationEntries_(source, now);
+    const rows = entries.map(passwordEntryToRow_);
+    if (snapshot.length) {
+      const currentEntries = snapshot.map((row, index) => rowToPasswordEntry_(row, index + 2));
+      if (!["MIGRATING", "FAILED"].includes(currentStatus) || !isPasswordMigrationPrefix_(entries, currentEntries)) throw createKotoreApiError_("CONFLICT", "各種パスワードシートに移行元と一致しないデータがあります。内容を確認してください");
+      if (currentEntries.length === entries.length) {
+        assertPasswordMigrationReadBack_(entries, currentEntries);
+        savePasswordIntegrityManifest_(currentEntries, now.toISOString());
+        setPasswordMigrationStatus_("MIGRATED");
+        return { migrationStatus: "MIGRATED", sourceCount: source.length, plannedCount: entries.length, writtenCount: currentEntries.length, readBackCount: currentEntries.length, resumed: true };
+      }
+      writeStarted = true;
+      clearPasswordDataRows_(sheet);
+    }
+    writeStarted = true;
+    if (rows.length) writeSheetRows_(sheet, 2, rows, PASSWORD_ENTRY_TEXT_COLUMNS);
+    const readBack = readPasswordEntries_();
+    assertPasswordMigrationReadBack_(entries, readBack);
+    savePasswordIntegrityManifest_(readBack, now.toISOString());
+    setPasswordMigrationStatus_("MIGRATED");
+    return { migrationStatus: "MIGRATED", sourceCount: source.length, plannedCount: entries.length, writtenCount: rows.length, readBackCount: readBack.length };
+  } catch (error) {
+    let rollbackError = null;
+    if (sheet && writeStarted) {
+      try { restorePasswordMigrationSnapshot_(sheet, snapshot); }
+      catch (restoreError) { rollbackError = restoreError; }
+    }
+    if (migrationStarted) {
+      PropertiesService.getScriptProperties().deleteProperty(PASSWORD_INTEGRITY_MANIFEST_PROPERTY);
+      setPasswordMigrationStatus_("FAILED");
+    }
+    if (rollbackError) throw createKotoreApiError_("DATA_ERROR", "パスワード移行に失敗し、移行前状態の復元にも失敗しました");
+    throw error;
+  } finally { if (lock.hasLock()) lock.releaseLock(); }
+}
+
+// eslint-disable-next-line no-unused-vars
+function runMigratePasswordConstantsSummary() { console.log(JSON.stringify(migratePasswordConstants(), null, 2)); }
+/* eslint-enable no-undef */
+
 function responseOneToOneMatrixTrace_(payload, trace) {
   const responseStartedAt = Date.now();
   logOneToOneMatrixTrace_(trace, "RESPONSE_START", { elapsedMs: responseStartedAt - trace.startedAt });
@@ -3295,6 +4049,33 @@ function doPost(e) {
   if (!data.apiKey || data.apiKey !== validApiKey) {
     const error = { result: "error", message: "認証エラー" };
     return oneToOneMatrixTrace ? responseOneToOneMatrixTrace_(error, oneToOneMatrixTrace) : responseJSON(error);
+  }
+
+  const kotoreContentActions = ["getPublishedKotoreContents", "listKotoreContentsAdmin", "getKotoreContentAdmin", "saveKotoreContentDraft", "publishKotoreContent", "deleteKotoreNotice"];
+  if (kotoreContentActions.includes(data.action)) {
+    try { return responseJSON(handleKotoreContentAction_(data)); }
+    catch (error) {
+      const code = getKotoreContentErrorCode_(error);
+      return responseJSON({ result: "error", code, message: getKotoreClientErrorMessage_(error, code, "個トレコンテンツを処理できませんでした") });
+    }
+  }
+
+  const kotoreImageActions = ["uploadKotoreContentImage", "listKotoreContentImagesAdmin", "getKotoreContentImage", "deleteKotoreContentImage"];
+  if (kotoreImageActions.includes(data.action)) {
+    try { return responseJSON(handleKotoreImageAction_(data)); }
+    catch (error) {
+      const code = getKotoreContentErrorCode_(error);
+      return responseJSON({ result: "error", code, message: getKotoreClientErrorMessage_(error, code, "画像を処理できませんでした") });
+    }
+  }
+
+  const passwordEntryActions = ["getPasswordEntries", "createPasswordEntry", "updatePasswordEntry", "deletePasswordEntry", "reorderPasswordEntries"];
+  if (passwordEntryActions.includes(data.action)) {
+    try { return responseJSON(handlePasswordEntryAction_(data)); }
+    catch (error) {
+      const code = getKotoreContentErrorCode_(error);
+      return responseJSON({ result: "error", code, message: getKotoreClientErrorMessage_(error, code, "パスワード項目を処理できませんでした") });
+    }
   }
 
   const studentProfileActions = ["getStudentProfileSummary", "getStudentProfileKoTore", "getStudentProfileSukimakun", "getStudentProfileOneToOne", "getStudentProfileAcademicResults"];

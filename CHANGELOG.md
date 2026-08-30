@@ -16,6 +16,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - Issue #018 生徒プロフィール
   - Issue #019 スキマ君ログ contentId正式保存対応
   - Issue #020 学校成績管理
+  - 個トレメニュー／コンテンツ管理刷新（Issue番号未割当）
 - 主な変更: 生徒ごとの1対1受講科目、学校／ネッツの1対1進捗比較、`userId + contentId`でスキマ君ログを安全に識別する基盤、学校成績の正本管理を整備し、これらを閲覧専用の生徒プロフィールへ統合した。
 - Frontend影響: 1対1受講科目・進捗チェック・学校成績管理・生徒プロフィールの各画面を追加。共通`VersionLabel`の表示は`Version 4.3.0`を維持した。
 - GAS／データ影響: 1対1受講科目・進捗・学校成績の専用シートとAPIを追加。Issue #019はstudent-app-log-gas側で今後のログへ`contentId`を保存する関連基盤であり、gyoumu-appのGAS変更は含まない。
@@ -65,6 +66,19 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### 個トレメニュー／コンテンツ管理刷新（Issue番号未割当）
+
+- 状態: Phase 1〜7のReact・GAS実装とローカル自動検証を作業branchで実施中。Git commit／push、clasp push、GAS Webアプリ再デプロイ、Vercelデプロイ、手動setup／migration、本番データ確認は未実施。
+- 個トレメニュー: 待ちリスト直結画面を「丸付け・質問待ち／個トレ進捗管理／模範解答／お知らせ／個トレの仕方」の5カード型トップへ変更。待ちリストは既存`getNotifications`／`startSupport`／`deleteNotification`を維持し、5秒pollingを子画面表示中だけ実行してunmount時に解除する。個トレ進捗と模範解答は既存コンポーネント・データを内部入口から再利用し、独立サイドバー項目だけを除く。
+- 模範解答: `modelAnswerBooks`と既存`public/pdfs`／`public/covers`を正本として、学年・titleから確定できる科目・教材名による絞り込み、教材一覧、ブラウザPDF viewerの3ペインへ再構成。単元・PDFページ対応は新設せず、外部placeholder画像も使用しない。
+- コンテンツ／Markdown: `個トレコンテンツ`シートを正本とするstaff公開取得とadmin管理actionを追加。`notice`は複数、`guide`と`menu-guide`は固定IDとし、本文・タイトル・重要度・公開期間をdraft／publishedへ分離して、公開操作だけが講師表示値を更新する。公開期間はGASサーバー時刻で判定し、講師レスポンスへ下書きを含めない。同一`contentId`は読取・更新・公開・setupで`DATA_ERROR`として停止する。シート・データ0件でも編集画面を開き、最初のadmin保存時に正式headerを安全に初期化して各コンテンツを作成できる。旧GASが`Unknown action`を返した場合は成功扱いせず、adminへGAS更新が必要な旨を表示する。Reactは`react-markdown`＋GFM＋sanitizerを使用し、生HTMLを有効化せず、リンク・画像URLを制限する。
+- 画像: Script Property `KOTORE_CONTENT_IMAGE_FOLDER_ID`で指定するDriveフォルダと`個トレコンテンツ画像`シートを使用。PNG／JPEG／GIF／WebP、10MB以下に加えてmagic bytesと申告MIMEの一致をGASで検証し、SVG・偽装画像を拒否する。Drive作成はDocumentLock外で行い、シート更新失敗時は作成ファイルをゴミ箱へ移す。Markdownには`kotore-image://imageId`だけを保存し、staff session付き取得結果をobject URLへ変換して破棄する。アップロード成功後は内部参照をカーソル位置へ挿入し、画像一覧では認証取得したthumbnailを表示する。参照中画像の削除を拒否し、Drive IDは一覧・公開レスポンスへ返さない。
+- 管理者メニュー: adminだけに入口と描画を許可し、3種コンテンツ編集と各種パスワード管理を実動カードとして追加。アカウント管理等の指定5カードはdisabledの未実装表示とし、遷移・API呼出を行わない。編集は共通Markdown toolbar、ライブプレビュー、画像管理、公開設定、下書き／公開分離、競合検出、未保存離脱警告を備える。
+- パスワード: `各種パスワード`シート向けstaff閲覧とadmin CRUD／並べ替えactionを追加。Script Propertyの`PASSWORD_MIGRATION_STATUS`を`NOT_MIGRATED／MIGRATING／MIGRATED／FAILED`で管理し、`MIGRATED`以外（新action未反映の旧GAS応答を含む）は既存`data.js`定数17件を講師・adminの双方へ読み取り専用で表示して、GAS側でも全mutationを拒否する。admin画面は移行前の既存データ利用中／移行後のシート利用中を明示する。移行は従来定数と一致する組み込み移行元を使用し、DocumentLock、安定ID・順序検証、一括書込み、全主要項目のread-back完全比較、失敗時snapshot復元を行い、確認用`PASSWORD_MIGRATION_JSON`は本番確認後まで自動削除しない。移行成功時と各CRUD後は、秘密情報を含まないID・sortOrder・有効／削除状態のintegrity manifestを更新し、MIGRATED後の空行・欠損・重複・不明IDをread／mutation前に`DATA_ERROR`として拒否する。コンテンツ、画像metadata、パスワードの自由入力セルは書込み前にプレーンテキスト書式へ設定し、`=+-@`開始値を変更せず往復する。
+- セットアップ: 読み取り専用previewとsummary wrapper、シート作成、固定ページ初期化、パスワード移行用の手動関数を追加。setupはシート・header作成だけで移行完了にはせず、contentId重複時は書込み前に停止する。これらはCodex未実行。Google Sheets／Driveの複数更新に完全な原子性はなく、復元処理自体が失敗した場合は`FAILED`と明確なエラーを残し手動確認が必要。
+- 既存互換: TeacherViewのheader／sidebar shell、季節業務3機能、学校進捗、アプリ利用、1対1進捗、アカウント管理、スキマ君利用設定、スタッフマニュアル、SharePoint、Version表示を維持。既存action名・既存成功レスポンス項目、認証・role・校舎権限、student-app、既存PDF、個トレ進捗保存形式は変更しない。
+- Version: 変更なし（Version 4.3.0）。
 
 ### Issue #021 個トレ ホーム画面UIリニューアル
 

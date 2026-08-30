@@ -1,0 +1,61 @@
+.kotore-admin-settings label {
+  color: #1f2937;
+}
+
+.kotore-admin-settings :is(input, select) {
+  color: #111827;
+  background: #fff;
+  color-scheme: light;
+  -webkit-text-fill-color: #111827;
+}
+
+.kotore-admin-settings input::placeholder {
+  color: #667085;
+  opacity: 1;
+  -webkit-text-fill-color: #667085;
+}
+
+.kotore-admin-settings select option {
+  color: #111827;
+  background: #fff;
+}
+
+.kotore-admin-settings :is(input, select):focus-visible {
+  color: #111827;
+  background: #fff;
+  outline: 2px solid #087a45;
+  outline-offset: 2px;
+  -webkit-text-fill-color: #111827;
+}
+
+.kotore-admin-settings :is(input, select):disabled {
+  color: #667085;
+  background: #f2f4f7;
+  cursor: not-allowed;
+  opacity: 1;
+  -webkit-text-fill-color: #667085;
+}
+
+.kotore-admin-editor__selector .kotore-create-notice-button {
+  border-color: var(--kotore-green, #087a45);
+  background: #fff;
+  color: var(--kotore-green-dark, #006838);
+  font-weight: 600;
+}
+
+.kotore-admin-editor__selector .kotore-create-notice-button:hover {
+  border-color: var(--kotore-green-dark, #006838);
+  background: #eff8f3;
+}
+
+.kotore-admin-editor__selector .kotore-create-notice-button:focus-visible {
+  outline: 2px solid var(--kotore-green, #087a45);
+  outline-offset: 2px;
+}
+
+.kotore-admin-editor__selector .kotore-create-notice-button:disabled {
+  border-color: #d0d5dd;
+  background: #f2f4f7;
+  color: #98a2b3;
+  cursor: not-allowed;
+}

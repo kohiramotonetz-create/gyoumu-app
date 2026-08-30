@@ -1,14 +1,11 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { lazy, Suspense, useState, useEffect, useRef, useMemo } from 'react'
 import axios from 'axios'
-import ModelAnswerShelf from './components/ModelAnswerShelf.jsx'
 import PasswordManager from './components/PasswordManager.jsx'
 import { styles } from './styles/teacherViewStyles.js'
-import NotificationManager from './components/NotificationManager.jsx'
 import TestReviewManager from './components/TestReviewManager.jsx'
-import NoticeManager from './components/NotificationManager.jsx'
+import NoticeManager from './components/NoticeManager.jsx'
 import AccountManagement from './components/AccountManagement.jsx'
 import SchoolProgressTracker from './components/SchoolProgressManager.jsx'
-import KoToreProgressTracker from './components/KoToreProgressTracker.jsx'
 import AppUsageTracker from './components/AppUsageTracker.jsx'
 import SukimakunPermissionManager from './components/SukimakunPermissionManager.jsx'
 import CampTrainingManager from './components/CampTrainingManager.jsx'
@@ -21,12 +18,14 @@ import { parseStudentProfileHash } from './utils/studentProfileNavigation.js'
 import HomeDashboard, { Icon } from './components/HomeDashboard.jsx'
 import './TeacherView.css'
 
+const KoToreMenu = lazy(() => import('./components/KoToreMenu.jsx'))
+const KotoreAdminWorkspace = lazy(() => import('./components/KotoreAdminWorkspace.jsx'))
+
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
 const CAMP_MENU_ITEM = { id: 'camp-training', label: '合宿メニュー', icon: '🏕️' };
 const WIDE_CONTENT_IDS = new Set([
   'app-usage',
-  'kotore-progress',
   'school-progress',
   'one-to-one-progress',
   'academic-results',
@@ -34,11 +33,13 @@ const WIDE_CONTENT_IDS = new Set([
   'camp-training',
   'test-review-check',
   'sukimakun-permissions',
+  'notifications',
+  'kotore-admin',
 ]);
 const MENU_ICON_NAMES = {
-  home: 'home', notices: 'megaphone', notifications: 'target', 'app-usage': 'clipboard', 'kotore-progress': 'chart',
+  home: 'home', notices: 'megaphone', notifications: 'target', 'app-usage': 'clipboard',
   'school-progress': 'school', 'one-to-one-progress': 'chart', 'create-account': 'user', passwords: 'key',
-  manual: 'book', 'takamatsu-staff': 'building', 'model-answer': 'book', 'test-review-check': 'clipboard',
+  manual: 'book', 'takamatsu-staff': 'building', 'test-review-check': 'clipboard', 'kotore-admin': 'settings',
   'sukimakun-permissions': 'settings', 'academic-results': 'chart', 'camp-training': 'alert'
 };
 const MENU_ICON_PATHS = {
@@ -54,13 +55,11 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 1200);
   const [activeContent, setActiveContent] = useState('home');
   const [profileRoute, setProfileRoute] = useState(() => parseStudentProfileHash(window.location.hash));
-  const [notifications, setNotifications] = useState([]);
+  const [notificationRefresh, setNotificationRefresh] = useState(null);
   const schools = ALL_SCHOOLS;
   const availableAssignedSchools = Array.isArray(assignedSchools) && assignedSchools.length > 0
     ? assignedSchools
     : school ? [school] : [];
-  const [selectedSchool, setSelectedSchool] = useState('すべて');
-  const [openPdf, setOpenPdf] = useState(null);
   const timeoutRef = useRef(null);
 
   useEffect(() => {
@@ -72,6 +71,19 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     window.addEventListener('hashchange', syncHash);
     return () => window.removeEventListener('hashchange', syncHash);
   }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const response = await axios.post(GAS_URL, JSON.stringify({ action: 'getNotifications', apiKey: API_KEY, unit }), {
+        headers: { 'Content-Type': 'text/plain' },
+      });
+      if (response.data?.result !== 'success') throw new Error(response.data?.message || '更新失敗');
+      setNotificationRefresh({ id: Date.now(), notifications: Array.isArray(response.data.notifications) ? response.data.notifications : [], error: '' });
+    } catch {
+      setNotificationRefresh({ id: Date.now(), notifications: null, error: '依頼を取得できませんでした' });
+      console.error('更新失敗');
+    }
+  };
 
   const resetTimer = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -93,57 +105,10 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     };
   }, []);
 
-  const fetchNotifications = async () => {
-    try {
-      const response = await axios.post(GAS_URL, JSON.stringify({ 
-        action: "getNotifications", 
-        apiKey: API_KEY,
-        unit: unit 
-      }), { headers: { 'Content-Type': 'text/plain' } });
-      if (response.data.result === "success") setNotifications(response.data.notifications);
-    } catch (e) { console.error("更新失敗"); }
-  };
-
-  const handleStart = async (qNum) => {
-    try {
-      const response = await axios.post(GAS_URL, JSON.stringify({ 
-        action: "startSupport", 
-        apiKey: API_KEY, 
-        unit: unit,
-        queueNumber: qNum
-      }), { headers: { 'Content-Type': 'text/plain' } });
-      
-      if (response.data.result === "success") {
-        fetchNotifications();
-      }
-    } catch (e) { alert("対応開始に失敗しました"); }
-  };
-
-  const handleComplete = async (userId, targetName, qNum) => {
-    try {
-      await axios.post(GAS_URL, JSON.stringify({ 
-        action: "deleteNotification", 
-        apiKey: API_KEY, 
-        userId, 
-        userName: targetName, 
-        unit: unit,
-        queueNumber: qNum
-      }), { headers: { 'Content-Type': 'text/plain' } });
-      fetchNotifications();
-    } catch (e) { alert("削除失敗"); }
-  };
-
-  useEffect(() => {
-    fetchNotifications();
-    const timer = setInterval(fetchNotifications, 5000);
-    return () => clearInterval(timer);
-  }, []);
-
   const baseMenuItems = [
     { id: 'notices', label: 'お知らせ', icon: '📢' },
     { id: 'notifications', label: '個トレメニュー', icon: '🎯' },
     { id: 'app-usage', label: 'アプリ利用チェック', icon: '📱' },
-    { id: 'kotore-progress', label: '個トレ進捗チェック', icon: '🏋️' },
     { id: 'school-progress', label: '学校進捗チェック', icon: '🏫' },
     { id: 'one-to-one-progress', label: '1対1進捗チェック', icon: '🤝' },
   ];
@@ -151,9 +116,9 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   const adminMenuItems = [
     { id: 'create-account', label: 'アカウント管理', icon: '👤' },
     { id: 'passwords', label: '各種パスワード', icon: '🔑' },
+    { id: 'kotore-admin', label: '個トレコンテンツ管理', icon: '⚙️', adminOnly: true },
     { id: 'manual', label: 'スタッフマニュアル', icon: '📖', isLink: true, url: 'https://morning-hoverfly-7d7.notion.site/22187fb597ea8051a617cc4850365bd9?pvs=74' }, 
     { id: 'takamatsu-staff', label: '高松スタッフ(SharePoint)', icon: '🏢', isLink: true, url: 'https://edunetz.sharepoint.com/sites/takamatustaff/SitePages/CollabHome.aspx?ga=1' },
-    { id: 'model-answer', label: '個トレ２（模範解答）', icon: '✅' },
     { id: 'test-review-check', label: 'テスト振り返り確認', icon: '📝' },
     { id: 'sukimakun-permissions', label: 'スキマ君利用設定', icon: '⚙️', adminOnly: true },
     { id: 'academic-results', label: '学校成績管理', icon: '📊', adminOnly: true },
@@ -170,9 +135,9 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   }, [role]);
 
   const navSections = [
-    { label:'日常業務', ids:['notifications','kotore-progress','school-progress','app-usage','one-to-one-progress','model-answer'] },
+    { label:'日常業務', ids:['notifications','school-progress','app-usage','one-to-one-progress'] },
     { label:'季節業務', ids:['camp-training','test-review-check','academic-results'] },
-    { label:'管理業務', ids:['create-account','sukimakun-permissions','passwords'] },
+    { label:'管理業務', ids:['create-account','sukimakun-permissions','passwords','kotore-admin'] },
     { label:'資料・情報', ids:['notices','manual','takamatsu-staff'] },
   ];
   const chooseContent = (item) => {
@@ -244,15 +209,17 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
             )}
 
             {activeContent === 'notifications' && (
-              <NotificationManager 
-                notifications={notifications}
+              <Suspense fallback={<div role="status">個トレメニューを読み込み中…</div>}><KoToreMenu
+                GAS_URL={GAS_URL}
+                API_KEY={API_KEY}
+                sessionToken={sessionToken}
+                unit={unit}
                 schools={schools}
-                selectedSchool={selectedSchool}
-                setSelectedSchool={setSelectedSchool}
-                handleStart={handleStart}
-                handleComplete={handleComplete}
+                assignedSchools={availableAssignedSchools}
                 styles={styles}
-              />
+                notificationRefresh={notificationRefresh}
+                onSessionExpired={handleLogout}
+              /></Suspense>
             )}
 
             {activeContent === 'test-review-check' && (role === 'admin' || role === 'head-teacher') && (
@@ -299,11 +266,11 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
             )}
 
             {activeContent === 'passwords' && (
-              <PasswordManager styles={styles} />
+              <PasswordManager GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} role={role} onSessionExpired={handleLogout} />
             )}
 
-            {activeContent === 'model-answer' && (
-              <ModelAnswerShelf setOpenPdf={setOpenPdf} styles={styles} />
+            {activeContent === 'kotore-admin' && role === 'admin' && (
+              <Suspense fallback={<div role="status">管理者メニューを読み込み中…</div>}><KotoreAdminWorkspace role={role} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={handleLogout} /></Suspense>
             )}
 
             {activeContent === 'school-progress' && (
@@ -327,15 +294,6 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
               />
             )}
 
-            {activeContent === 'kotore-progress' && (
-               <KoToreProgressTracker 
-                styles={styles} 
-                GAS_URL={GAS_URL} 
-                API_KEY={API_KEY} 
-                assignedSchools={availableAssignedSchools}
-              />
-            )}
-
             {activeContent === 'app-usage' && (
               <AppUsageTracker 
                 styles={styles} 
@@ -347,18 +305,6 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
             </>}
           </div>
         </main>
-
-      {openPdf && (
-        <div style={styles.modalOverlay} onClick={() => setOpenPdf(null)}>
-          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <button style={styles.closeBtn} onClick={() => setOpenPdf(null)}>×</button>
-            <div style={{ width: '100%', height: '100%', overflowY: 'auto' }}>
-              <iframe src={openPdf} style={{ width: '100%', height: '100%', minHeight: '1000px', border: 'none' }} title="PDF Viewer" />
-            </div>
-            <button onClick={() => window.open(openPdf, '_blank')} style={styles.modalFullBtn}>全画面で開く ↗</button>
-          </div>
-        </div>
-      )}
 
       {activeContent !== 'home' && <VersionLabel />}
     </div>
