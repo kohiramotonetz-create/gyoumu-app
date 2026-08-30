@@ -466,10 +466,9 @@ test('画像magic bytesはPNG・JPEG・GIF・WebPだけを判定しSVGを拒否�
 })
 
 test('画像uploadはDrive作成をlock外で行いMIME不一致を拒否する', () => {
-  const { context, sheets, isLockHeld } = makeEnvironment()
+  const { context, sheets, isLockHeld } = makeEnvironment({ properties: { KOTORE_CONTENT_IMAGE_FOLDER_ID: 'folder-id' } })
   let driveCreatedWhileLocked = null
   context.DriveApp = { getFolderById: () => ({ createFile: blob => { driveCreatedWhileLocked = isLockHeld(); return { getId: () => 'file-id', setTrashed: () => {}, getBlob: () => blob } } }) }
-  context.getRequiredScriptProperty = () => 'folder-id'
   const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
   context.__upload = { action: 'uploadKotoreContentImage', sessionToken: 'token', mimeType: 'image/png', base64: Buffer.from(png).toString('base64'), sizeBytes: png.length, originalName: '=image.png' }
   assert.equal(vm.runInContext('handleKotoreImageAction_(__upload).result', context), 'success')
@@ -478,6 +477,45 @@ test('画像uploadはDrive作成をlock外で行いMIME不一致を拒否する'
   assert.equal(sheets['個トレコンテンツ画像'].rows[1][2], '=image.png')
   context.__upload = { ...context.__upload, mimeType: 'image/jpeg' }
   assert.throws(() => vm.runInContext('handleKotoreImageAction_(__upload)', context), error => error.code === 'VALIDATION_ERROR')
+})
+
+test('画像uploadは保存先未設定・Drive取得失敗・Drive作成失敗を安全な分類で返す', () => {
+  const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  const upload = { action: 'uploadKotoreContentImage', sessionToken: 'token', mimeType: 'image/png', base64: Buffer.from(png).toString('base64'), sizeBytes: png.length, originalName: 'image.png' }
+
+  const missing = makeEnvironment()
+  missing.context.__upload = upload
+  assert.throws(() => vm.runInContext('handleKotoreImageAction_(__upload)', missing.context), error => error.code === 'IMAGE_STORAGE_NOT_CONFIGURED')
+
+  const inaccessible = makeEnvironment({ properties: { KOTORE_CONTENT_IMAGE_FOLDER_ID: ' folder-id ' } })
+  inaccessible.context.DriveApp = { getFolderById: () => { throw new Error('sensitive Drive detail') } }
+  inaccessible.context.__upload = upload
+  assert.throws(() => vm.runInContext('handleKotoreImageAction_(__upload)', inaccessible.context), error => error.code === 'IMAGE_STORAGE_ACCESS_ERROR' && !/sensitive/.test(error.message))
+
+  const createFailure = makeEnvironment({ properties: { KOTORE_CONTENT_IMAGE_FOLDER_ID: ' folder-id ' } })
+  let receivedFolderId = ''
+  createFailure.context.DriveApp = { getFolderById: id => { receivedFolderId = id; return { createFile: () => { throw new Error('sensitive Drive detail') } } } }
+  createFailure.context.__upload = upload
+  assert.throws(() => vm.runInContext('handleKotoreImageAction_(__upload)', createFailure.context), error => error.code === 'IMAGE_UPLOAD_ERROR' && !/sensitive/.test(error.message))
+  assert.equal(receivedFolderId, 'folder-id')
+})
+
+test('画像metadata保存失敗時は作成済みDriveファイルをcleanupして安全なエラーを返す', () => {
+  const { context, sheets } = makeEnvironment({ properties: { KOTORE_CONTENT_IMAGE_FOLDER_ID: 'folder-id' } })
+  const imageSheet = makeSheet([Array.from(vm.runInContext('KOTORE_CONTENT_IMAGE_HEADERS', context))])
+  const getRange = imageSheet.getRange
+  imageSheet.getRange = (row, ...args) => {
+    const range = getRange(row, ...args)
+    if (row > 1) range.setValues = () => { throw new Error('sensitive Sheet detail') }
+    return range
+  }
+  sheets['個トレコンテンツ画像'] = imageSheet
+  let trashed = false
+  context.DriveApp = { getFolderById: () => ({ createFile: () => ({ getId: () => 'file-id', setTrashed: value => { trashed = value } }) }) }
+  const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  context.__upload = { action: 'uploadKotoreContentImage', sessionToken: 'token', mimeType: 'image/png', base64: Buffer.from(png).toString('base64'), sizeBytes: png.length, originalName: 'image.png' }
+  assert.throws(() => vm.runInContext('handleKotoreImageAction_(__upload)', context), error => error.code === 'IMAGE_METADATA_ERROR' && !/sensitive/.test(error.message))
+  assert.equal(trashed, true)
 })
 
 test('setupは既存contentId重複を検出して固定ページを書き足さない', () => {

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { filterModelAnswerBooks, inferModelAnswerSubject, insertMarkdownAtSelection } from '../src/utils/kotoreContent.js'
+import { extractImageBase64, filterModelAnswerBooks, inferModelAnswerSubject, insertMarkdownAtSelection } from '../src/utils/kotoreContent.js'
 import { externalServiceAccounts, studentAccountRules } from '../src/constants/data.js'
 import { buildLegacyPasswordEntries, isLegacyPasswordResponse } from '../src/utils/passwordEntries.js'
 import { getKotoreManagementErrorMessage } from '../src/utils/managementApi.js'
@@ -97,6 +97,13 @@ test('画像は内部参照・認証取得・object URL解放を使用する', (
   assert.match(manager, /MAX_IMAGE_BYTES = 10 \* 1024 \* 1024/)
   assert.match(manager, /AuthenticatedKotoreImage/)
   assert.match(manager, /data\.image\.imageId/)
+})
+
+test('画像FileReaderのData URLは接頭辞を除いたBase64本体だけをGAS payloadへ渡す', () => {
+  assert.equal(extractImageBase64('data:image/png;base64,iVBORw0KGgo='), 'iVBORw0KGgo=')
+  assert.equal(extractImageBase64('data:image/jpeg;base64,/9j/AA=='), '/9j/AA==')
+  assert.throws(() => extractImageBase64('iVBORw0KGgo='), /画像データ/)
+  assert.throws(() => extractImageBase64('data:image/png;base64,'), /画像データ/)
 })
 
 test('旧GASのUnknown actionはコンテンツ管理者向け更新案内へ変換する', () => {

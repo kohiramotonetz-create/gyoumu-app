@@ -93,3 +93,12 @@ export function insertMarkdownAtSelection(value, start, end, before, after = '',
     selectionEnd: start + before.length + selected.length,
   }
 }
+
+export function extractImageBase64(dataUrl) {
+  const value = String(dataUrl || '')
+  const separator = value.indexOf(',')
+  if (separator < 0 || !/^data:[^;,]+;base64$/i.test(value.slice(0, separator))) throw new Error('画像データを読み取れませんでした')
+  const base64 = value.slice(separator + 1)
+  if (!base64) throw new Error('画像データを読み取れませんでした')
+  return base64
+}

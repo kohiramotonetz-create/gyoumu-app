@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { AuthenticatedKotoreImage } from './common/KotoreMarkdown.jsx'
 import { getKotoreManagementErrorMessage, postManagementAction } from '../utils/managementApi.js'
+import { extractImageBase64 } from '../utils/kotoreContent.js'
 import './KotoreImageManager.css'
 
 const ACCEPTED_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
@@ -9,7 +10,10 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '')
+    reader.onload = () => {
+      try { resolve(extractImageBase64(reader.result)) }
+      catch (error) { reject(error) }
+    }
     reader.onerror = () => reject(new Error('画像を読み込めませんでした'))
     reader.readAsDataURL(file)
   })
@@ -52,7 +56,11 @@ const KotoreImageManager = forwardRef(function KotoreImageManager({ GAS_URL, API
       }
       await load()
       onInsert(`![${file.name || '画像'}](kotore-image://${data.image.imageId})`)
-    } catch (error) { setStatus(previous => ({ ...previous, error: error.message })) }
+    } catch (error) {
+      const message = String(error?.message || '')
+      const safeMessage = message && !/network error|timeout|status code/i.test(message) ? message : '画像のアップロードに失敗しました'
+      setStatus(previous => ({ ...previous, error: safeMessage }))
+    }
     finally { setStatus(previous => ({ ...previous, saving: false })) }
   }
 

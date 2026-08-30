@@ -3545,6 +3545,26 @@ function detectKotoreImageMimeType_(bytes) {
   return "";
 }
 
+function getKotoreContentImageFolder_() {
+  const rawFolderId = PropertiesService.getScriptProperties().getProperty("KOTORE_CONTENT_IMAGE_FOLDER_ID");
+  if (!rawFolderId || String(rawFolderId).trim() === "") {
+    throw createKotoreApiError_("IMAGE_STORAGE_NOT_CONFIGURED", "画像保存先が設定されていません");
+  }
+  try {
+    return DriveApp.getFolderById(String(rawFolderId).trim());
+  } catch (error) {
+    throw createKotoreApiError_("IMAGE_STORAGE_ACCESS_ERROR", "画像保存先へアクセスできません");
+  }
+}
+
+function createKotoreContentImageFile_(folder, bytes, mimeType, originalName) {
+  try {
+    return folder.createFile(Utilities.newBlob(bytes, mimeType, originalName));
+  } catch (error) {
+    throw createKotoreApiError_("IMAGE_UPLOAD_ERROR", "画像のアップロードに失敗しました");
+  }
+}
+
 function handleKotoreImageAction_(data) {
   if (data.action === "getKotoreContentImage") {
     const session = requireKotoreStaffSession_(data.sessionToken);
@@ -3568,14 +3588,19 @@ function handleKotoreImageAction_(data) {
     if (detectKotoreImageMimeType_(bytes) !== mimeType) throw createKotoreApiError_("VALIDATION_ERROR", "画像形式とファイル内容が一致しません");
     const imageId = `kotore-image-${Utilities.getUuid()}`;
     const originalName = sanitizeKotoreImageName_(data.originalName);
-    const folder = DriveApp.getFolderById(getRequiredScriptProperty("KOTORE_CONTENT_IMAGE_FOLDER_ID"));
+    const folder = getKotoreContentImageFolder_();
     const metadataLock = LockService.getDocumentLock();
     let sheet;
     try {
       metadataLock.waitLock(10000);
-      sheet = createSheetWithHeaders_(KOTORE_CONTENT_IMAGE_SHEET_NAME, KOTORE_CONTENT_IMAGE_HEADERS);
+      try {
+        sheet = createSheetWithHeaders_(KOTORE_CONTENT_IMAGE_SHEET_NAME, KOTORE_CONTENT_IMAGE_HEADERS);
+      } catch (error) {
+        if (error && error.code) throw error;
+        throw createKotoreApiError_("IMAGE_METADATA_ERROR", "画像管理情報を準備できませんでした");
+      }
     } finally { if (metadataLock.hasLock()) metadataLock.releaseLock(); }
-    const file = folder.createFile(Utilities.newBlob(bytes, mimeType, originalName));
+    const file = createKotoreContentImageFile_(folder, bytes, mimeType, originalName);
     try {
       const lock = LockService.getDocumentLock();
       try {
@@ -3587,7 +3612,8 @@ function handleKotoreImageAction_(data) {
     } catch (error) {
       try { file.setTrashed(true); }
       catch { throw createKotoreApiError_("DATA_ERROR", "画像情報の保存とDriveファイルの後処理に失敗しました"); }
-      throw error;
+      if (error && error.code) throw error;
+      throw createKotoreApiError_("IMAGE_METADATA_ERROR", "画像管理情報を保存できませんでした");
     }
   }
   if (data.action === "deleteKotoreContentImage") {
