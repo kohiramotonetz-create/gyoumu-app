@@ -3565,6 +3565,57 @@ function createKotoreContentImageFile_(folder, bytes, mimeType, originalName) {
   }
 }
 
+function createKotoreImageFolderDiagnosticError_(stage, error, folderId) {
+  let detail = String(error && error.message || error || "不明なエラー");
+  if (folderId) detail = detail.split(String(folderId)).join("[redacted]");
+  return new Error(`[${stage}] ${detail.slice(0, 500)}`);
+}
+
+function inspectKotoreContentImageFolderAccess_() {
+  const rawFolderId = PropertiesService.getScriptProperties().getProperty("KOTORE_CONTENT_IMAGE_FOLDER_ID");
+  const folderId = String(rawFolderId || "").trim();
+  if (!folderId) throw new Error("[SCRIPT_PROPERTY] 画像保存先が設定されていません");
+
+  let folder;
+  try {
+    folder = DriveApp.getFolderById(folderId);
+  } catch (error) {
+    throw createKotoreImageFolderDiagnosticError_("FOLDER_ACCESS", error, folderId);
+  }
+
+  let testFile;
+  try {
+    const testFileName = `kotore-image-folder-access-test-${Utilities.getUuid()}.txt`;
+    testFile = folder.createFile(testFileName, "Kotore image folder access test.", MimeType.PLAIN_TEXT);
+  } catch (error) {
+    throw createKotoreImageFolderDiagnosticError_("TEST_FILE_CREATE", error, folderId);
+  }
+
+  try {
+    testFile.setTrashed(true);
+  } catch (error) {
+    throw createKotoreImageFolderDiagnosticError_("TEST_FILE_CLEANUP", error, folderId);
+  }
+
+  return {
+    result: "success",
+    folderAccess: "success",
+    testFileCreation: "success",
+    cleanup: "success"
+  };
+}
+
+// GASエディタからの手動実行専用。folder ID等の機密値は出力しない。
+function testKotoreContentImageFolderAccess() {
+  const result = inspectKotoreContentImageFolderAccess_();
+  console.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+function runTestKotoreContentImageFolderAccessSummary() {
+  return testKotoreContentImageFolderAccess();
+}
+
 function handleKotoreImageAction_(data) {
   if (data.action === "getKotoreContentImage") {
     const session = requireKotoreStaffSession_(data.sessionToken);

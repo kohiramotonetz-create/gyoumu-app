@@ -71,6 +71,7 @@ function makeEnvironment({ sheets = {}, properties = {} } = {}) {
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
     PropertiesService: { getScriptProperties: () => ({ getProperty: key => propertyMap.has(key) ? propertyMap.get(key) : null, setProperty: (key, value) => propertyMap.set(key, String(value)), deleteProperty: key => propertyMap.delete(key) }) },
     LockService: { getDocumentLock: () => lock },
+    MimeType: { PLAIN_TEXT: 'text/plain' },
     Utilities: { getUuid: () => 'uuid', base64Decode: value => [...Buffer.from(value, 'base64')], base64Encode: value => Buffer.from(value).toString('base64'), newBlob: (bytes, mimeType, name) => ({ bytes, mimeType, name, getBytes: () => bytes }) },
   })
   vm.runInContext(source, context)
@@ -518,6 +519,50 @@ test('画像metadata保存失敗時は作成済みDriveファイルをcleanupし
   assert.equal(trashed, true)
 })
 
+test('画像フォルダ接続診断は取得・一時ファイル作成・cleanupだけを安全に報告する', () => {
+  const folderId = 'secret-folder-id'
+  const { context } = makeEnvironment({ properties: { KOTORE_CONTENT_IMAGE_FOLDER_ID: ` ${folderId} ` } })
+  const calls = []
+  let trashed = false
+  const logs = []
+  context.console = { log: value => logs.push(String(value)) }
+  context.DriveApp = { getFolderById: id => {
+    calls.push(['folder', id])
+    return { createFile: (name, body, mimeType) => {
+      calls.push(['file', name, body, mimeType])
+      return { setTrashed: value => { trashed = value } }
+    } }
+  } }
+  const result = vm.runInContext('testKotoreContentImageFolderAccess()', context)
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { result: 'success', folderAccess: 'success', testFileCreation: 'success', cleanup: 'success' })
+  assert.equal(calls[0][1], folderId)
+  assert.match(calls[1][1], /^kotore-image-folder-access-test-.*\.txt$/)
+  assert.equal(calls[1][2], 'Kotore image folder access test.')
+  assert.equal(calls[1][3], 'text/plain')
+  assert.equal(trashed, true)
+  assert.equal(logs.length, 1)
+  assert.doesNotMatch(logs[0], new RegExp(folderId))
+  assert.deepEqual(JSON.parse(logs[0]), { result: 'success', folderAccess: 'success', testFileCreation: 'success', cleanup: 'success' })
+})
+
+test('画像フォルダ接続診断は未設定・Drive取得・作成・cleanup失敗を段階別に返してIDを伏せる', () => {
+  const missing = makeEnvironment()
+  assert.throws(() => vm.runInContext('inspectKotoreContentImageFolderAccess_()', missing.context), /SCRIPT_PROPERTY/)
+
+  const folderId = 'secret-folder-id'
+  const accessFailure = makeEnvironment({ properties: { KOTORE_CONTENT_IMAGE_FOLDER_ID: folderId } })
+  accessFailure.context.DriveApp = { getFolderById: () => { throw new Error(`no access to ${folderId}`) } }
+  assert.throws(() => vm.runInContext('inspectKotoreContentImageFolderAccess_()', accessFailure.context), error => /FOLDER_ACCESS/.test(error.message) && !error.message.includes(folderId))
+
+  const createFailure = makeEnvironment({ properties: { KOTORE_CONTENT_IMAGE_FOLDER_ID: folderId } })
+  createFailure.context.DriveApp = { getFolderById: () => ({ createFile: () => { throw new Error(`cannot create in ${folderId}`) } }) }
+  assert.throws(() => vm.runInContext('inspectKotoreContentImageFolderAccess_()', createFailure.context), error => /TEST_FILE_CREATE/.test(error.message) && !error.message.includes(folderId))
+
+  const cleanupFailure = makeEnvironment({ properties: { KOTORE_CONTENT_IMAGE_FOLDER_ID: folderId } })
+  cleanupFailure.context.DriveApp = { getFolderById: () => ({ createFile: () => ({ setTrashed: () => { throw new Error(`cannot cleanup in ${folderId}`) } }) }) }
+  assert.throws(() => vm.runInContext('inspectKotoreContentImageFolderAccess_()', cleanupFailure.context), error => /TEST_FILE_CLEANUP/.test(error.message) && !error.message.includes(folderId))
+})
+
 test('setupは既存contentId重複を検出して固定ページを書き足さない', () => {
   const { context, sheets } = makeEnvironment()
   sheets['個トレコンテンツ'] = makeSheet([contentHeaders(context), ['duplicate'], ['duplicate']])
@@ -534,7 +579,7 @@ test('公開APIはdraftMarkdownを返さずpublished期間を使う', () => {
 })
 
 test('summary wrapperを維持しmigration sourceを自動削除しない', () => {
-  for (const name of ['runPreviewKotoreContentSetupSummary', 'runSetupKotoreContentSheetsSummary', 'runPreviewPasswordMigrationSummary', 'runSetupPasswordManagementSheetsSummary', 'runMigratePasswordConstantsSummary']) assert.match(source, new RegExp(`function ${name}`))
+  for (const name of ['runPreviewKotoreContentSetupSummary', 'runSetupKotoreContentSheetsSummary', 'runPreviewPasswordMigrationSummary', 'runSetupPasswordManagementSheetsSummary', 'runMigratePasswordConstantsSummary', 'runTestKotoreContentImageFolderAccessSummary']) assert.match(source, new RegExp(`function ${name}`))
   const migration = source.slice(source.indexOf('function migratePasswordConstants'), source.indexOf('function runMigratePasswordConstantsSummary'))
   assert.doesNotMatch(migration, /deleteProperty\("PASSWORD_MIGRATION_JSON"\)/)
 })
