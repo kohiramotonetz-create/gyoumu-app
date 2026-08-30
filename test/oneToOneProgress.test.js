@@ -103,11 +103,24 @@ test('1対1条件UIは選択条件と適用済み条件を分離し既存matrix 
   assert.match(source, /selectedSubjectIds/);
   assert.match(source, /appliedFilters/);
   assert.match(source, /Promise\.allSettled\(subjectIds\.map\(subjectId/);
-  assert.match(source, /request\('getOneToOneProgressMatrix',[\s\S]*?subjectId,/);
+  assert.match(source, /requestMatrix\(\{[\s\S]*?subjectId,/);
   assert.doesNotMatch(source, /subjectIds:\s*subjectIds/);
   assert.match(source, /requestGenerationRef\.current/);
   assert.match(source, /onOpenStudent=\{openStudent\}/);
   assert.match(source, /subjectId: selectedSubjectId/);
+});
+
+test('Matrix requestは科目ごとの診断IDとclient経過時間を付けtimeout時に診断IDを表示する', () => {
+  const source = fs.readFileSync(new URL('../src/components/OneToOneProgressManager.jsx', import.meta.url), 'utf8');
+  assert.match(source, /one_to_one_matrix_/);
+  assert.match(source, /diagnosticRequestId/);
+  assert.match(source, /performance\.now\(\)/);
+  assert.match(source, /clientElapsedMs/);
+  assert.match(source, /ECONNABORTED/);
+  assert.match(source, /診断ID:/);
+  assert.match(source, /timeout: 30000/);
+  assert.doesNotMatch(source, /timeout:\s*(?:60000|120000)/);
+  assert.match(source, /Promise\.allSettled\(subjectIds\.map\(subjectId => requestMatrix/);
 });
 
 test('進捗差は同一axisのunitOrderだけで厳密に算出する', () => {

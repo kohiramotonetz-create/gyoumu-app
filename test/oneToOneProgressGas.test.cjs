@@ -7,7 +7,7 @@ const vm = require('node:vm');
 const generated = fs.readFileSync(path.join(__dirname, '..', 'gas', 'schoolUnits.generated.js'), 'utf8');
 const source = fs.readFileSync(path.join(__dirname, '..', 'gas', 'コード.js'), 'utf8');
 const formatTokyoDate = value => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
-const context = vm.createContext({ console, Date, Set, Map, Object, Array, String, Number, Boolean, Math, JSON, RegExp, Error, Utilities: { formatDate: formatTokyoDate } });
+const context = vm.createContext({ console, Date, Set, Map, Object, Array, String, Number, Boolean, Math, JSON, RegExp, Error, Utilities: { formatDate: formatTokyoDate, getUuid: () => '00000000-0000-0000-0000-000000000000' } });
 vm.runInContext(`${generated}\n${source}`, context);
 
 test('GAS検証用単元軸はCSV順と同じ連番を返す', () => {
@@ -47,6 +47,84 @@ test('Matrix用読込contextは進捗シートを1回ずつ読み複数生徒で
   assert.equal(unitReads, 1);
   assert.equal(context.__firstState.schoolCurrent.unitOrder, 3);
   assert.equal(context.__secondState.netzCurrent.unitOrder, 5);
+});
+
+test('性能診断helperは実データ行数と処理区間を計測し進捗シートを各1回だけ読む', () => {
+  const axis = vm.runInContext('getOneToOneSchoolUnitAxis_("中２", "math")', context);
+  const subjectRows = [['userId','subjectId','enabled','createdAt','updatedAt','updatedBy'], ['001200','math',true,'','',''], ['', '', '', '', '', '']];
+  const eventRows = [['eventId','userId','subjectId','progressType','lessonDate','recordedAt','recordedBy','status','correctedAt','correctedBy','correctionReason','replacementEventId','requestId','fieldId'], ['e1','001200','math','school','',new Date(),'t','ACTIVE','','','','','r1',''], ['', '', '', '', '', '', '', '', '', '', '', '', '', '']];
+  const unitRows = [['eventId','unitId','unitOrder','textNameSnapshot','chapterSnapshot','sectionSnapshot','unitNameSnapshot','pageSnapshot'], ['e1',axis[2].unitId,3,'','','','',''], ['', '', '', '', '', '', '', '']];
+  let subjectReads = 0;
+  let eventReads = 0;
+  let unitReads = 0;
+  const sheet = (rows, onRead) => ({
+    getDataRange: () => ({ getValues: () => { onRead(); return rows; } }),
+    getLastRow: () => rows.length,
+    getLastColumn: () => rows[0].length
+  });
+  context.__performanceSubjectSheet = sheet(subjectRows, () => { subjectReads += 1; });
+  context.__performanceEventSheet = sheet(eventRows, () => { eventReads += 1; });
+  context.__performanceUnitSheet = sheet(unitRows, () => { unitReads += 1; });
+  vm.runInContext(`
+    getUserAuthContexts_ = () => [{ userId: '001200', role: 'student', enabled: true, deleted: false, grade: '中２', school: '校舎A', name: '生徒', nameKana: 'セイト' }];
+    assertOneToOneSubjectSheet_ = () => __performanceSubjectSheet;
+    assertOneToOneProgressSheets_ = () => ({
+      [ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME]: __performanceEventSheet,
+      [ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME]: __performanceUnitSheet
+    });
+  `, context);
+  const result = vm.runInContext('inspectOneToOneProgressPerformance_()', context);
+  assert.equal(subjectReads, 1);
+  assert.equal(eventReads, 1);
+  assert.equal(unitReads, 1);
+  assert.equal(result.sheets.subjects.actualDataRows, 1);
+  assert.equal(result.sheets.events.actualDataRows, 1);
+  assert.equal(result.sheets.progressUnits.actualDataRows, 1);
+  assert.equal(result.scenarios.length, 1);
+  assert.equal(result.scenarios[0].studentCount, 1);
+  assert.equal(result.scenarios[0].subjectId, 'math');
+  assert.equal(typeof result.timings.indexBuildMs, 'number');
+  assert.equal(typeof result.scenarios[0].estimatedResponseBytes, 'number');
+  const serialized = JSON.stringify(result);
+  assert.doesNotMatch(serialized, /password|sessionToken|token/i);
+  assert.doesNotMatch(serialized, /001200|生徒|セイト/);
+});
+
+test('Matrix診断IDは安全な値を維持し未指定・不正値にはサーバーIDを発行する', () => {
+  assert.equal(vm.runInContext('normalizeOneToOneMatrixDiagnosticRequestId_("one_to_one_matrix_123_abcd")', context), 'one_to_one_matrix_123_abcd');
+  assert.equal(vm.runInContext('normalizeOneToOneMatrixDiagnosticRequestId_("invalid id")', context), 'one_to_one_matrix_server_00000000000000000000000000000000');
+  assert.equal(vm.runInContext('normalizeOneToOneMatrixDiagnosticRequestId_("")', context), 'one_to_one_matrix_server_00000000000000000000000000000000');
+});
+
+test('管理セッション診断はread・lookup・認証context・期限延長を分離しLock未使用を明示する', () => {
+  let extendWrites = 0;
+  context.__managementSheet = {
+    getDataRange: () => ({ getValues: () => [['token','userId','role','expiresAt'], ['session-token','teacher1','teacher',new Date(Date.now() + 60000)]] }),
+    getRange: () => ({ setValue: () => { extendWrites += 1; } })
+  };
+  vm.runInContext(`
+    getRequiredSheet = () => __managementSheet;
+    getUserAuthContexts_ = () => [{ userId: 'teacher1', role: 'teacher', enabled: true, deleted: false }];
+    __authDiagnostics = {};
+  `, context);
+  const session = vm.runInContext('validateManagementSession("session-token", true, true, __authDiagnostics)', context);
+  const diagnostics = context.__authDiagnostics;
+  assert.equal(session.userId, 'teacher1');
+  assert.equal(extendWrites, 1);
+  for (const key of ['sessionReadMs', 'sessionLookupMs', 'authContextLoadMs', 'sessionExtendMs', 'lockWaitMs', 'authTotalMs']) assert.equal(typeof diagnostics[key], 'number');
+  assert.equal(diagnostics.lockWaitMs, 0);
+  assert.equal(diagnostics.lockUsed, false);
+});
+
+test('Matrix traceは認証・matrix・response段階と後方互換diagnosticsを持つ', () => {
+  for (const stage of ['START', 'AUTH_START', 'AUTH_DONE', 'AUTH_ERROR', 'MATRIX_START', 'MATRIX_DONE', 'RESPONSE_START', 'RESPONSE_DONE']) {
+    assert.match(source, new RegExp(`"${stage}"`));
+  }
+  for (const field of ['requestId', 'matrixElapsedMs', 'responseElapsedMs', 'serverTotalMs']) {
+    assert.match(source, new RegExp(field));
+  }
+  assert.match(source, /Object\.assign\(\{\}, payload, \{ diagnostics \}\)/);
+  assert.doesNotMatch(source, /logOneToOneMatrixTrace_\([^\n]*(?:sessionToken|userId|nameKana|password)/);
 });
 
 test('teacher/head-teacher/adminは担当外を含む単一校舎の生徒を利用できる', () => {

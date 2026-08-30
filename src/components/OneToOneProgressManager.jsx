@@ -13,6 +13,7 @@ import './OneToOneProgressManager.css';
 
 const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
 const makeRequestId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const makeMatrixDiagnosticRequestId = () => `one_to_one_matrix_${Date.now()}_${makeRequestId().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 36)}`;
 
 function FilterIcon({ type }) {
   const path = type === 'school'
@@ -70,6 +71,33 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
     return response.data;
   };
 
+  const requestMatrix = async payload => {
+    const diagnosticRequestId = makeMatrixDiagnosticRequestId();
+    const startedAt = performance.now();
+    console.info('[ONE_TO_ONE_MATRIX_CLIENT] START', { diagnosticRequestId });
+    try {
+      const result = await request('getOneToOneProgressMatrix', { ...payload, diagnosticRequestId });
+      console.info('[ONE_TO_ONE_MATRIX_CLIENT] RESPONSE', {
+        diagnosticRequestId,
+        clientElapsedMs: Math.round(performance.now() - startedAt),
+        serverDiagnostics: result.diagnostics,
+      });
+      return result;
+    } catch (error) {
+      const clientElapsedMs = Math.round(performance.now() - startedAt);
+      const isTimeout = error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''));
+      console.error('[ONE_TO_ONE_MATRIX_CLIENT] ERROR', {
+        diagnosticRequestId,
+        clientElapsedMs,
+        type: isTimeout ? 'TIMEOUT' : 'REQUEST_ERROR',
+        message: error?.message,
+      });
+      if (isTimeout) error.message = `1対1進捗の取得に時間がかかっています。診断ID: ${diagnosticRequestId}`;
+      error.diagnosticRequestId = diagnosticRequestId;
+      throw error;
+    }
+  };
+
   const fetchMatrix = async () => {
     const nextFieldErrors = {
       school: school ? '' : '校舎を選択してください。',
@@ -86,7 +114,7 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
     requestGenerationRef.current = generation;
     setLoading(true); setNotice('');
 
-    const settled = await Promise.allSettled(subjectIds.map(subjectId => request('getOneToOneProgressMatrix', {
+    const settled = await Promise.allSettled(subjectIds.map(subjectId => requestMatrix({
       school,
       schools: nextAppliedFilters.schools,
       grade,
@@ -104,7 +132,7 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
   const refreshSubjectMatrix = async subjectId => {
     if (!appliedFilters || !appliedFilters.subjectIds.includes(subjectId)) return;
     try {
-      const result = await request('getOneToOneProgressMatrix', {
+      const result = await requestMatrix({
         school: appliedFilters.school,
         schools: appliedFilters.schools,
         grade: appliedFilters.grade,
