@@ -5,6 +5,18 @@ const path = require('node:path')
 const vm = require('node:vm')
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'gas', 'コード.js'), 'utf8')
+const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'gas', 'appsscript.json'), 'utf8'))
+
+test('GAS manifestは既存サービスとDrive書込みに必要なOAuth scopeを維持する', () => {
+  const expectedScopes = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/script.external_request',
+    'https://www.googleapis.com/auth/drive',
+  ]
+
+  assert.deepEqual([...manifest.oauthScopes].sort(), expectedScopes.sort())
+  assert.equal(new Set(manifest.oauthScopes).size, manifest.oauthScopes.length)
+})
 
 function makeSheet(initialRows = [], options = {}) {
   const rows = initialRows.map(row => [...row])
