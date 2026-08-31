@@ -16,6 +16,7 @@ import StudentProfileView from './components/StudentProfileView.jsx'
 import { ALL_SCHOOLS } from './constants/organization.js'
 import { parseStudentProfileHash } from './utils/studentProfileNavigation.js'
 import HomeDashboard, { Icon } from './components/HomeDashboard.jsx'
+import TeacherHomeProgressStudentList from './components/TeacherHomeProgressStudentList.jsx'
 import './TeacherView.css'
 
 const KoToreMenu = lazy(() => import('./components/KoToreMenu.jsx'))
@@ -35,6 +36,7 @@ const WIDE_CONTENT_IDS = new Set([
   'sukimakun-permissions',
   'notifications',
   'kotore-admin',
+  'home-progress-list',
 ]);
 const MENU_ICON_NAMES = {
   home: 'home', notices: 'megaphone', notifications: 'target', 'app-usage': 'clipboard',
@@ -56,10 +58,12 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   const [activeContent, setActiveContent] = useState('home');
   const [profileRoute, setProfileRoute] = useState(() => parseStudentProfileHash(window.location.hash));
   const [notificationRefresh, setNotificationRefresh] = useState(null);
+  const [homeProgressData, setHomeProgressData] = useState(null);
+  const [homeProgressStatus, setHomeProgressStatus] = useState('behind');
   const schools = ALL_SCHOOLS;
-  const availableAssignedSchools = Array.isArray(assignedSchools) && assignedSchools.length > 0
+  const availableAssignedSchools = useMemo(() => Array.isArray(assignedSchools) && assignedSchools.length > 0
     ? assignedSchools
-    : school ? [school] : [];
+    : school ? [school] : [], [assignedSchools, school]);
   const timeoutRef = useRef(null);
 
   useEffect(() => {
@@ -145,6 +149,11 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     else { setActiveContent(item.id); if (profileRoute) window.location.hash = ''; }
     if (window.innerWidth < 1200) setIsSidebarOpen(false);
   };
+  const openHomeProgressStatus = (status, data) => {
+    setHomeProgressStatus(status);
+    if (data) setHomeProgressData(data);
+    setActiveContent('home-progress-list');
+  };
   const handleMainKeyDown = (event) => {
     const scrollElement = event.currentTarget;
     const keyScroll = {
@@ -192,7 +201,23 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
           <div className={`teacher-content ${activeContent !== 'home' && !isWideContent ? 'teacher-content--legacy' : ''} ${isWideContent ? 'teacher-content--wide' : ''} ${profileRoute ? 'teacher-content--profile' : ''}`}>
             {profileRoute && <StudentProfileView userId={profileRoute.userId} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={handleLogout} onBack={() => { if (window.history.length > 1) window.history.back(); else window.location.hash = ''; }} />}
             {!profileRoute && <>
-            {activeContent === 'home' && <HomeDashboard userName={userName} />}
+            {activeContent === 'home' && <HomeDashboard
+              userName={userName}
+              GAS_URL={GAS_URL}
+              API_KEY={API_KEY}
+              sessionToken={sessionToken}
+              role={role}
+              assignedSchools={availableAssignedSchools}
+              onSessionExpired={handleLogout}
+              onOpenProgressStatus={openHomeProgressStatus}
+              onProgressData={setHomeProgressData}
+            />}
+            {activeContent === 'home-progress-list' && <TeacherHomeProgressStudentList
+              key={homeProgressStatus}
+              data={homeProgressData}
+              statusFilter={homeProgressStatus}
+              onBack={() => setActiveContent('home')}
+            />}
             {activeContent === 'notices' && (
               <NoticeManager notices={[]} styles={styles} />
             )}

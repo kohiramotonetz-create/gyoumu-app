@@ -38,6 +38,7 @@ const CAMP_SUBJECT_KEYS = ["japanese", "math", "english", "social", "science"];
 const ONE_TO_ONE_SUBJECT_SHEET_NAME = "1対1受講科目";
 const ONE_TO_ONE_SUBJECT_HEADERS = ["userId", "subjectId", "enabled", "createdAt", "updatedAt", "updatedBy"];
 const ONE_TO_ONE_SUBJECT_IDS = ["english", "math", "japanese", "science", "social"];
+const ONE_TO_ONE_SUBJECT_LABELS = { english: "英語", math: "数学", japanese: "国語", science: "理科", social: "社会" };
 const ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME = "1対1進捗イベント";
 const ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME = "1対1進捗単元";
 const ONE_TO_ONE_PROGRESS_EVENT_HEADERS = ["eventId", "userId", "subjectId", "progressType", "lessonDate", "recordedAt", "recordedBy", "status", "correctedAt", "correctedBy", "correctionReason", "replacementEventId", "requestId", "fieldId"];
@@ -1958,6 +1959,199 @@ function getOneToOneProgressErrorCode_(error) {
   return isManagementAuthorizationError(error) || /利用権限/.test(String(error && error.message || ""))
     ? "AUTHORIZATION_ERROR"
     : "VALIDATION_ERROR";
+}
+
+function classifyTeacherHomeProgressDifference_(difference) {
+  if (!Number.isFinite(difference) || !Number.isInteger(difference)) return null;
+  if (difference >= 2) return "good";
+  if (difference >= 0) return "warning";
+  return "behind";
+}
+
+function calculateTeacherHomeProgressPercentages_(counts) {
+  const keys = ["good", "warning", "behind"];
+  const normalized = keys.map(key => Math.max(0, Number(counts && counts[key]) || 0));
+  const total = normalized.reduce((sum, value) => sum + value, 0);
+  if (!total) return { good: 0, warning: 0, behind: 0 };
+  const exact = normalized.map(value => value * 100 / total);
+  const roundedDown = exact.map(Math.floor);
+  let remainder = 100 - roundedDown.reduce((sum, value) => sum + value, 0);
+  exact.map((value, index) => ({ index, fraction: value - roundedDown[index] }))
+    .sort((left, right) => right.fraction - left.fraction || left.index - right.index)
+    .forEach(item => {
+      if (remainder <= 0) return;
+      roundedDown[item.index] += 1;
+      remainder -= 1;
+    });
+  return Object.fromEntries(keys.map((key, index) => [key, roundedDown[index]]));
+}
+
+function serializeTeacherHomeProgressUnit_(unit) {
+  if (!unit || !unit.unitId || !Number.isInteger(unit.unitOrder) || unit.unitOrder < 1) return null;
+  return {
+    unitId: unit.unitId,
+    unitOrder: unit.unitOrder,
+    textName: unit.textName || "",
+    chapter: unit.chapter || "",
+    section: unit.section || "",
+    unitName: unit.unitName || "",
+    page: unit.page || ""
+  };
+}
+
+function buildTeacherHomeProgressComparison_(state, field) {
+  const schoolCurrent = serializeTeacherHomeProgressUnit_(state && state.schoolCurrent);
+  const netzCurrent = serializeTeacherHomeProgressUnit_(state && state.netzCurrent);
+  if (!schoolCurrent || !netzCurrent) return null;
+  const difference = netzCurrent.unitOrder - schoolCurrent.unitOrder;
+  const status = classifyTeacherHomeProgressDifference_(difference);
+  if (!status) return null;
+  return {
+    fieldId: field && field.fieldId || "",
+    fieldLabel: field && field.label || "",
+    status,
+    difference,
+    schoolCurrent,
+    netzCurrent
+  };
+}
+
+function readTeacherHomeProgressStateStrict_(userId, subjectId, fieldId, readContext, axis) {
+  const normalizedFieldId = String(fieldId || "").trim();
+  const axisById = Object.create(null);
+  axis.forEach(unit => { axisById[unit.unitId] = unit; });
+  const key = `${userId}\t${subjectId}\t${normalizedFieldId}`;
+  const events = (readContext.eventsByUserSubjectField[key] || []).filter(event => event.status === "ACTIVE");
+  let hasUnresolvedUnitId = false;
+  const current = type => {
+    const resolvedUnits = events.filter(event => event.progressType === type).flatMap(event => event.units).map(unit => {
+      const axisUnit = axisById[unit.unitId] || null;
+      if (!axisUnit) hasUnresolvedUnitId = true;
+      return axisUnit;
+    }).filter(Boolean);
+    if (!resolvedUnits.length) return null;
+    return resolvedUnits.reduce((currentUnit, unit) => unit.unitOrder > currentUnit.unitOrder ? unit : currentUnit);
+  };
+  const schoolCurrent = current("school");
+  const netzCurrent = current("netz");
+  return { fieldId: normalizedFieldId, schoolCurrent, netzCurrent, hasUnresolvedUnitId };
+}
+
+function getTeacherHomeProgressExcludedReason_(states, axisUnavailable) {
+  if (axisUnavailable) return "axisUnavailable";
+  const values = Array.isArray(states) ? states : [];
+  if (values.some(state => Boolean(state && state.hasUnresolvedUnitId))) return "axisUnavailable";
+  const hasInvalidCurrent = values.some(state => Boolean(state && ((state.schoolCurrent && !serializeTeacherHomeProgressUnit_(state.schoolCurrent))
+    || (state.netzCurrent && !serializeTeacherHomeProgressUnit_(state.netzCurrent)))));
+  if (hasInvalidCurrent) return "axisUnavailable";
+  const hasSchool = values.some(state => Boolean(state && serializeTeacherHomeProgressUnit_(state.schoolCurrent)));
+  const hasNetz = values.some(state => Boolean(state && serializeTeacherHomeProgressUnit_(state.netzCurrent)));
+  return !hasSchool && !hasNetz ? "noProgress" : "partialProgress";
+}
+
+function resolveTeacherHomeAssignedSchools_(session) {
+  const actor = (session.userContexts || []).find(user => user.userId === session.userId && user.enabled && !user.deleted);
+  if (!actor) throw new Error("管理セッションの利用者が存在しません");
+  return Array.from(new Set((Array.isArray(actor.assignedSchools) ? actor.assignedSchools : [])
+    .map(school => String(school || "").trim())
+    .filter(Boolean)));
+}
+
+function buildTeacherHomeProgressSummary_(session) {
+  const schools = resolveTeacherHomeAssignedSchools_(session);
+  const subjectRows = assertOneToOneSubjectSheet_().getDataRange().getValues();
+  const subjectState = buildOneToOneSubjectStateMap_(subjectRows).states;
+  const sheets = assertOneToOneProgressSheets_();
+  const readContext = buildOneToOneProgressReadContext_(sheets);
+  const middleGradePattern = /^中[1-3]$/;
+  const schoolSet = new Set(schools);
+  const targetStudents = (session.userContexts || []).filter(user => user.role === "student"
+    && user.enabled && !user.deleted && schoolSet.has(String(user.school || "").trim())
+    && middleGradePattern.test(normalizeGrade(user.grade)) && (subjectState[user.userId] || []).length > 0);
+  const axisCache = Object.create(null);
+  const getAxis = (grade, subjectId, fieldId) => {
+    const key = `${normalizeGrade(grade)}\t${subjectId}\t${fieldId || ""}`;
+    if (!Object.prototype.hasOwnProperty.call(axisCache, key)) {
+      try { axisCache[key] = { axis: getOneToOneSchoolUnitAxis_(grade, subjectId, fieldId), error: null }; }
+      catch (error) { axisCache[key] = { axis: null, error }; }
+    }
+    if (axisCache[key].error) throw axisCache[key].error;
+    return axisCache[key].axis;
+  };
+  const statusRank = { good: 1, warning: 2, behind: 3 };
+  const counts = { good: 0, warning: 0, behind: 0 };
+  const excludedCounts = { noProgress: 0, partialProgress: 0, axisUnavailable: 0 };
+  const items = [];
+  let targetEntryCount = 0;
+
+  targetStudents.forEach(student => {
+    (subjectState[student.userId] || []).forEach(subjectId => {
+      targetEntryCount += 1;
+      const fields = subjectId === "social" ? ONE_TO_ONE_SOCIAL_FIELDS : [{ fieldId: "", label: "" }];
+      const states = [];
+      const comparisons = [];
+      let axisUnavailable = false;
+      fields.forEach(field => {
+        try {
+          const axis = getAxis(student.grade, subjectId, field.fieldId);
+          const state = readTeacherHomeProgressStateStrict_(student.userId, subjectId, field.fieldId, readContext, axis);
+          states.push(state);
+          const comparison = buildTeacherHomeProgressComparison_(state, field);
+          if (comparison) comparisons.push(comparison);
+        } catch {
+          axisUnavailable = true;
+        }
+      });
+      if (!comparisons.length) {
+        excludedCounts[getTeacherHomeProgressExcludedReason_(states, axisUnavailable)] += 1;
+        return;
+      }
+      const representative = comparisons.slice().sort((left, right) => statusRank[right.status] - statusRank[left.status] || left.fieldId.localeCompare(right.fieldId))[0];
+      counts[representative.status] += 1;
+      items.push({
+        userId: student.userId,
+        name: student.name,
+        nameKana: student.nameKana,
+        school: student.school,
+        grade: student.grade,
+        subjectId,
+        subjectLabel: ONE_TO_ONE_SUBJECT_LABELS[subjectId] || subjectId,
+        status: representative.status,
+        difference: representative.difference,
+        schoolCurrent: representative.schoolCurrent,
+        netzCurrent: representative.netzCurrent,
+        comparisons
+      });
+    });
+  });
+  items.sort((left, right) => compareStudentsByKana_(left, right)
+    || ONE_TO_ONE_SUBJECT_IDS.indexOf(left.subjectId) - ONE_TO_ONE_SUBJECT_IDS.indexOf(right.subjectId));
+  return {
+    result: "success",
+    scope: { schools, label: schools.length ? `担当${schools.length}校` : "担当校舎なし" },
+    summary: {
+      targetEntryCount,
+      comparableEntryCount: items.length,
+      excludedEntryCount: targetEntryCount - items.length,
+      counts,
+      percentages: calculateTeacherHomeProgressPercentages_(counts)
+    },
+    items,
+    excludedCounts,
+    generatedAt: new Date().toISOString(),
+    sessionExpiresAt: session.sessionExpiresAt
+  };
+}
+
+function handleTeacherHomeProgressAction_(data) {
+  const session = requireOneToOneProgressSession_(data.sessionToken, true);
+  return buildTeacherHomeProgressSummary_(session);
+}
+
+function getTeacherHomeProgressErrorCode_(error) {
+  return isManagementAuthorizationError(error) || /利用権限/.test(String(error && error.message || ""))
+    ? "AUTHORIZATION_ERROR"
+    : "DATA_ERROR";
 }
 
 function normalizeLessonDate_(value) {
@@ -4202,6 +4396,15 @@ function doPost(e) {
       const code = getOneToOneProgressErrorCode_(error);
       const result = { result: "error", code, message: code === "AUTHORIZATION_ERROR" ? "この1対1進捗を利用する権限がありません" : String(error && error.message || "入力内容が不正です") };
       return oneToOneMatrixTrace ? responseOneToOneMatrixTrace_(result, oneToOneMatrixTrace) : responseJSON(result);
+    }
+  }
+
+  if (data.action === "getTeacherHomeProgressSummary") {
+    try {
+      return responseJSON(handleTeacherHomeProgressAction_(data));
+    } catch (error) {
+      const code = getTeacherHomeProgressErrorCode_(error);
+      return responseJSON({ result: "error", code, message: code === "AUTHORIZATION_ERROR" ? "講師ホームの利用権限がありません" : "進捗状況を取得できませんでした" });
     }
   }
 

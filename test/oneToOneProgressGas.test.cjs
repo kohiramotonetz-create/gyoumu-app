@@ -10,6 +10,12 @@ const formatTokyoDate = value => new Intl.DateTimeFormat('en-CA', { timeZone: 'A
 const context = vm.createContext({ console, Date, Set, Map, Object, Array, String, Number, Boolean, Math, JSON, RegExp, Error, Utilities: { formatDate: formatTokyoDate, getUuid: () => '00000000-0000-0000-0000-000000000000' } });
 vm.runInContext(`${generated}\n${source}`, context);
 
+function createTeacherHomeContext() {
+  const homeContext = vm.createContext({ console, Date, Set, Map, Object, Array, String, Number, Boolean, Math, JSON, RegExp, Error, Utilities: { formatDate: formatTokyoDate, getUuid: () => '00000000-0000-0000-0000-000000000000' } });
+  vm.runInContext(`${generated}\n${source}`, homeContext);
+  return homeContext;
+}
+
 test('GAS検証用単元軸はCSV順と同じ連番を返す', () => {
   const axis = vm.runInContext('getOneToOneSchoolUnitAxis_("中２", "math")', context);
   assert.ok(axis.length > 0);
@@ -243,4 +249,216 @@ test('lessonDateは日本時間の暦日をAPI境界で維持しrecordedAtは日
   context.__dateState.events[0].lessonDate = '2026-08-27';
   const stringDate = vm.runInContext('serializeOneToOneProgressState_(__dateState)', context);
   assert.equal(stringDate.schoolHistory[0].lessonDate, '2026-08-27');
+});
+
+test('講師ホーム判定は符号付きネッツ差の全境界を分類する', () => {
+  const homeContext = createTeacherHomeContext();
+  const values = [-2, -1, 0, 1, 2, 3].map(value => vm.runInContext(`classifyTeacherHomeProgressDifference_(${value})`, homeContext));
+  assert.deepEqual(Array.from(values), ['behind', 'behind', 'warning', 'warning', 'good', 'good']);
+  assert.equal(vm.runInContext('classifyTeacherHomeProgressDifference_(NaN)', homeContext), null);
+});
+
+test('講師ホーム割合は0件を安全に扱い丸め後も100になる', () => {
+  const homeContext = createTeacherHomeContext();
+  const thirds = vm.runInContext('calculateTeacherHomeProgressPercentages_({ good: 1, warning: 1, behind: 1 })', homeContext);
+  assert.deepEqual({ ...thirds }, { good: 34, warning: 33, behind: 33 });
+  const mixed = vm.runInContext('calculateTeacherHomeProgressPercentages_({ good: 2, warning: 0, behind: 1 })', homeContext);
+  assert.equal(Object.values(mixed).reduce((sum, value) => sum + value, 0), 100);
+  assert.deepEqual({ ...vm.runInContext('calculateTeacherHomeProgressPercentages_({ good: 1, warning: 0, behind: 0 })', homeContext) }, { good: 100, warning: 0, behind: 0 });
+  assert.deepEqual({ ...vm.runInContext('calculateTeacherHomeProgressPercentages_({ good: 0, warning: 8, behind: 0 })', homeContext) }, { good: 0, warning: 100, behind: 0 });
+  assert.deepEqual({ ...vm.runInContext('calculateTeacherHomeProgressPercentages_({ good: 0, warning: 0, behind: 0 })', homeContext) }, { good: 0, warning: 0, behind: 0 });
+});
+
+test('講師ホームは両方未登録・片側未登録・不正単元を3分類へ含めない', () => {
+  const homeContext = createTeacherHomeContext();
+  homeContext.__unit = { unitId: 'u1', unitOrder: 1, unitName: '単元1' };
+  assert.equal(vm.runInContext('buildTeacherHomeProgressComparison_({ schoolCurrent: null, netzCurrent: null }, {})', homeContext), null);
+  assert.equal(vm.runInContext('buildTeacherHomeProgressComparison_({ schoolCurrent: __unit, netzCurrent: null }, {})', homeContext), null);
+  assert.equal(vm.runInContext('buildTeacherHomeProgressComparison_({ schoolCurrent: null, netzCurrent: __unit }, {})', homeContext), null);
+  homeContext.__invalid = { unitId: null, unitOrder: 999 };
+  assert.equal(vm.runInContext('buildTeacherHomeProgressComparison_({ schoolCurrent: __invalid, netzCurrent: __unit }, {})', homeContext), null);
+  assert.equal(vm.runInContext('getTeacherHomeProgressExcludedReason_([{ schoolCurrent: null, netzCurrent: null }], false)', homeContext), 'noProgress');
+  assert.equal(vm.runInContext('getTeacherHomeProgressExcludedReason_([{ schoolCurrent: __unit, netzCurrent: null }], false)', homeContext), 'partialProgress');
+  assert.equal(vm.runInContext('getTeacherHomeProgressExcludedReason_([{ schoolCurrent: __invalid, netzCurrent: __unit }], false)', homeContext), 'axisUnavailable');
+  assert.equal(vm.runInContext('getTeacherHomeProgressExcludedReason_([], true)', homeContext), 'axisUnavailable');
+});
+
+test('講師ホームはroleに関係なくsession本人の全assignedSchoolsだけを使用する', () => {
+  const homeContext = createTeacherHomeContext();
+  for (const role of ['teacher', 'head-teacher', 'admin']) {
+    homeContext.__session = { userId: 'staff', role, userContexts: [{ userId: 'staff', role, enabled: true, deleted: false, assignedSchools: ['校舎A', '校舎B', '校舎A'] }] };
+    const schools = vm.runInContext('resolveTeacherHomeAssignedSchools_(__session)', homeContext);
+    assert.deepEqual(Array.from(schools), ['校舎A', '校舎B']);
+  }
+  homeContext.__session = { userId: 'staff', role: 'admin', userContexts: [{ userId: 'staff', role: 'admin', enabled: true, deleted: false, assignedSchools: [] }] };
+  assert.deepEqual(Array.from(vm.runInContext('resolveTeacherHomeAssignedSchools_(__session)', homeContext)), []);
+});
+
+test('講師ホーム集計は生徒×科目・社会最悪状態を1件で集計しシートを各1回だけ読む', () => {
+  const homeContext = createTeacherHomeContext();
+  const mathAxis = vm.runInContext('getOneToOneSchoolUnitAxis_("中２", "math")', homeContext);
+  const englishAxis = vm.runInContext('getOneToOneSchoolUnitAxis_("中２", "english")', homeContext);
+  const socialAxes = Object.fromEntries(['history', 'geography', 'civics'].map(field => [field, vm.runInContext(`getOneToOneSchoolUnitAxis_("中２", "social", "${field}")`, homeContext)]));
+  const subjectRows = [
+    ['userId','subjectId','enabled','createdAt','updatedAt','updatedBy'],
+    ['001200','math',true,'','',''], ['001200','english',true,'','',''], ['001200','social',true,'','',''],
+    ['001201','math',true,'','',''], ['001202','math',true,'','',''], ['001203','math',true,'','',''],
+    ['001204','math',true,'','',''], ['001205','math',true,'','',''], ['001207','math',true,'','','']
+  ];
+  const eventRows = [['eventId','userId','subjectId','progressType','lessonDate','recordedAt','recordedBy','status','correctedAt','correctedBy','correctionReason','replacementEventId','requestId','fieldId']];
+  const unitRows = [['eventId','unitId','unitOrder','textNameSnapshot','chapterSnapshot','sectionSnapshot','unitNameSnapshot','pageSnapshot']];
+  const addProgress = (eventId, userId, subjectId, type, axis, order, fieldId = '') => {
+    eventRows.push([eventId,userId,subjectId,type,'',new Date(),'staff','ACTIVE','','','','',`r-${eventId}`,fieldId]);
+    const unit = axis[order - 1];
+    unitRows.push([eventId,unit.unitId,order,unit.textName,unit.chapter,unit.section,unit.unitName,unit.page]);
+  };
+  addProgress('m-s','001200','math','school',mathAxis,5); addProgress('m-n','001200','math','netz',mathAxis,7);
+  addProgress('e-s','001200','english','school',englishAxis,5); addProgress('e-n','001200','english','netz',englishAxis,4);
+  addProgress('h-s','001200','social','school',socialAxes.history,3,'history'); addProgress('h-n','001200','social','netz',socialAxes.history,5,'history');
+  addProgress('g-s','001200','social','school',socialAxes.geography,4,'geography'); addProgress('g-n','001200','social','netz',socialAxes.geography,4,'geography');
+  addProgress('c-s','001200','social','school',socialAxes.civics,5,'civics'); addProgress('c-n','001200','social','netz',socialAxes.civics,4,'civics');
+  addProgress('p-s','001201','math','school',mathAxis,2);
+  let subjectReads = 0; let eventReads = 0; let unitReads = 0;
+  const sheet = (rows, counter) => ({ getDataRange: () => ({ getValues: () => { counter(); return rows; } }) });
+  homeContext.__subjectSheet = sheet(subjectRows, () => { subjectReads += 1; });
+  homeContext.__eventSheet = sheet(eventRows, () => { eventReads += 1; });
+  homeContext.__unitSheet = sheet(unitRows, () => { unitReads += 1; });
+  homeContext.__session = {
+    userId: 'staff', role: 'admin', sessionExpiresAt: '2026-08-31T00:00:00.000Z',
+    userContexts: [
+      { userId: 'staff', role: 'admin', enabled: true, deleted: false, assignedSchools: ['校舎A'] },
+      { userId: '001200', role: 'student', enabled: true, deleted: false, school: '校舎A', grade: '中２', name: '甲', nameKana: 'コウ' },
+      { userId: '001201', role: 'student', enabled: true, deleted: false, school: '校舎A', grade: '中２', name: '乙', nameKana: 'オツ' },
+      { userId: '001202', role: 'student', enabled: true, deleted: false, school: '校舎外', grade: '中２', name: '外', nameKana: 'ソト' },
+      { userId: '001203', role: 'student', enabled: true, deleted: false, school: '校舎A', grade: '高１', name: '高', nameKana: 'コウ' },
+      { userId: '001204', role: 'student', enabled: false, deleted: false, school: '校舎A', grade: '中２', name: '無効', nameKana: 'ムコウ' },
+      { userId: '001205', role: 'student', enabled: true, deleted: true, school: '校舎A', grade: '中２', name: '削除', nameKana: 'サクジョ' },
+      { userId: '001206', role: 'student', enabled: true, deleted: false, school: '校舎A', grade: '中２', name: '未受講', nameKana: 'ミジュコウ' },
+      { userId: '001207', role: 'student', enabled: true, deleted: false, school: '校舎A', grade: '小６', name: '小学生', nameKana: 'ショウガクセイ' }
+    ]
+  };
+  vm.runInContext(`
+    assertOneToOneSubjectSheet_ = () => __subjectSheet;
+    assertOneToOneProgressSheets_ = () => ({
+      [ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME]: __eventSheet,
+      [ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME]: __unitSheet
+    });
+  `, homeContext);
+  const result = vm.runInContext('buildTeacherHomeProgressSummary_(__session)', homeContext);
+  assert.equal(subjectReads, 1);
+  assert.equal(eventReads, 1);
+  assert.equal(unitReads, 1);
+  assert.deepEqual({ ...result.summary.counts }, { good: 1, warning: 0, behind: 2 });
+  assert.equal(result.summary.targetEntryCount, 4);
+  assert.equal(result.summary.comparableEntryCount, 3);
+  assert.equal(result.summary.excludedEntryCount, 1);
+  assert.equal(result.excludedCounts.partialProgress, 1);
+  assert.equal(result.items.filter(item => item.subjectId === 'social').length, 1);
+  const social = result.items.find(item => item.subjectId === 'social');
+  assert.equal(social.status, 'behind');
+  assert.equal(social.comparisons.length, 3);
+  assert.equal(result.items.some(item => ['001202', '001203', '001204', '001205', '001206', '001207'].includes(item.userId)), false);
+  assert.equal(Object.values(result.summary.percentages).reduce((sum, value) => sum + value, 0), 100);
+});
+
+test('講師ホームは現行axisにないunitIdを保存済みunitOrderで復元せず比較不能にする', () => {
+  const homeContext = createTeacherHomeContext();
+  const mathAxis = vm.runInContext('getOneToOneSchoolUnitAxis_("中２", "math")', homeContext);
+  const englishAxis = vm.runInContext('getOneToOneSchoolUnitAxis_("中２", "english")', homeContext);
+  const socialAxes = Object.fromEntries(['history', 'geography', 'civics'].map(field => [field, vm.runInContext(`getOneToOneSchoolUnitAxis_("中２", "social", "${field}")`, homeContext)]));
+  const subjectRows = [
+    ['userId','subjectId','enabled','createdAt','updatedAt','updatedBy'],
+    ['001300','math',true,'','',''], ['001301','math',true,'','',''], ['001302','math',true,'','',''],
+    ['001303','math',true,'','',''], ['001304','math',true,'','',''], ['001304','english',true,'','',''],
+    ['001305','social',true,'','',''], ['001306','social',true,'','','']
+  ];
+  const eventRows = [['eventId','userId','subjectId','progressType','lessonDate','recordedAt','recordedBy','status','correctedAt','correctedBy','correctionReason','replacementEventId','requestId','fieldId']];
+  const unitRows = [['eventId','unitId','unitOrder','textNameSnapshot','chapterSnapshot','sectionSnapshot','unitNameSnapshot','pageSnapshot']];
+  const addProgress = (eventId, userId, subjectId, type, unitId, order, fieldId = '') => {
+    eventRows.push([eventId,userId,subjectId,type,'',new Date(),'staff','ACTIVE','','','','',`r-${eventId}`,fieldId]);
+    unitRows.push([eventId,unitId,order,'','','','','']);
+  };
+  const addInvalidPair = (userId, subjectId, fieldId = '') => {
+    addProgress(`${userId}-${fieldId}-s`, userId, subjectId, 'school', `invalid-${userId}-${fieldId}-school`, 5, fieldId);
+    addProgress(`${userId}-${fieldId}-n`, userId, subjectId, 'netz', `invalid-${userId}-${fieldId}-netz`, 7, fieldId);
+  };
+
+  addProgress('school-invalid-s','001300','math','school','invalid-school-unit',5);
+  addProgress('school-invalid-n','001300','math','netz',mathAxis[6].unitId,7);
+  addProgress('netz-invalid-s','001301','math','school',mathAxis[4].unitId,5);
+  addProgress('netz-invalid-n','001301','math','netz','invalid-netz-unit',7);
+  addInvalidPair('001302','math');
+  addProgress('valid-s','001303','math','school',mathAxis[4].unitId,5);
+  addProgress('valid-n','001303','math','netz',mathAxis[6].unitId,7);
+  addInvalidPair('001304','math');
+  addProgress('other-valid-s','001304','english','school',englishAxis[1].unitId,2);
+  addProgress('other-valid-n','001304','english','netz',englishAxis[3].unitId,4);
+  addInvalidPair('001305','social','history');
+  addProgress('social-g-s','001305','social','school',socialAxes.geography[1].unitId,2,'geography');
+  addProgress('social-g-n','001305','social','netz',socialAxes.geography[3].unitId,4,'geography');
+  addProgress('social-c-s','001305','social','school',socialAxes.civics[3].unitId,4,'civics');
+  addProgress('social-c-n','001305','social','netz',socialAxes.civics[4].unitId,5,'civics');
+  ['history', 'geography', 'civics'].forEach(field => addInvalidPair('001306','social',field));
+
+  const sheet = rows => ({ getDataRange: () => ({ getValues: () => rows }) });
+  homeContext.__subjectSheet = sheet(subjectRows);
+  homeContext.__eventSheet = sheet(eventRows);
+  homeContext.__unitSheet = sheet(unitRows);
+  homeContext.__mathAxis = mathAxis;
+  homeContext.__session = {
+    userId: 'staff', role: 'teacher', sessionExpiresAt: '2026-08-31T00:00:00.000Z',
+    userContexts: [
+      { userId: 'staff', role: 'teacher', enabled: true, deleted: false, assignedSchools: ['校舎A'] },
+      ...['001300','001301','001302','001303','001304','001305','001306'].map((userId, index) => ({ userId, role: 'student', enabled: true, deleted: false, school: '校舎A', grade: '中２', name: `生徒${index}`, nameKana: `セイト${index}` }))
+    ]
+  };
+  vm.runInContext(`
+    assertOneToOneSubjectSheet_ = () => __subjectSheet;
+    assertOneToOneProgressSheets_ = () => ({
+      [ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME]: __eventSheet,
+      [ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME]: __unitSheet
+    });
+    __strictReadContext = buildOneToOneProgressReadContext_({
+      [ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME]: __eventSheet,
+      [ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME]: __unitSheet
+    });
+  `, homeContext);
+
+  homeContext.__schoolInvalid = vm.runInContext('readTeacherHomeProgressStateStrict_("001300", "math", "", __strictReadContext, __mathAxis)', homeContext);
+  homeContext.__netzInvalid = vm.runInContext('readTeacherHomeProgressStateStrict_("001301", "math", "", __strictReadContext, __mathAxis)', homeContext);
+  homeContext.__bothInvalid = vm.runInContext('readTeacherHomeProgressStateStrict_("001302", "math", "", __strictReadContext, __mathAxis)', homeContext);
+  homeContext.__valid = vm.runInContext('readTeacherHomeProgressStateStrict_("001303", "math", "", __strictReadContext, __mathAxis)', homeContext);
+  assert.equal(homeContext.__schoolInvalid.schoolCurrent, null);
+  assert.equal(homeContext.__schoolInvalid.netzCurrent.unitOrder, 7);
+  assert.equal(homeContext.__netzInvalid.schoolCurrent.unitOrder, 5);
+  assert.equal(homeContext.__netzInvalid.netzCurrent, null);
+  assert.equal(homeContext.__bothInvalid.schoolCurrent, null);
+  assert.equal(homeContext.__bothInvalid.netzCurrent, null);
+  assert.equal(homeContext.__valid.schoolCurrent.unitOrder, 5);
+  assert.equal(homeContext.__valid.netzCurrent.unitOrder, 7);
+
+  const result = vm.runInContext('buildTeacherHomeProgressSummary_(__session)', homeContext);
+  assert.equal(result.summary.targetEntryCount, 8);
+  assert.equal(result.summary.comparableEntryCount, 3);
+  assert.equal(result.summary.excludedEntryCount, 5);
+  assert.deepEqual({ ...result.summary.counts }, { good: 2, warning: 1, behind: 0 });
+  assert.equal(result.excludedCounts.axisUnavailable, 5);
+  assert.equal(result.items.some(item => ['001300','001301','001302'].includes(item.userId) || (item.userId === '001304' && item.subjectId === 'math') || item.userId === '001306'), false);
+  assert.equal(result.items.some(item => item.userId === '001304' && item.subjectId === 'english' && item.status === 'good'), true);
+  const social = result.items.find(item => item.userId === '001305' && item.subjectId === 'social');
+  assert.equal(social.status, 'warning');
+  assert.equal(social.comparisons.length, 2);
+  assert.equal(Object.values(result.summary.counts).reduce((sum, value) => sum + value, 0), result.summary.comparableEntryCount);
+  assert.equal(Object.values(result.summary.percentages).reduce((sum, value) => sum + value, 0), 100);
+
+  const matrixCompatibleState = vm.runInContext('readOneToOneProgressState_("001300", "math", "中２", {}, "", __strictReadContext, __mathAxis)', homeContext);
+  assert.equal(matrixCompatibleState.schoolCurrent.unitOrder, 5);
+});
+
+test('講師ホームactionはmanagement sessionを必須にしstudentを拒否する', () => {
+  const homeContext = createTeacherHomeContext();
+  homeContext.validateManagementSession = () => ({ userId: 'student', role: 'student', userContexts: [] });
+  assert.throws(() => vm.runInContext('handleTeacherHomeProgressAction_({ sessionToken: "token" })', homeContext), /利用権限/);
+  assert.match(source, /data\.action === "getTeacherHomeProgressSummary"/);
+  assert.match(source, /handleTeacherHomeProgressAction_\(data\)/);
 });

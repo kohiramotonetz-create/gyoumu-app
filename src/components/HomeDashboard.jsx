@@ -1,4 +1,7 @@
+import { useCallback, useEffect, useState } from 'react'
+import axios from 'axios'
 import VersionLabel from './common/VersionLabel.jsx'
+import { buildTeacherHomeProgressDonut, TEACHER_HOME_PROGRESS_STATUSES } from '../utils/teacherHomeProgress.js'
 
 const Icon = ({ name, size = 24, strokeWidth = 2 }) => {
   const paths = {
@@ -39,15 +42,90 @@ function SummaryCard({ variant }) {
   </article>
 }
 
-export default function HomeDashboard({ userName }) {
+function ProgressLoading() {
+  return <div className="home-progress-state" role="status">進捗状況を読み込み中…</div>
+}
+
+function ProgressError({ onRetry }) {
+  return <div className="home-progress-state home-progress-state--error" role="alert"><p>進捗状況を取得できませんでした</p><button type="button" onClick={onRetry}>再試行</button></div>
+}
+
+function ProgressPanel({ progressState, onRetry, onOpenProgressStatus }) {
+  if (progressState.loading) return <ProgressLoading />
+  if (progressState.error) return <ProgressError onRetry={onRetry} />
+  const data = progressState.data
+  const summary = data?.summary
+  if (!summary || summary.targetEntryCount === 0) return <div className="home-progress-state">対象となる1対1進捗がありません</div>
+  if (summary.comparableEntryCount === 0) return <div className="home-progress-state"><strong>比較可能な進捗がありません</strong><span>比較不能：{summary.excludedEntryCount}件</span></div>
+  return <>
+    <div className="home-progress__scope"><span>対象：{data.scope?.label || '担当校舎'}</span><span>比較可能：{summary.comparableEntryCount}件 / 比較不能：{summary.excludedEntryCount}件</span></div>
+    <div className="home-progress__content">
+      <div className="home-donut" style={{ background: buildTeacherHomeProgressDonut(summary.percentages) }}><div><span>比較対象</span><strong>{summary.comparableEntryCount}<small>件</small></strong></div></div>
+      <div className="home-legend">
+        {Object.entries(TEACHER_HOME_PROGRESS_STATUSES).map(([status, config]) => <button type="button" key={status} onClick={() => onOpenProgressStatus(status, data)}>
+          <span className={`home-legend__dot home-legend__dot--${config.colorKey}`} /><b>{config.label}</b><strong>{summary.counts[status]}人</strong><span>（{summary.percentages[status]}%）</span>
+        </button>)}
+      </div>
+    </div>
+    <p className="home-progress__count-note">※複数科目を受講している生徒は、科目ごとに集計しています</p>
+  </>
+}
+
+function ActionItems({ progressState, onOpenProgressStatus }) {
+  if (progressState.loading) return <div className="home-actions__state" role="status">対応項目を読み込み中…</div>
+  if (progressState.error) return <div className="home-actions__state">進捗遅れ件数を取得できませんでした</div>
+  const behind = progressState.data?.summary?.counts?.behind || 0
+  return <div className="home-actions__list">
+    <button type="button" className="home-action-row" onClick={() => onOpenProgressStatus('behind', progressState.data)}>
+      <span className="home-status-dot home-status-dot--1" /><span>進捗遅れ生徒対応</span><strong>{behind}人</strong><Icon name="chevron" size={20} />
+    </button>
+    {[2, 3].map(index => <button type="button" className="home-action-row home-action-row--disabled" key={index} disabled>
+      <span className={`home-status-dot home-status-dot--${index}`} /><span>未設定</span><strong>--</strong><Icon name="chevron" size={20} />
+    </button>)}
+  </div>
+}
+
+export default function HomeDashboard({ userName, GAS_URL, API_KEY, sessionToken, role, assignedSchools, onSessionExpired, onOpenProgressStatus, onProgressData }) {
   const now = new Date()
   const dateText = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }).format(now)
+  const [requestVersion, setRequestVersion] = useState(0)
+  const [progressState, setProgressState] = useState({ loading: true, error: '', data: null })
+  const loadProgress = useCallback(async signal => {
+    setProgressState({ loading: true, error: '', data: null })
+    try {
+      const response = await axios.post(GAS_URL, JSON.stringify({ action: 'getTeacherHomeProgressSummary', apiKey: API_KEY, sessionToken }), { headers: { 'Content-Type': 'text/plain' }, timeout: 30000, signal })
+      if (response.data?.result !== 'success') {
+        const error = new Error(response.data?.message || '進捗状況を取得できませんでした')
+        error.code = response.data?.code
+        throw error
+      }
+      setProgressState({ loading: false, error: '', data: response.data })
+      onProgressData?.(response.data)
+    } catch (error) {
+      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
+      if (error.code === 'AUTHORIZATION_ERROR') onSessionExpired?.()
+      setProgressState({ loading: false, error: '進捗状況を取得できませんでした', data: null })
+    }
+  }, [API_KEY, GAS_URL, onProgressData, onSessionExpired, sessionToken])
+
+  useEffect(() => {
+    if (!['admin', 'head-teacher', 'teacher'].includes(role) || !Array.isArray(assignedSchools)) {
+      setProgressState({ loading: false, error: '進捗状況を取得できませんでした', data: null })
+      return undefined
+    }
+    const controller = new AbortController()
+    loadProgress(controller.signal)
+    return () => controller.abort()
+  }, [assignedSchools, loadProgress, requestVersion, role])
+
+  const retry = () => setRequestVersion(value => value + 1)
+  const updatedAt = progressState.data?.generatedAt ? new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(progressState.data.generatedAt)) : '未取得'
   return <div className="home-dashboard">
     <section className="home-greeting">
       <h1>おはようございます、{userName} 先生！ <span className="home-greeting__sun"><Icon name="sun" size={29} /></span></h1>
       <div className="home-greeting__meta">
         <span>{dateText}</span>
-        <span className="home-greeting__updated"><Icon name="calendar" size={18} /> 最終データ更新：未取得</span>
+        <span className="home-greeting__updated"><Icon name="calendar" size={18} /> 最終データ更新：{updatedAt}</span>
       </div>
     </section>
 
@@ -58,26 +136,13 @@ export default function HomeDashboard({ userName }) {
     <section className="home-panel-grid">
       <article className="home-panel home-actions">
         <header><Icon name="alert" size={30} /><h2>対応が必要な項目</h2></header>
-        <div className="home-actions__list">
-          {['確認項目 1', '確認項目 2', '確認項目 3'].map((label, index) => <div className="home-action-row" key={label}>
-            <span className={`home-status-dot home-status-dot--${index + 1}`} />
-            <span>{label}</span><strong>--</strong><Icon name="chevron" size={20} />
-          </div>)}
-        </div>
-        <div className="home-panel-link" aria-disabled="true">表示する情報は未設定です <Icon name="arrow" size={18} /></div>
+        <ActionItems progressState={progressState} onOpenProgressStatus={onOpenProgressStatus} />
+        <div className="home-panel-link" aria-disabled="true">2件は未設定です</div>
       </article>
 
       <article className="home-panel home-progress">
         <header><Icon name="chart" size={30} /><h2>進捗状況</h2></header>
-        <div className="home-progress__content">
-          <div className="home-donut"><div><span>全体進捗率</span><strong>--<small>%</small></strong><em>データ未設定</em></div></div>
-          <div className="home-legend">
-            {[['順調', 'success'], ['要注意', 'warning'], ['遅れ', 'danger']].map(([label, color]) => <div key={label}>
-              <span className={`home-legend__dot home-legend__dot--${color}`} /><b>{label}</b><strong>--名</strong><span>（--%）</span>
-            </div>)}
-          </div>
-        </div>
-        <div className="home-panel-link" aria-disabled="true">表示する情報は未設定です <Icon name="arrow" size={18} /></div>
+        <ProgressPanel progressState={progressState} onRetry={retry} onOpenProgressStatus={onOpenProgressStatus} />
       </article>
     </section>
 
