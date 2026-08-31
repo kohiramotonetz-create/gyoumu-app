@@ -7,6 +7,12 @@ import { ONE_TO_ONE_SUBJECTS, normalizeOneToOneSubjectIds, toggleOneToOneSubject
 import { formatSchoolUnit, SOCIAL_FIELDS } from '../utils/schoolUnits.js';
 import { formatLessonDateJa, isConsecutiveUnits } from '../utils/oneToOneProgressDisplay.js';
 import { collectOneToOneMatrixResults } from '../utils/oneToOneProgressRequests.js';
+import {
+  addOneToOneNetzUnitRange,
+  applyOneToOneNetzUnitSelection,
+  buildOneToOneNetzProgressReplacement,
+  removeOneToOneNetzUnitSelection,
+} from '../utils/oneToOneProgressInput.js';
 import OneToOneProgressResults from './OneToOneProgressResults.jsx';
 import { ALL_SCHOOLS } from '../constants/organization.js';
 import './OneToOneProgressManager.css';
@@ -47,6 +53,7 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
   const [lessonDate, setLessonDate] = useState(today());
   const [schoolTarget, setSchoolTarget] = useState('');
   const [netzUnits, setNetzUnits] = useState([]);
+  const [selectedNetzUnitId, setSelectedNetzUnitId] = useState('');
   const [rangeStart, setRangeStart] = useState('');
   const [rangeEnd, setRangeEnd] = useState('');
   const [saving, setSaving] = useState(false);
@@ -151,7 +158,7 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
 
   const openStudent = async (student, nextMode, subjectId, fieldId = '') => {
     const effectiveFieldId = subjectId === 'social' ? (fieldId || 'history') : '';
-    setSelected(student); setMode(nextMode); setLessonDate(today()); setSchoolTarget(''); setNetzUnits([]); setRangeStart(''); setRangeEnd(''); setNotice(''); setCorrectionEvent(null);
+    setSelected(student); setMode(nextMode); setLessonDate(today()); setSchoolTarget(''); setNetzUnits([]); setSelectedNetzUnitId(''); setRangeStart(''); setRangeEnd(''); setNotice(''); setCorrectionEvent(null);
     setSelectedSubjectId(subjectId);
     setSelectedFieldId(effectiveFieldId);
     try {
@@ -171,7 +178,7 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
       const correctionStart = correctionEvent?.units?.[0]?.unitOrder || 1;
       const replacement = mode === 'school'
         ? { lessonDate, toUnitId: schoolTarget, unitIds: correctionEvent ? detail.axis.filter(unit => unit.unitOrder >= correctionStart && unit.unitOrder <= schoolTargetOrder).map(unit => unit.unitId) : undefined, isCorrection: Boolean(correctionEvent), requestId: makeRequestId() }
-        : { lessonDate, unitIds: netzUnits, requestId: makeRequestId() };
+        : buildOneToOneNetzProgressReplacement({ lessonDate, unitIds: netzUnits, requestId: makeRequestId() });
       if (correctionEvent) {
         const correctionReason = window.prompt('訂正理由を入力してください。');
         if (!correctionReason) return;
@@ -186,11 +193,7 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
   };
 
   const addRange = () => {
-    const start = detail.axis.find(unit => unit.unitId === rangeStart)?.unitOrder;
-    const end = detail.axis.find(unit => unit.unitId === rangeEnd)?.unitOrder;
-    if (!start || !end) return;
-    const [low, high] = start <= end ? [start, end] : [end, start];
-    setNetzUnits(current => Array.from(new Set([...current, ...detail.axis.filter(unit => unit.unitOrder >= low && unit.unitOrder <= high).map(unit => unit.unitId)])));
+    setNetzUnits(current => addOneToOneNetzUnitRange(detail.axis, current, rangeStart, rangeEnd));
   };
 
   const voidEvent = async event => {
@@ -270,8 +273,8 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
             {correctionEvent && <p style={{ color: '#b45309' }}>履歴を訂正中です。登録時に元履歴をVOID化します。</p>}
             {mode !== 'history' && <label>授業日 <input type="date" value={lessonDate} onChange={event => setLessonDate(event.target.value)} /></label>}
             {mode === 'school' && <div style={{ display: 'grid', gap: 12, marginTop: 14 }}><p>現在：{currentSchoolOrder ? `単元${currentSchoolOrder}` : '未登録'}</p><label>今回の最終到達位置<select value={schoolTarget} onChange={event => setSchoolTarget(event.target.value)}><option value="">選択</option>{detail.axis.filter(unit => correctionEvent || unit.unitOrder > currentSchoolOrder).map(unit => <option key={unit.unitId} value={unit.unitId}>{unit.unitOrder}. {formatSchoolUnit(unit)}</option>)}</select></label><p>今回追加：{correctionEvent ? `訂正後：単元${schoolTargetOrder || '-'}` : schoolTargetOrder > currentSchoolOrder ? `単元${currentSchoolOrder + 1}～単元${schoolTargetOrder}` : '未選択'}</p><button type="button" onClick={save} disabled={!schoolTarget || saving}>{saving ? '登録中...' : '登録'}</button></div>}
-            {mode === 'netz' && <div style={{ display: 'grid', gap: 12, marginTop: 14 }}><label>単元を追加<select defaultValue="" onChange={event => { if (event.target.value) setNetzUnits(current => Array.from(new Set([...current, event.target.value]))); event.target.value = ''; }}><option value="">選択</option>{detail.axis.map(unit => <option key={unit.unitId} value={unit.unitId}>{unit.unitOrder}. {formatSchoolUnit(unit)}</option>)}</select></label><div><select value={rangeStart} onChange={event => setRangeStart(event.target.value)}><option value="">範囲開始</option>{detail.axis.map(unit => <option key={unit.unitId} value={unit.unitId}>単元{unit.unitOrder}</option>)}</select><select value={rangeEnd} onChange={event => setRangeEnd(event.target.value)}><option value="">範囲終了</option>{detail.axis.map(unit => <option key={unit.unitId} value={unit.unitId}>単元{unit.unitOrder}</option>)}</select><button type="button" onClick={addRange}>範囲追加</button></div><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{selectedNetz.map(unit => <button key={unit.unitId} type="button" onClick={() => setNetzUnits(current => current.filter(id => id !== unit.unitId))}>単元{unit.unitOrder} ×</button>)}</div><p>登録後最大到達：単元{Math.max(detail.axis.find(unit => unit.unitId === detail.netzCurrentUnitId)?.unitOrder || 0, ...selectedNetz.map(unit => unit.unitOrder), 0) || '未登録'}</p><button type="button" onClick={save} disabled={!netzUnits.length || saving}>{saving ? '登録中...' : '登録'}</button></div>}
-            {mode === 'history' && <div style={{ display: 'grid', gap: 10 }}>{history.map(event => <article key={event.eventId} style={{ border: event.status === 'VOID' ? '1px solid #cbd5e1' : '1px solid #dbe3ea', borderLeft: `5px solid ${event.status === 'VOID' ? '#94a3b8' : event.progressType === 'school' ? '#2563eb' : '#16a34a'}`, padding: 12, borderRadius: 8, background: event.status === 'VOID' ? '#f8fafc' : '#fff', color: event.status === 'VOID' ? '#64748b' : '#1e293b' }}><header style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 7 }}><strong>{formatLessonDateJa(event.lessonDate)}</strong><strong>{event.progressType === 'school' ? '学校' : 'ネッツ'}</strong>{event.status === 'VOID' && <span style={{ padding: '2px 7px', borderRadius: 999, background: '#e2e8f0', fontSize: 12, fontWeight: 700 }}>無効化済み</span>}</header><HistoryUnits event={event} />{event.correctionReason && <p style={{ margin: '8px 0 0', fontSize: 12 }}><strong>理由：</strong>{event.correctionReason}</p>}{role === 'admin' && event.status === 'ACTIVE' && <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 10 }}><button type="button" onClick={() => voidEvent(event)} style={{ fontSize: 12 }}>無効化</button><button type="button" onClick={() => { setCorrectionEvent(event); setMode(event.progressType); setLessonDate(String(event.lessonDate).slice(0, 10)); if (event.progressType === 'school') setSchoolTarget(event.units.at(-1)?.unitId || ''); else setNetzUnits(event.units.map(unit => unit.unitId)); }} style={{ fontSize: 12 }}>修正</button></div>}</article>)}</div>}
+            {mode === 'netz' && <div style={{ display: 'grid', gap: 12, marginTop: 14 }}><label>単元を追加<select value={selectedNetzUnitId} onChange={event => { const next = applyOneToOneNetzUnitSelection(netzUnits, event.target.value); setSelectedNetzUnitId(next.selectedUnitId); setNetzUnits(next.unitIds); }}><option value="">選択</option>{detail.axis.map(unit => <option key={unit.unitId} value={unit.unitId}>{unit.unitOrder}. {formatSchoolUnit(unit)}</option>)}</select></label><div><select value={rangeStart} onChange={event => setRangeStart(event.target.value)}><option value="">範囲開始</option>{detail.axis.map(unit => <option key={unit.unitId} value={unit.unitId}>{unit.unitOrder}. {formatSchoolUnit(unit)}</option>)}</select><select value={rangeEnd} onChange={event => setRangeEnd(event.target.value)}><option value="">範囲終了</option>{detail.axis.map(unit => <option key={unit.unitId} value={unit.unitId}>{unit.unitOrder}. {formatSchoolUnit(unit)}</option>)}</select><button type="button" onClick={addRange}>範囲追加</button></div><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{selectedNetz.map(unit => <button key={unit.unitId} type="button" onClick={() => { const next = removeOneToOneNetzUnitSelection(netzUnits, selectedNetzUnitId, unit.unitId); setSelectedNetzUnitId(next.selectedUnitId); setNetzUnits(next.unitIds); }}>単元{unit.unitOrder} ×</button>)}</div><p>登録後最大到達：単元{Math.max(detail.axis.find(unit => unit.unitId === detail.netzCurrentUnitId)?.unitOrder || 0, ...selectedNetz.map(unit => unit.unitOrder), 0) || '未登録'}</p><button type="button" onClick={save} disabled={!netzUnits.length || saving}>{saving ? '登録中...' : '登録'}</button></div>}
+            {mode === 'history' && <div style={{ display: 'grid', gap: 10 }}>{history.map(event => <article key={event.eventId} style={{ border: event.status === 'VOID' ? '1px solid #cbd5e1' : '1px solid #dbe3ea', borderLeft: `5px solid ${event.status === 'VOID' ? '#94a3b8' : event.progressType === 'school' ? '#2563eb' : '#16a34a'}`, padding: 12, borderRadius: 8, background: event.status === 'VOID' ? '#f8fafc' : '#fff', color: event.status === 'VOID' ? '#64748b' : '#1e293b' }}><header style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 7 }}><strong>{formatLessonDateJa(event.lessonDate)}</strong><strong>{event.progressType === 'school' ? '学校' : 'ネッツ'}</strong>{event.status === 'VOID' && <span style={{ padding: '2px 7px', borderRadius: 999, background: '#e2e8f0', fontSize: 12, fontWeight: 700 }}>無効化済み</span>}</header><HistoryUnits event={event} />{event.correctionReason && <p style={{ margin: '8px 0 0', fontSize: 12 }}><strong>理由：</strong>{event.correctionReason}</p>}{role === 'admin' && event.status === 'ACTIVE' && <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 10 }}><button type="button" onClick={() => voidEvent(event)} style={{ fontSize: 12 }}>無効化</button><button type="button" onClick={() => { setCorrectionEvent(event); setMode(event.progressType); setLessonDate(String(event.lessonDate).slice(0, 10)); if (event.progressType === 'school') setSchoolTarget(event.units.at(-1)?.unitId || ''); else { const unitIds = event.units.map(unit => unit.unitId); setNetzUnits(unitIds); setSelectedNetzUnitId(unitIds.at(-1) || ''); } }} style={{ fontSize: 12 }}>修正</button></div>}</article>)}</div>}
           </div>
         </div>
       )}
