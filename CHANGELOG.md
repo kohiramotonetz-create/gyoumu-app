@@ -18,6 +18,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - 1対1進捗Detailのrequest内context再利用（Issue番号未割当）
   - 1対1進捗Detailの実GAS区間診断（Issue番号未割当）
   - 1対1認証contextのmaster別区間診断（Issue番号未割当）
+  - 1対1進捗Detail diagnostics配送修正（Issue番号未割当）
 - 個トレメニュー: 「丸付け・質問待ち／個トレ進捗管理／模範解答／お知らせ／個トレの仕方」の5アイコン型へ刷新し、旧個トレ進捗管理と個トレ2の入口を個トレメニューへ統合。模範解答を検索・教材一覧・PDF表示の3ペインへ再構成した。
 - コンテンツ管理: admin向けに、お知らせ、個トレの仕方、メニューの使い方のMarkdown編集、下書き／公開分離、Google Drive画像アップロード・公開、各種パスワード管理を追加した。
 - 講師ホーム: 既存1対1進捗データから順調／要注意／遅れを「生徒×科目」単位で集計し、全`assignedSchools`を対象とする動的ドーナツ、進捗遅れ生徒対応、状態別進捗一覧を追加。社会は地理・歴史・公民の比較可能分野から最も悪い状態を1科目の代表判定とする。
@@ -82,6 +83,13 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### 1対1進捗Detail diagnostics配送修正（Issue番号未割当）
+
+- 状態: 原因調査、最小修正、自動検証まで実施。Git commit／push、clasp push、GAS再デプロイ、本番確認は未実施。
+- 原因: Detail diagnosticsはhandler内でのみ成功responseへ付与され、`doPost`の最終HTTP response境界では保持を保証していなかった。認証内部診断追加後もhandler単体テストは通過したが、最終response経路を検証する回帰テストがなく、本番で`diagnostics`欠落を検知できなかった。
+- 修正: Detail専用response helperで既存Detail本体を維持したままrequest traceとhandler diagnosticsを最終responseへ明示的に付与し、`authContextDiagnostics`を通常のJSON objectとして生成する。フロントは従来どおり`result.diagnostics`を参照する。
+- 影響: Detailの業務処理、認証・権限、Matrix、Spreadsheet構造、request形式、既存response項目は変更しない。性能最適化は含まない。
 
 ### 1対1認証contextのmaster別区間診断（Issue番号未割当）
 

@@ -1568,7 +1568,7 @@ function validateManagementSession(sessionToken, extendExpiration, includeUserCo
       throw new Error("管理セッションが無効または期限切れです");
     }
     startedAt = Date.now();
-    const authContextDiagnostics = authDiagnostics ? Object.create(null) : null;
+    const authContextDiagnostics = authDiagnostics ? {} : null;
     const userContexts = getUserAuthContexts_(authContextDiagnostics);
     if (authDiagnostics) authDiagnostics.authContextLoadMs = Date.now() - startedAt;
     if (authDiagnostics) authDiagnostics.authContextDiagnostics = authContextDiagnostics;
@@ -4446,6 +4446,15 @@ function responseOneToOneMatrixTrace_(payload, trace) {
   return response;
 }
 
+function responseOneToOneDetailTrace_(payload, trace) {
+  const diagnostics = Object.assign(
+    { action: "getOneToOneProgressDetail" },
+    trace && trace.timings ? trace.timings : {},
+    payload && payload.diagnostics ? payload.diagnostics : {}
+  );
+  return responseJSON(Object.assign({}, payload, { diagnostics }));
+}
+
 function doPost(e) {
   let data;
   try {
@@ -4571,7 +4580,9 @@ function doPost(e) {
   if (oneToOneProgressActions.includes(data.action)) {
     try {
       const result = handleOneToOneProgressAction_(data);
-      return oneToOneMatrixTrace ? responseOneToOneMatrixTrace_(result, oneToOneMatrixTrace) : responseJSON(result);
+      if (oneToOneMatrixTrace) return responseOneToOneMatrixTrace_(result, oneToOneMatrixTrace);
+      if (oneToOneDetailTrace) return responseOneToOneDetailTrace_(result, oneToOneDetailTrace);
+      return responseJSON(result);
     } catch (error) {
       const code = getOneToOneProgressErrorCode_(error);
       const result = { result: "error", code, message: code === "AUTHORIZATION_ERROR" ? "この1対1進捗を利用する権限がありません" : String(error && error.message || "入力内容が不正です") };

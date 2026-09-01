@@ -246,6 +246,31 @@ test('Detailは認証で取得したuserContextsと対象生徒を再利用し�
   for (const secretKey of ['sessionToken', 'apiKey', 'password', 'userId', 'name']) assert.equal(Object.hasOwn(diagnostics, secretKey), false);
 });
 
+test('Detail diagnosticsはdoPostの最終response境界でも保持される', () => {
+  const responseContext = createTeacherHomeContext();
+  responseContext.__payload = { result: 'success', schoolHistory: [], netzHistory: [] };
+  responseContext.__trace = {
+    timings: {
+      totalMs: 123,
+      authContextDiagnostics: { totalMs: 45, processingMs: 2, otherMs: 1 },
+    },
+  };
+  vm.runInContext(`
+    ContentService = {
+      MimeType: { JSON: 'application/json' },
+      createTextOutput: text => ({ text, setMimeType: function () { return this; } })
+    };
+    __response = responseOneToOneDetailTrace_(__payload, __trace);
+  `, responseContext);
+  const body = JSON.parse(responseContext.__response.text);
+  assert.equal(body.result, 'success');
+  assert.deepEqual(body.schoolHistory, []);
+  assert.equal(body.diagnostics.action, 'getOneToOneProgressDetail');
+  assert.equal(body.diagnostics.totalMs, 123);
+  assert.equal(body.diagnostics.authContextDiagnostics.totalMs, 45);
+  assert.match(source, /if \(oneToOneDetailTrace\) return responseOneToOneDetailTrace_\(result, oneToOneDetailTrace\);/);
+});
+
 test('Matrix traceは認証・matrix・response段階と後方互換diagnosticsを持つ', () => {
   for (const stage of ['START', 'AUTH_START', 'AUTH_DONE', 'AUTH_ERROR', 'MATRIX_START', 'MATRIX_DONE', 'RESPONSE_START', 'RESPONSE_DONE']) {
     assert.match(source, new RegExp(`"${stage}"`));
