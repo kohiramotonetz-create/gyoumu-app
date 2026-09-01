@@ -6,12 +6,10 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 
 ## Version History
 
-### v4.3.1 - 2026-08-31
+### v4.3.2 - 2026-09-01
 
-- テーマ: 個トレ運営機能と講師ホーム進捗可視化の刷新
+- テーマ: 既存機能の操作応答・Detail性能・ホーム再表示の安定化
 - 含まれるIssue:
-  - 個トレメニュー／コンテンツ管理刷新（Issue番号未割当）
-  - 講師ホーム進捗状況実データ化（Issue番号未割当）
   - 1対1ネッツ進捗の単元選択保持修正（Issue番号未割当）
   - 丸付け・質問待ちの対応開始表示ラグ修正（Issue番号未割当）
   - 1対1進捗入力のDetail読込表示改善（Issue番号未割当）
@@ -21,6 +19,17 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - 1対1進捗Detail diagnostics配送修正（Issue番号未割当）
   - 1対1認証contextのSpreadsheet多重I/O削減（Issue番号未割当）
   - 講師ホーム進捗summaryのセッション内キャッシュ（Issue番号未割当）
+- 操作応答: 丸付け・質問待ちは対応開始API成功後に対象行だけを即時更新し、処理中表示、二重操作防止、5秒pollingと他ユーザー更新の同期、古いpolling responseによる巻き戻り防止を両立した。1対1ネッツ進捗は選択単元を制御stateで保持し、教材の正式単元名を範囲選択へ表示する。
+- Detail UX／性能: 学校進捗・ネッツ進捗・履歴はdialogを直ちに開いて対象生徒だけをlazy loadする。Detail request内で認証contextを再利用し、認証4マスターのvaluesをrequest-scoped snapshotとして共有して、重複した`getUserAuthContexts_()`、`getLastRow()`、`getLastColumn()`、`getValues()`を削減した。既存認証・権限・API・Spreadsheet構造は維持する。
+- 講師ホーム: 進捗summaryをログイン時に1回取得して`TeacherView`のReactメモリstateへ保持し、Home復帰時の自動再取得を廃止した。「データ更新」時だけ旧データを維持したまま再取得し、成功時刻を表示する。logout／session変更時はcacheを破棄し、localStorage等は使用しない。
+- Version表示: 共通`VersionLabel`の正本を`Version 4.3.2`へ更新。追加の性能最適化、GAS変更、API変更、Spreadsheet変更、student-app変更は含まない。
+
+### v4.3.1 - 2026-08-31
+
+- テーマ: 個トレ運営機能と講師ホーム進捗可視化の刷新
+- 含まれるIssue:
+  - 個トレメニュー／コンテンツ管理刷新（Issue番号未割当）
+  - 講師ホーム進捗状況実データ化（Issue番号未割当）
 - 個トレメニュー: 「丸付け・質問待ち／個トレ進捗管理／模範解答／お知らせ／個トレの仕方」の5アイコン型へ刷新し、旧個トレ進捗管理と個トレ2の入口を個トレメニューへ統合。模範解答を検索・教材一覧・PDF表示の3ペインへ再構成した。
 - コンテンツ管理: admin向けに、お知らせ、個トレの仕方、メニューの使い方のMarkdown編集、下書き／公開分離、Google Drive画像アップロード・公開、各種パスワード管理を追加した。
 - 講師ホーム: 既存1対1進捗データから順調／要注意／遅れを「生徒×科目」単位で集計し、全`assignedSchools`を対象とする動的ドーナツ、進捗遅れ生徒対応、状態別進捗一覧を追加。社会は地理・歴史・公民の比較可能分野から最も悪い状態を1科目の代表判定とする。
@@ -92,6 +101,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - 原因: `HomeDashboard`が画面切替のたびにmountされ、その内部`useEffect`が毎回`getTeacherHomeProgressSummary`を実行していた。
 - 修正: summaryのdata／初回loading／手動更新中／error／成功時刻をログイン中維持される`TeacherView`へ移し、初回に1回だけ取得する。Home再表示は保持済みdataを利用し、「データ更新」操作時だけ同じAPIを1回再実行する。
 - UX／互換: 手動更新中・更新失敗時も既存dataを維持し、成功時だけsummary全体とブラウザ取得成功時刻を差し替える。状態別一覧と進捗遅れ生徒対応は同じsummaryを共有する。Reactメモリstateのみを使い、GAS・API・Spreadsheet・集計仕様は変更しない。
+- Version: Version 4.3.2に収録。
 
 ### 1対1認証contextのSpreadsheet多重I/O削減（Issue番号未割当）
 
@@ -99,6 +109,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - 原因: 移行済みアカウント4マスターの通常認証経路で、各sheetのヘッダー検証とデータ取得が分離され、合計でsheet lookup 4回、`getLastRow()` 12回、`getLastColumn()` 8回、`getValues()` 8回のSpreadsheet I/Oが発生していた。
 - 修正: 通常認証専用のrequest-scoped snapshotを導入し、各masterをsheet lookup、last row、last column、範囲read各1回で取得する。同じvaluesをヘッダー検証、data rows抽出、profile／assignedSchools結合へ再利用する。移行・setup用helperとlegacy fallbackは変更しない。
 - 診断／互換: 既存`authContextDiagnostics`を維持し、統合read用の`valuesRangeMs`、`valuesReadMs`、`valuesReadCount`を追加する。認証・role・削除判定・担当校舎制限・API・Spreadsheet構造は変更しない。
+- Version: Version 4.3.2に収録。
 
 ### 1対1進捗Detail diagnostics配送修正（Issue番号未割当）
 
@@ -106,48 +117,49 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - 原因: Detail diagnosticsはhandler内でのみ成功responseへ付与され、`doPost`の最終HTTP response境界では保持を保証していなかった。認証内部診断追加後もhandler単体テストは通過したが、最終response経路を検証する回帰テストがなく、本番で`diagnostics`欠落を検知できなかった。
 - 修正: Detail専用response helperで既存Detail本体を維持したままrequest traceとhandler diagnosticsを最終responseへ明示的に付与し、`authContextDiagnostics`を通常のJSON objectとして生成する。フロントは従来どおり`result.diagnostics`を参照する。
 - 影響: Detailの業務処理、認証・権限、Matrix、Spreadsheet構造、request形式、既存response項目は変更しない。性能最適化は含まない。
+- Version: Version 4.3.2に収録。
 
 ### 1対1認証contextのmaster別区間診断（Issue番号未割当）
 
 - 状態: 診断コードと自動検証まで完了。GAS再デプロイ、実GAS計測は未実施。
 - 診断: Detailの`authContextLoadMs`内部について、アカウント・生徒・講師・講師担当校舎の各master別にsheet lookup、last row／column、header range／read、data range／read、取得行数とread回数を計測し、contextのmap／index／merge加工時間と未分類時間も`authContextDiagnostics`へ追加する。
 - セキュリティ／互換: 認証・role・assignedSchools・legacy fallback・既存response項目は変更せず、診断値は時間・行数・read回数のみとする。userId、氏名、校舎、password、token、Spreadsheet IDは含めない。
-- Version: Version 4.3.1に収録。
+- Version: Version 4.3.2に収録。
 
 ### 1対1進捗Detailの実GAS区間診断（Issue番号未割当）
 
 - 状態: 診断コードと自動検証まで完了。GAS再デプロイ、実GAS計測は未実施。
 - 診断: `getOneToOneProgressDetail`成功responseへ、API key取得、管理セッション、対象生徒／受講確認、単元軸、進捗イベント／単元のSpreadsheet readと行数、JavaScript加工、response生成、GAS内合計時間を含む小さな`diagnostics`を追加する。フロントはAPI往復時間とdiagnosticsだけをbrowser consoleへ出力する。
 - セキュリティ／互換: action・request・既存response項目・Detail処理は変更せず、診断値は時間・行数・read回数・action名だけとする。token、API key、個人情報、Spreadsheet IDは含めない。
-- Version: Version 4.3.1に収録。
+- Version: Version 4.3.2に収録。
 
 ### 1対1進捗Detailのrequest内context再利用（Issue番号未割当）
 
 - 状態: GASの局所修正と自動検証まで完了。実機性能確認、GAS再デプロイは未実施。
 - 原因／修正: `getOneToOneProgressDetail`の1 request内で、管理セッション認証、対象生徒確認、Detail state生成、受講確認がそれぞれ`getUserAuthContexts_()`へ到達し、アカウント4マスターを4回読み直していた。認証済み`session.userContexts`と確認済み対象生徒をoptional引数で下位helperへ渡し、Detail経路では同じcontextを再利用する。optional引数がない既存呼出しは従来どおり内部取得する。
 - 性能／互換: Detail通常経路の`getUserAuthContexts_()`を4回から1回、アカウント系`getValues()`を32回から8回へ削減。管理セッション検証、role・対象生徒・受講科目検証、進捗イベント／単元の全件read、action・request・response、Spreadsheet構造は変更しない。
-- Version: Version 4.3.1に収録。
+- Version: Version 4.3.2に収録。
 
 ### 1対1進捗入力のDetail読込表示改善（Issue番号未割当）
 
 - 状態: Reactの局所修正と自動検証まで完了。実機確認、Vercel手動デプロイは未実施。
 - 原因／修正: 学校進捗・ネッツ進捗・履歴の各ボタン自体は無効化されていなかったが、クリック後の`getOneToOneProgressDetail`完了までdialogを描画しないため無反応に見えていた。さらに前回Detailを次回取得開始時に消しておらず、履歴取得後だけ入力dialogが即表示されるように見えていた。各操作時に対象生徒のDetailだけをlazy loadし、クリック直後からdialog内へ読込状態を表示して、取得完了後に指定モードを描画するよう分離した。
 - 既存互換: Matrix／Detail action・payload・response、学校／ネッツ登録payload、履歴内容、単元軸、GAS、Spreadsheet、権限は変更しない。全生徒Detailの初期一括取得は追加しない。
-- Version: Version 4.3.1に収録。
+- Version: Version 4.3.2に収録。
 
 ### 丸付け・質問待ちの対応開始表示ラグ修正（Issue番号未割当）
 
 - 状態: Reactの局所修正と自動検証まで完了。実機確認、Git commit／push、Vercelデプロイは未実施。
 - 原因／修正: `startSupport`成功後に一覧stateを直接更新せず再取得だけを行い、5秒polling取得中は重複取得防止によりその再取得も開始されないため、次回pollingまで表示が残っていた。対象行をAPI成功後だけ既存status＋`（対応中）`へ局所更新し、処理中表示と二重操作防止を維持した。開始APIより前に開始したpolling応答はversionを進めて破棄し、未対応表示への巻き戻りを防ぐ。
 - 既存互換: 5秒polling、`getNotifications`／`startSupport`／`deleteNotification`のaction・payload・response、生徒SOS送信、GAS、Spreadsheet、他講師同期方式は変更しない。
-- Version: Version 4.3.1に収録。
+- Version: Version 4.3.2に収録。
 
 ### 1対1ネッツ進捗の単元選択保持修正（Issue番号未割当）
 
 - 状態: Reactの局所修正と自動検証まで完了。実機確認、Git commit／push、Vercelデプロイは未実施。
 - 原因／修正: 「単元を追加」のselectが非制御で、選択直後にDOMの値を空文字へ戻していたため、選択表示が「選択」へ戻っていた。unitIdを保持する制御stateへ変更し、個別単元・範囲追加・登録payloadの既存仕様を維持した。
 - 既存互換: 学校進捗、既存GAS action、1対1進捗データ形式、Spreadsheet、単元マスター、講師ホーム集計は変更しない。
-- Version: Version 4.3.1に収録。
+- Version: Version 4.3.2に収録。
 
 ### 講師ホーム進捗状況実データ化（Issue番号未割当）
 
