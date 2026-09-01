@@ -5,6 +5,7 @@ import { extractImageBase64, filterModelAnswerBooks, inferModelAnswerSubject, in
 import { externalServiceAccounts, studentAccountRules } from '../src/constants/data.js'
 import { buildLegacyPasswordEntries, isLegacyPasswordResponse } from '../src/utils/passwordEntries.js'
 import { getKotoreManagementErrorMessage } from '../src/utils/managementApi.js'
+import { markNotificationSupportStarted } from '../src/utils/notificationState.js'
 
 const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8')
 
@@ -47,7 +48,34 @@ test('待ちリストは既存3actionと5秒polling・破棄時解除・重複�
   assert.match(source, /POLL_INTERVAL_MS = 5000/)
   assert.match(source, /clearInterval/)
   assert.match(source, /inFlightRef/)
+  assert.match(source, /if \(pendingKey\) return/)
+  assert.match(source, /disabled=\{Boolean\(pendingKey\)\}/)
   for (const label of ['待ち順', '受付時刻', '生徒名', '学年', '校舎', 'ステータス', '対応開始', '対応完了']) assert.match(source, new RegExp(label))
+})
+
+test('対応開始成功後は対象行だけを既存正式表示の対応中へ更新する', () => {
+  const notifications = [
+    { queueNumber: 1, userId: '000001', status: '丸付け待ち' },
+    { queueNumber: 2, userId: '000002', status: '質問待ち' },
+    { queueNumber: 3, userId: '000003', status: 'SOS(ギブアップ)' },
+  ]
+  const updated = markNotificationSupportStarted(notifications, notifications[1])
+  assert.equal(updated[0], notifications[0])
+  assert.deepEqual(updated[1], { ...notifications[1], status: '質問待ち（対応中）' })
+  assert.equal(updated[2], notifications[2])
+  assert.deepEqual(markNotificationSupportStarted(notifications, notifications[0])[0], { ...notifications[0], status: '丸付け待ち（対応中）' })
+  assert.deepEqual(markNotificationSupportStarted(notifications, notifications[2])[2], { ...notifications[2], status: 'SOS(ギブアップ)（対応中）' })
+})
+
+test('対応開始はAPI成功後だけ局所更新し、古いpolling応答を無効化する', () => {
+  const source = read('../src/components/NotificationManager.jsx')
+  const actionSource = source.slice(source.indexOf('const runAction'), source.indexOf('const availableSchools'))
+  const successCheck = actionSource.indexOf("response.data?.result !== 'success'")
+  const invalidatePolling = actionSource.indexOf('requestVersionRef.current += 1', successCheck)
+  const localUpdate = actionSource.indexOf('setNotifications(current => markNotificationSupportStarted(current, notification))', invalidatePolling)
+  assert.ok(successCheck >= 0 && invalidatePolling > successCheck && localUpdate > invalidatePolling)
+  assert.match(actionSource, /catch \(requestError\)[\s\S]*setError\(/)
+  assert.doesNotMatch(actionSource.slice(0, successCheck), /markNotificationSupportStarted/)
 })
 
 test('模範解答は既存titleだけから学年・科目・教材を絞り込む', () => {

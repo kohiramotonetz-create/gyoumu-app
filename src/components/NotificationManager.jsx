@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
+import { markNotificationSupportStarted } from '../utils/notificationState.js'
 import './KoToreMenu.css'
 
 const POLL_INTERVAL_MS = 5000
@@ -65,7 +66,13 @@ export default function NotificationManager({ GAS_URL, API_KEY, unit, schools = 
     try {
       const response = await axios.post(GAS_URL, JSON.stringify(payload), { headers: { 'Content-Type': 'text/plain' }, timeout: 30000 })
       if (response.data?.result !== 'success') throw new Error(response.data?.message || '操作を完了できませんでした')
-      await fetchNotifications()
+      if (action === 'startSupport') {
+        // API開始前のpolling応答で、成功後の局所更新が未対応へ巻き戻ることを防ぐ。
+        requestVersionRef.current += 1
+        setNotifications(current => markNotificationSupportStarted(current, notification))
+      } else {
+        await fetchNotifications()
+      }
     } catch (requestError) {
       setError(requestError.message || (action === 'startSupport' ? '対応開始に失敗しました' : '対応完了に失敗しました'))
     } finally {
@@ -87,7 +94,7 @@ export default function NotificationManager({ GAS_URL, API_KEY, unit, schools = 
         <div className="kotore-queue-table-wrap"><table className="kotore-queue-table"><thead><tr><th>待ち順</th><th>受付時刻</th><th>生徒名</th><th>学年</th><th>校舎</th><th>ステータス</th><th>操作</th></tr></thead><tbody>{filtered.map(item => {
           const processing = String(item.status || '').includes('（対応中）')
           const action = processing ? 'deleteNotification' : 'startSupport'
-          return <tr key={`${item.queueNumber}-${item.userId}`}><td><span className="kotore-queue-number">{item.queueNumber}</span></td><td>{item.time}</td><td className="kotore-queue-name">{item.name}</td><td>{item.grade}</td><td>{item.school}</td><td><span className={`kotore-status kotore-status--${String(item.status || '').includes('SOS') ? 'sos' : String(item.status || '').includes('質問') ? 'question' : 'marking'}`}>{item.status}</span></td><td><button className={processing ? 'kotore-action kotore-action--complete' : 'kotore-action'} disabled={Boolean(pendingKey)} onClick={() => runAction(action, item)}>{pendingKey === `${action}:${item.queueNumber}` ? '処理中…' : processing ? '対応完了' : '対応開始'}</button></td></tr>
+          return <tr key={`${item.queueNumber}-${item.userId}`}><td><span className="kotore-queue-number">{item.queueNumber}</span></td><td>{item.time}</td><td className="kotore-queue-name">{item.name}</td><td>{item.grade}</td><td>{item.school}</td><td><span className={`kotore-status kotore-status--${String(item.status || '').includes('SOS') ? 'sos' : String(item.status || '').includes('質問') ? 'question' : 'marking'}`}>{item.status}</span></td><td><button className={processing ? 'kotore-action kotore-action--complete' : 'kotore-action'} disabled={Boolean(pendingKey)} onClick={() => runAction(action, item)}>{pendingKey === `${action}:${item.queueNumber}` ? (action === 'startSupport' ? '開始中…' : '完了処理中…') : processing ? '対応完了' : '対応開始'}</button></td></tr>
         })}</tbody></table></div>
       )}
     </section>
