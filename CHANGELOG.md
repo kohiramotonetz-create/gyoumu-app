@@ -17,6 +17,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - 1対1進捗入力のDetail読込表示改善（Issue番号未割当）
   - 1対1進捗Detailのrequest内context再利用（Issue番号未割当）
   - 1対1進捗Detailの実GAS区間診断（Issue番号未割当）
+  - 1対1認証contextのmaster別区間診断（Issue番号未割当）
 - 個トレメニュー: 「丸付け・質問待ち／個トレ進捗管理／模範解答／お知らせ／個トレの仕方」の5アイコン型へ刷新し、旧個トレ進捗管理と個トレ2の入口を個トレメニューへ統合。模範解答を検索・教材一覧・PDF表示の3ペインへ再構成した。
 - コンテンツ管理: admin向けに、お知らせ、個トレの仕方、メニューの使い方のMarkdown編集、下書き／公開分離、Google Drive画像アップロード・公開、各種パスワード管理を追加した。
 - 講師ホーム: 既存1対1進捗データから順調／要注意／遅れを「生徒×科目」単位で集計し、全`assignedSchools`を対象とする動的ドーナツ、進捗遅れ生徒対応、状態別進捗一覧を追加。社会は地理・歴史・公民の比較可能分野から最も悪い状態を1科目の代表判定とする。
@@ -81,6 +82,13 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### 1対1認証contextのmaster別区間診断（Issue番号未割当）
+
+- 状態: 診断コードと自動検証まで完了。GAS再デプロイ、実GAS計測は未実施。
+- 診断: Detailの`authContextLoadMs`内部について、アカウント・生徒・講師・講師担当校舎の各master別にsheet lookup、last row／column、header range／read、data range／read、取得行数とread回数を計測し、contextのmap／index／merge加工時間と未分類時間も`authContextDiagnostics`へ追加する。
+- セキュリティ／互換: 認証・role・assignedSchools・legacy fallback・既存response項目は変更せず、診断値は時間・行数・read回数のみとする。userId、氏名、校舎、password、token、Spreadsheet IDは含めない。
+- Version: Version 4.3.1に収録。
 
 ### 1対1進捗Detailの実GAS区間診断（Issue番号未割当）
 

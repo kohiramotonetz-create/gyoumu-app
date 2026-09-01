@@ -122,6 +122,75 @@ test('管理セッション診断はread・lookup・認証context・期限延長
   assert.equal(diagnostics.lockUsed, false);
 });
 
+test('認証context診断は4マスターのheader・data readとcontext加工を個人情報なしで分解する', () => {
+  const authContext = createTeacherHomeContext();
+  const rowsBySheet = {
+    'アカウントマスター': [
+      ['userId','password','isInitial','passwordUpdatedAt','role','enabled','sukimakunToken','sukimakunTokenExpire','createdAt','updatedAt','deletedAt'],
+      ['teacher1','secret',false,'','teacher',true,'','','','',''],
+      ['001200','secret',false,'','student',true,'','','','',''],
+    ],
+    '生徒マスター': [
+      ['userId','school','name','nameKana','grade','createdAt','updatedAt'],
+      ['001200','校舎A','生徒','セイト','中２','',''],
+    ],
+    '講師マスター': [
+      ['userId','name','nameKana','createdAt','updatedAt'],
+      ['teacher1','講師','コウシ','',''],
+    ],
+    '講師担当校舎': [
+      ['userId','school','isPrimary','enabled','createdAt','updatedAt','updatedBy'],
+      ['teacher1','校舎A',true,true,'','','admin'],
+    ],
+  };
+  authContext.__rowsBySheet = rowsBySheet;
+  vm.runInContext(`
+    __masterCounters = Object.create(null);
+    __sheets = Object.create(null);
+    Object.keys(__rowsBySheet).forEach(name => {
+      const rows = __rowsBySheet[name];
+      const counters = __masterCounters[name] = { headerReads: 0, dataReads: 0, lastRows: 0, lastColumns: 0, lookups: 0 };
+      __sheets[name] = {
+        getLastRow: () => { counters.lastRows += 1; return rows.length; },
+        getLastColumn: () => { counters.lastColumns += 1; return rows[0].length; },
+        getRange: row => ({ getValues: () => {
+          if (row === 1) { counters.headerReads += 1; return [rows[0]]; }
+          counters.dataReads += 1; return rows.slice(1);
+        } })
+      };
+    });
+    SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: name => {
+      __masterCounters[name].lookups += 1;
+      return __sheets[name];
+    } }) };
+    __authContextDiagnostics = {};
+    __authContexts = getUserAuthContexts_(__authContextDiagnostics);
+  `, authContext);
+  assert.equal(authContext.__authContexts.length, 2);
+  for (const [sheetName, key, expectedRows] of [
+    ['アカウントマスター', 'account', 2],
+    ['生徒マスター', 'student', 1],
+    ['講師マスター', 'teacher', 1],
+    ['講師担当校舎', 'teacherSchools', 1],
+  ]) {
+    const counters = authContext.__masterCounters[sheetName];
+    assert.deepEqual({ ...counters }, { headerReads: 1, dataReads: 1, lastRows: 3, lastColumns: 2, lookups: 1 });
+    const diagnostics = authContext.__authContextDiagnostics[key];
+    for (const valueKey of ['sheetLookupMs','sheetLookupCount','lastRowMs','lastRowCount','lastColumnMs','lastColumnCount','headerRangeMs','headerReadMs','headerReadCount','dataRangeMs','dataReadMs','dataReadCount','rows']) {
+      assert.equal(typeof diagnostics[valueKey], 'number');
+      assert.ok(diagnostics[valueKey] >= 0);
+    }
+    assert.equal(diagnostics.rows, expectedRows);
+    for (const countKey of ['sheetLookupCount','lastRowCount','lastColumnCount','headerReadCount','dataReadCount','rows']) assert.ok(Number.isInteger(diagnostics[countKey]));
+  }
+  for (const key of ['processingMs', 'totalMs', 'otherMs']) {
+    assert.equal(typeof authContext.__authContextDiagnostics[key], 'number');
+    assert.ok(authContext.__authContextDiagnostics[key] >= 0);
+  }
+  const serialized = JSON.stringify(authContext.__authContextDiagnostics);
+  assert.doesNotMatch(serialized, /teacher1|001200|校舎A|生徒|講師|セイト|コウシ|secret/);
+});
+
 test('Detailは認証で取得したuserContextsと対象生徒を再利用してアカウントcontextを1回だけ読む', () => {
   const detailContext = createTeacherHomeContext();
   const axis = vm.runInContext('getOneToOneSchoolUnitAxis_("中２", "math")', detailContext);
@@ -171,6 +240,7 @@ test('Detailは認証で取得したuserContextsと対象生徒を再利用し�
   assert.equal(diagnostics.progressUnitsRows, 1);
   assert.equal(diagnostics.eventsReadCount, 1);
   assert.equal(diagnostics.progressUnitsReadCount, 1);
+  assert.equal(typeof diagnostics.authContextDiagnostics, 'object');
   assert.ok(Number.isInteger(diagnostics.eventsRows));
   assert.ok(Number.isInteger(diagnostics.progressUnitsRows));
   for (const secretKey of ['sessionToken', 'apiKey', 'password', 'userId', 'name']) assert.equal(Object.hasOwn(diagnostics, secretKey), false);

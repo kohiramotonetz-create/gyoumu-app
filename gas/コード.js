@@ -368,17 +368,59 @@ function previewLegacyAccountMigration() {
   };
 }
 
-function assertAccountMigrationSheets_(requireEmpty) {
+function getAuthContextMasterDiagnostics_(diagnostics, sheetName) {
+  if (!diagnostics) return null;
+  const keys = { "アカウントマスター": "account", "生徒マスター": "student", "講師マスター": "teacher", "講師担当校舎": "teacherSchools" };
+  const key = keys[sheetName];
+  if (!key) return null;
+  if (!diagnostics[key]) diagnostics[key] = {
+    sheetLookupMs: 0, sheetLookupCount: 0,
+    lastRowMs: 0, lastRowCount: 0,
+    lastColumnMs: 0, lastColumnCount: 0,
+    headerRangeMs: 0, headerReadMs: 0, headerReadCount: 0,
+    dataRangeMs: 0, dataReadMs: 0, dataReadCount: 0,
+    rows: 0
+  };
+  return diagnostics[key];
+}
+
+function assertAccountMigrationSheets_(requireEmpty, diagnostics) {
   // eslint-disable-next-line no-undef
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = Object.create(null);
   ACCOUNT_MASTER_SHEET_SPECS.forEach(spec => {
+    const masterDiagnostics = getAuthContextMasterDiagnostics_(diagnostics, spec.name);
+    let startedAt = Date.now();
     const sheet = spreadsheet.getSheetByName(spec.name);
+    if (masterDiagnostics) {
+      masterDiagnostics.sheetLookupMs += Date.now() - startedAt;
+      masterDiagnostics.sheetLookupCount += 1;
+    }
     if (!sheet) throw new Error(`Required migration sheet is missing: ${spec.name}`);
-    if (sheet.getLastColumn() !== spec.headers.length || sheet.getLastRow() < 1) {
+    startedAt = Date.now();
+    const lastColumn = sheet.getLastColumn();
+    if (masterDiagnostics) {
+      masterDiagnostics.lastColumnMs += Date.now() - startedAt;
+      masterDiagnostics.lastColumnCount += 1;
+    }
+    startedAt = Date.now();
+    const lastRow = sheet.getLastRow();
+    if (masterDiagnostics) {
+      masterDiagnostics.lastRowMs += Date.now() - startedAt;
+      masterDiagnostics.lastRowCount += 1;
+    }
+    if (lastColumn !== spec.headers.length || lastRow < 1) {
       throw new Error(`Migration sheet header mismatch: ${spec.name}`);
     }
-    const actualHeaders = sheet.getRange(1, 1, 1, spec.headers.length).getValues()[0].map(String);
+    startedAt = Date.now();
+    const headerRange = sheet.getRange(1, 1, 1, spec.headers.length);
+    if (masterDiagnostics) masterDiagnostics.headerRangeMs += Date.now() - startedAt;
+    startedAt = Date.now();
+    const actualHeaders = headerRange.getValues()[0].map(String);
+    if (masterDiagnostics) {
+      masterDiagnostics.headerReadMs += Date.now() - startedAt;
+      masterDiagnostics.headerReadCount += 1;
+    }
     if (actualHeaders.join("\t") !== spec.headers.join("\t")) {
       throw new Error(`Migration sheet header mismatch: ${spec.name}`);
     }
@@ -412,9 +454,37 @@ function createAccountMigrationId_(now) {
   return `account-migration-${timestamp}-${Utilities.getUuid().slice(0, 8)}`;
 }
 
-function getAccountMigrationDataRows_(sheet) {
-  if (sheet.getLastRow() < 2) return [];
-  return sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+function getAccountMigrationDataRows_(sheet, masterDiagnostics) {
+  let startedAt = Date.now();
+  const firstLastRow = sheet.getLastRow();
+  if (masterDiagnostics) {
+    masterDiagnostics.lastRowMs += Date.now() - startedAt;
+    masterDiagnostics.lastRowCount += 1;
+  }
+  if (firstLastRow < 2) return [];
+  startedAt = Date.now();
+  const dataLastRow = sheet.getLastRow();
+  if (masterDiagnostics) {
+    masterDiagnostics.lastRowMs += Date.now() - startedAt;
+    masterDiagnostics.lastRowCount += 1;
+  }
+  startedAt = Date.now();
+  const dataLastColumn = sheet.getLastColumn();
+  if (masterDiagnostics) {
+    masterDiagnostics.lastColumnMs += Date.now() - startedAt;
+    masterDiagnostics.lastColumnCount += 1;
+  }
+  startedAt = Date.now();
+  const dataRange = sheet.getRange(2, 1, dataLastRow - 1, dataLastColumn);
+  if (masterDiagnostics) masterDiagnostics.dataRangeMs += Date.now() - startedAt;
+  startedAt = Date.now();
+  const rows = dataRange.getValues();
+  if (masterDiagnostics) {
+    masterDiagnostics.dataReadMs += Date.now() - startedAt;
+    masterDiagnostics.dataReadCount += 1;
+    masterDiagnostics.rows = rows.length;
+  }
+  return rows;
 }
 
 function getAccountMigrationDigest_(rows) {
@@ -1318,12 +1388,13 @@ function appendStudentPermissionInfo(result, userId, role) {
   return result;
 }
 
-function getNewAuthData_() {
-  const sheets = assertAccountMigrationSheets_(false);
-  const accounts = getAccountMigrationDataRows_(sheets["アカウントマスター"]);
-  const students = getAccountMigrationDataRows_(sheets["生徒マスター"]);
-  const staff = getAccountMigrationDataRows_(sheets["講師マスター"]);
-  const assignments = getAccountMigrationDataRows_(sheets["講師担当校舎"]);
+function getNewAuthData_(diagnostics) {
+  const sheets = assertAccountMigrationSheets_(false, diagnostics);
+  const accounts = getAccountMigrationDataRows_(sheets["アカウントマスター"], getAuthContextMasterDiagnostics_(diagnostics, "アカウントマスター"));
+  const students = getAccountMigrationDataRows_(sheets["生徒マスター"], getAuthContextMasterDiagnostics_(diagnostics, "生徒マスター"));
+  const staff = getAccountMigrationDataRows_(sheets["講師マスター"], getAuthContextMasterDiagnostics_(diagnostics, "講師マスター"));
+  const assignments = getAccountMigrationDataRows_(sheets["講師担当校舎"], getAuthContextMasterDiagnostics_(diagnostics, "講師担当校舎"));
+  const processingStartedAt = Date.now();
   const studentById = Object.create(null);
   const staffById = Object.create(null);
   students.forEach(row => { studentById[normalizeUserId(row[0])] = row; });
@@ -1354,6 +1425,7 @@ function getNewAuthData_() {
       assignedSchools: assigned.map(item => item.school).filter(Boolean)
     };
   });
+  if (diagnostics) diagnostics.processingMs = Date.now() - processingStartedAt;
   return { sheets, contexts };
 }
 
@@ -1362,17 +1434,39 @@ function canUseLegacyAuthFallback_() {
   return !metadata || metadata.status !== "completed";
 }
 
-function getUserAuthContexts_() {
+function getUserAuthContexts_(diagnostics) {
+  const startedAt = Date.now();
   try {
-    return getNewAuthData_().contexts;
+    const contexts = getNewAuthData_(diagnostics).contexts;
+    if (diagnostics) {
+      diagnostics.totalMs = Date.now() - startedAt;
+      const masters = [diagnostics.account, diagnostics.student, diagnostics.teacher, diagnostics.teacherSchools].filter(Boolean);
+      const measuredMs = masters.reduce((sum, item) => sum + item.sheetLookupMs + item.lastRowMs + item.lastColumnMs + item.headerRangeMs + item.headerReadMs + item.dataRangeMs + item.dataReadMs, 0)
+        + (diagnostics.processingMs || 0);
+      diagnostics.otherMs = Math.max(0, diagnostics.totalMs - measuredMs);
+    }
+    return contexts;
   } catch (error) {
     if (!canUseLegacyAuthFallback_()) throw error;
+    const fallbackStartedAt = Date.now();
     const rows = getLegacyAccountSheet_().getDataRange().getValues();
-    return rows.slice(1).map((row, index) => ({
+    if (diagnostics) {
+      diagnostics.legacyFallbackReadMs = Date.now() - fallbackStartedAt;
+      diagnostics.legacyFallbackReadCount = 1;
+      diagnostics.legacyFallbackRows = Math.max(0, rows.length - 1);
+    }
+    const processingStartedAt = Date.now();
+    const contexts = rows.slice(1).map((row, index) => ({
       rowIndex: index + 2, userId: normalizeUserId(row[1]), password: row[9], isInitial: row[8],
       passwordUpdatedAt: row[7], role: String(row[10] || "").trim(), enabled: true, deleted: false,
       token: row[11], tokenExpire: row[12], school: row[0], name: row[4], nameKana: row[2], grade: row[5], assignedSchools: row[0] ? [row[0]] : []
     }));
+    if (diagnostics) {
+      diagnostics.processingMs = (diagnostics.processingMs || 0) + Date.now() - processingStartedAt;
+      diagnostics.totalMs = Date.now() - startedAt;
+      diagnostics.otherMs = Math.max(0, diagnostics.totalMs - diagnostics.legacyFallbackReadMs - diagnostics.processingMs);
+    }
+    return contexts;
   }
 }
 
@@ -1474,8 +1568,10 @@ function validateManagementSession(sessionToken, extendExpiration, includeUserCo
       throw new Error("管理セッションが無効または期限切れです");
     }
     startedAt = Date.now();
-    const userContexts = getUserAuthContexts_();
+    const authContextDiagnostics = authDiagnostics ? Object.create(null) : null;
+    const userContexts = getUserAuthContexts_(authContextDiagnostics);
     if (authDiagnostics) authDiagnostics.authContextLoadMs = Date.now() - startedAt;
+    if (authDiagnostics) authDiagnostics.authContextDiagnostics = authContextDiagnostics;
     const normalizedUserId = normalizeUserId(rows[i][1]);
     const user = userContexts.find(item => item.userId === normalizedUserId && item.enabled && !item.deleted);
     if (!user) {
