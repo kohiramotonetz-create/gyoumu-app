@@ -40,7 +40,7 @@ test('GASは専用シート・先頭0・enabled無効化・admin専用actionを�
   assert.match(source, /setNumberFormat\("@"\)/);
   assert.match(source, /ONE_TO_ONE_SUBJECT_IDS\.map\(subjectId => \[formatUserIdForSheet/);
   assert.match(source, /enabled\.has\(subjectId\)/);
-  assert.match(source, /function getOneToOneSubjects\(userId\)/);
+  assert.match(source, /function getOneToOneSubjects\(userId, userContexts, providedTarget\)/);
   assert.match(source, /const admin = requireAdminSession\(data\.sessionToken\)/);
   assert.match(source, /"getOneToOneSubjects", "updateOneToOneSubjects"/);
 });

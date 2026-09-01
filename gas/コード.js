@@ -1659,13 +1659,17 @@ function buildOneToOneSubjectStateMap_(rows) {
   return { states, warnings };
 }
 
-function findOneToOneSubjectStudent_(userId) {
+function findOneToOneSubjectStudent_(userId, userContexts) {
   const targetId = normalizeUserId(userId);
-  return getUserAuthContexts_().find(user => user.userId === targetId && user.role === "student" && !user.deleted) || null;
+  const contexts = Array.isArray(userContexts) ? userContexts : getUserAuthContexts_();
+  return contexts.find(user => user.userId === targetId && user.role === "student" && !user.deleted) || null;
 }
 
-function getOneToOneSubjects(userId) {
-  const target = findOneToOneSubjectStudent_(userId);
+function getOneToOneSubjects(userId, userContexts, providedTarget) {
+  const normalizedUserId = normalizeUserId(userId);
+  const target = providedTarget && providedTarget.userId === normalizedUserId && providedTarget.role === "student" && !providedTarget.deleted
+    ? providedTarget
+    : findOneToOneSubjectStudent_(normalizedUserId, userContexts);
   if (!target) throw new Error("対象の生徒が見つかりません");
   const rows = assertOneToOneSubjectSheet_().getDataRange().getValues();
   const state = buildOneToOneSubjectStateMap_(rows);
@@ -2315,10 +2319,13 @@ function readOneToOneProgressState_(userId, subjectId, grade, sheets, fieldId, r
   return { axis, axisById, fieldId: normalizedFieldId, events: events.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt)), schoolCurrent: current("school"), netzCurrent: current("netz") };
 }
 
-function getOneToOneProgressState_(userId, subjectId, fieldId) {
-  const target = findOneToOneSubjectStudent_(userId);
+function getOneToOneProgressState_(userId, subjectId, fieldId, userContexts, providedTarget) {
+  const normalizedUserId = normalizeUserId(userId);
+  const target = providedTarget && providedTarget.userId === normalizedUserId && providedTarget.role === "student" && !providedTarget.deleted
+    ? providedTarget
+    : findOneToOneSubjectStudent_(normalizedUserId, userContexts);
   if (!target) throw new Error("対象生徒が見つかりません");
-  if (!getOneToOneSubjects(target.userId).subjectIds.includes(subjectId)) throw new Error("未受講の科目です");
+  if (!getOneToOneSubjects(target.userId, userContexts, target).subjectIds.includes(subjectId)) throw new Error("未受講の科目です");
   const sheets = assertOneToOneProgressSheets_();
   if (subjectId === "social" && !fieldId) {
     const fields = Object.create(null);
@@ -2474,9 +2481,9 @@ function handleOneToOneProgressAction_(data) {
   const userId = normalizeUserId(data.userId);
   const subjectId = String(data.subjectId || "").trim();
   const fieldId = String(data.fieldId || "").trim();
-  const target = findOneToOneSubjectStudent_(userId);
+  const target = findOneToOneSubjectStudent_(userId, session.userContexts);
   assertOneToOneProgressStudentAccess_(session, target, data.action !== "getOneToOneProgressDetail");
-  if (data.action === "getOneToOneProgressDetail") return Object.assign({ result: "success", userId, subjectId, sessionExpiresAt: session.sessionExpiresAt }, serializeOneToOneProgressState_(getOneToOneProgressState_(userId, subjectId, fieldId)));
+  if (data.action === "getOneToOneProgressDetail") return Object.assign({ result: "success", userId, subjectId, sessionExpiresAt: session.sessionExpiresAt }, serializeOneToOneProgressState_(getOneToOneProgressState_(userId, subjectId, fieldId, session.userContexts, target)));
   if (data.action === "addOneToOneSchoolProgress") return Object.assign({ result: "success" }, appendOneToOneProgressEvent_(data, session, "school"));
   if (data.action === "addOneToOneNetzProgress") return Object.assign({ result: "success" }, appendOneToOneProgressEvent_(data, session, "netz"));
   if (data.action === "voidOneToOneProgressEvent") return Object.assign({ result: "success" }, voidOneToOneProgressEvent_(data, session, ""));

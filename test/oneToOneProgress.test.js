@@ -81,6 +81,20 @@ test('一覧は専用結果componentで学校・ネッツ2段と分離入力・�
   assert.doesNotMatch(managerSource, /\{event\.status\}<\/strong>/);
 });
 
+test('入力と履歴は一覧から独立して対象生徒Detailをlazy loadし直ちにloading dialogを表示する', () => {
+  const managerSource = fs.readFileSync(new URL('../src/components/OneToOneProgressManager.jsx', import.meta.url), 'utf8');
+  const resultsSource = fs.readFileSync(new URL('../src/components/OneToOneProgressResults.jsx', import.meta.url), 'utf8');
+  for (const mode of ['school', 'netz', 'history']) assert.match(resultsSource, new RegExp(`onOpenStudent\\(student, '${mode}'`));
+  assert.match(managerSource, /setSelected\(student\); setMode\(nextMode\)/);
+  assert.match(managerSource, /setDetail\(null\);\s*setDetailLoading\(true\)/);
+  assert.match(managerSource, /request\('getOneToOneProgressDetail', \{ userId: student\.userId, subjectId, fieldId: effectiveFieldId \}\)/);
+  assert.match(managerSource, /\{selected && \(/);
+  assert.doesNotMatch(managerSource, /\{selected && detail && \(/);
+  assert.match(managerSource, /detailLoading && <p role="status">進捗情報を読み込み中…<\/p>/);
+  assert.match(managerSource, /finally \{ setDetailLoading\(false\); \}/);
+  assert.doesNotMatch(managerSource, /students\.(?:map|forEach)[\s\S]*?getOneToOneProgressDetail/);
+});
+
 test('複数科目取得は成功結果と科目別エラーを分離して保持する', () => {
   const english = { axis: [{ unitId: 'u1' }], students: [{ userId: '000001' }] };
   const result = collectOneToOneMatrixResults(

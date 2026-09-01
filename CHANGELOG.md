@@ -14,6 +14,8 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - 講師ホーム進捗状況実データ化（Issue番号未割当）
   - 1対1ネッツ進捗の単元選択保持修正（Issue番号未割当）
   - 丸付け・質問待ちの対応開始表示ラグ修正（Issue番号未割当）
+  - 1対1進捗入力のDetail読込表示改善（Issue番号未割当）
+  - 1対1進捗Detailのrequest内context再利用（Issue番号未割当）
 - 個トレメニュー: 「丸付け・質問待ち／個トレ進捗管理／模範解答／お知らせ／個トレの仕方」の5アイコン型へ刷新し、旧個トレ進捗管理と個トレ2の入口を個トレメニューへ統合。模範解答を検索・教材一覧・PDF表示の3ペインへ再構成した。
 - コンテンツ管理: admin向けに、お知らせ、個トレの仕方、メニューの使い方のMarkdown編集、下書き／公開分離、Google Drive画像アップロード・公開、各種パスワード管理を追加した。
 - 講師ホーム: 既存1対1進捗データから順調／要注意／遅れを「生徒×科目」単位で集計し、全`assignedSchools`を対象とする動的ドーナツ、進捗遅れ生徒対応、状態別進捗一覧を追加。社会は地理・歴史・公民の比較可能分野から最も悪い状態を1科目の代表判定とする。
@@ -78,6 +80,20 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### 1対1進捗Detailのrequest内context再利用（Issue番号未割当）
+
+- 状態: GASの局所修正と自動検証まで完了。実機性能確認、GAS再デプロイは未実施。
+- 原因／修正: `getOneToOneProgressDetail`の1 request内で、管理セッション認証、対象生徒確認、Detail state生成、受講確認がそれぞれ`getUserAuthContexts_()`へ到達し、アカウント4マスターを4回読み直していた。認証済み`session.userContexts`と確認済み対象生徒をoptional引数で下位helperへ渡し、Detail経路では同じcontextを再利用する。optional引数がない既存呼出しは従来どおり内部取得する。
+- 性能／互換: Detail通常経路の`getUserAuthContexts_()`を4回から1回、アカウント系`getValues()`を32回から8回へ削減。管理セッション検証、role・対象生徒・受講科目検証、進捗イベント／単元の全件read、action・request・response、Spreadsheet構造は変更しない。
+- Version: Version 4.3.1に収録。
+
+### 1対1進捗入力のDetail読込表示改善（Issue番号未割当）
+
+- 状態: Reactの局所修正と自動検証まで完了。実機確認、Vercel手動デプロイは未実施。
+- 原因／修正: 学校進捗・ネッツ進捗・履歴の各ボタン自体は無効化されていなかったが、クリック後の`getOneToOneProgressDetail`完了までdialogを描画しないため無反応に見えていた。さらに前回Detailを次回取得開始時に消しておらず、履歴取得後だけ入力dialogが即表示されるように見えていた。各操作時に対象生徒のDetailだけをlazy loadし、クリック直後からdialog内へ読込状態を表示して、取得完了後に指定モードを描画するよう分離した。
+- 既存互換: Matrix／Detail action・payload・response、学校／ネッツ登録payload、履歴内容、単元軸、GAS、Spreadsheet、権限は変更しない。全生徒Detailの初期一括取得は追加しない。
+- Version: Version 4.3.1に収録。
 
 ### 丸付け・質問待ちの対応開始表示ラグ修正（Issue番号未割当）
 

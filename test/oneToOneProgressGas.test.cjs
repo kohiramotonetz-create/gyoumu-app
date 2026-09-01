@@ -122,6 +122,46 @@ test('管理セッション診断はread・lookup・認証context・期限延長
   assert.equal(diagnostics.lockUsed, false);
 });
 
+test('Detailは認証で取得したuserContextsと対象生徒を再利用してアカウントcontextを1回だけ読む', () => {
+  const detailContext = createTeacherHomeContext();
+  const axis = vm.runInContext('getOneToOneSchoolUnitAxis_("中２", "math")', detailContext);
+  const actor = { userId: 'teacher1', role: 'teacher', enabled: true, deleted: false, assignedSchools: ['校舎A'] };
+  const student = { userId: '001200', role: 'student', enabled: true, deleted: false, grade: '中２', school: '校舎A', name: '生徒', nameKana: 'セイト' };
+  const subjectRows = [['userId','subjectId','enabled','createdAt','updatedAt','updatedBy'], ['001200','math',true,'','','']];
+  const eventRows = [['eventId','userId','subjectId','progressType','lessonDate','recordedAt','recordedBy','status','correctedAt','correctedBy','correctionReason','replacementEventId','requestId','fieldId'], ['e1','001200','math','school','2026-09-01',new Date(),'teacher1','ACTIVE','','','','','r1','']];
+  const unitRows = [['eventId','unitId','unitOrder','textNameSnapshot','chapterSnapshot','sectionSnapshot','unitNameSnapshot','pageSnapshot'], ['e1',axis[0].unitId,1,'','','','','']];
+  const sheet = rows => ({
+    getLastRow: () => rows.length,
+    getLastColumn: () => rows[0].length,
+    getRange: (row, column, rowCount) => ({
+      getValues: () => row === 1 ? [rows[0]] : rows.slice(row - 1, row - 1 + rowCount),
+      setValue: () => {},
+    }),
+    getDataRange: () => ({ getValues: () => rows }),
+  });
+  detailContext.__actor = actor;
+  detailContext.__student = student;
+  detailContext.__managementSheet = sheet([['token','userId','role','expiresAt'], ['session-token','teacher1','teacher',new Date(Date.now() + 60000)]]);
+  detailContext.__subjectSheet = sheet(subjectRows);
+  detailContext.__eventSheet = sheet(eventRows);
+  detailContext.__unitSheet = sheet(unitRows);
+  vm.runInContext(`
+    __userContextReads = 0;
+    getRequiredSheet = () => __managementSheet;
+    getUserAuthContexts_ = () => { __userContextReads += 1; return [__actor, __student]; };
+    SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: name => ({
+      [ONE_TO_ONE_SUBJECT_SHEET_NAME]: __subjectSheet,
+      [ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME]: __eventSheet,
+      [ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME]: __unitSheet
+    })[name] }) };
+    __detailResult = handleOneToOneProgressAction_({ action: 'getOneToOneProgressDetail', sessionToken: 'session-token', userId: '001200', subjectId: 'math', fieldId: '' });
+  `, detailContext);
+  assert.equal(detailContext.__userContextReads, 1);
+  assert.equal(detailContext.__detailResult.result, 'success');
+  assert.equal(detailContext.__detailResult.schoolCurrentUnitId, axis[0].unitId);
+  assert.deepEqual(Array.from(detailContext.__detailResult.netzHistory), []);
+});
+
 test('Matrix traceは認証・matrix・response段階と後方互換diagnosticsを持つ', () => {
   for (const stage of ['START', 'AUTH_START', 'AUTH_DONE', 'AUTH_ERROR', 'MATRIX_START', 'MATRIX_DONE', 'RESPONSE_START', 'RESPONSE_DONE']) {
     assert.match(source, new RegExp(`"${stage}"`));
