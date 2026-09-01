@@ -154,12 +154,26 @@ test('Detailは認証で取得したuserContextsと対象生徒を再利用し�
       [ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME]: __eventSheet,
       [ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME]: __unitSheet
     })[name] }) };
-    __detailResult = handleOneToOneProgressAction_({ action: 'getOneToOneProgressDetail', sessionToken: 'session-token', userId: '001200', subjectId: 'math', fieldId: '' });
+    __detailTrace = { startedAt: Date.now(), timings: { apiKeyMs: 0 } };
+    __detailResult = handleOneToOneProgressAction_({ action: 'getOneToOneProgressDetail', sessionToken: 'session-token', userId: '001200', subjectId: 'math', fieldId: '', __oneToOneDetailTrace: __detailTrace });
   `, detailContext);
   assert.equal(detailContext.__userContextReads, 1);
   assert.equal(detailContext.__detailResult.result, 'success');
   assert.equal(detailContext.__detailResult.schoolCurrentUnitId, axis[0].unitId);
   assert.deepEqual(Array.from(detailContext.__detailResult.netzHistory), []);
+  const diagnostics = detailContext.__detailResult.diagnostics;
+  for (const key of ['apiKeyMs', 'authMs', 'targetAndSubjectMs', 'axisMs', 'eventsReadMs', 'progressUnitsReadMs', 'processingMs', 'responseBuildMs', 'totalMs']) {
+    assert.equal(typeof diagnostics[key], 'number');
+    assert.ok(diagnostics[key] >= 0);
+  }
+  assert.equal(diagnostics.action, 'getOneToOneProgressDetail');
+  assert.equal(diagnostics.eventsRows, 1);
+  assert.equal(diagnostics.progressUnitsRows, 1);
+  assert.equal(diagnostics.eventsReadCount, 1);
+  assert.equal(diagnostics.progressUnitsReadCount, 1);
+  assert.ok(Number.isInteger(diagnostics.eventsRows));
+  assert.ok(Number.isInteger(diagnostics.progressUnitsRows));
+  for (const secretKey of ['sessionToken', 'apiKey', 'password', 'userId', 'name']) assert.equal(Object.hasOwn(diagnostics, secretKey), false);
 });
 
 test('Matrix traceは認証・matrix・response段階と後方互換diagnosticsを持つ', () => {

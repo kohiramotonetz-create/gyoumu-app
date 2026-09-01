@@ -16,6 +16,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - 丸付け・質問待ちの対応開始表示ラグ修正（Issue番号未割当）
   - 1対1進捗入力のDetail読込表示改善（Issue番号未割当）
   - 1対1進捗Detailのrequest内context再利用（Issue番号未割当）
+  - 1対1進捗Detailの実GAS区間診断（Issue番号未割当）
 - 個トレメニュー: 「丸付け・質問待ち／個トレ進捗管理／模範解答／お知らせ／個トレの仕方」の5アイコン型へ刷新し、旧個トレ進捗管理と個トレ2の入口を個トレメニューへ統合。模範解答を検索・教材一覧・PDF表示の3ペインへ再構成した。
 - コンテンツ管理: admin向けに、お知らせ、個トレの仕方、メニューの使い方のMarkdown編集、下書き／公開分離、Google Drive画像アップロード・公開、各種パスワード管理を追加した。
 - 講師ホーム: 既存1対1進捗データから順調／要注意／遅れを「生徒×科目」単位で集計し、全`assignedSchools`を対象とする動的ドーナツ、進捗遅れ生徒対応、状態別進捗一覧を追加。社会は地理・歴史・公民の比較可能分野から最も悪い状態を1科目の代表判定とする。
@@ -80,6 +81,13 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### 1対1進捗Detailの実GAS区間診断（Issue番号未割当）
+
+- 状態: 診断コードと自動検証まで完了。GAS再デプロイ、実GAS計測は未実施。
+- 診断: `getOneToOneProgressDetail`成功responseへ、API key取得、管理セッション、対象生徒／受講確認、単元軸、進捗イベント／単元のSpreadsheet readと行数、JavaScript加工、response生成、GAS内合計時間を含む小さな`diagnostics`を追加する。フロントはAPI往復時間とdiagnosticsだけをbrowser consoleへ出力する。
+- セキュリティ／互換: action・request・既存response項目・Detail処理は変更せず、診断値は時間・行数・read回数・action名だけとする。token、API key、個人情報、Spreadsheet IDは含めない。
+- Version: Version 4.3.1に収録。
 
 ### 1対1進捗Detailのrequest内context再利用（Issue番号未割当）
 

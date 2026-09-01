@@ -92,6 +92,9 @@ test('入力と履歴は一覧から独立して対象生徒Detailをlazy load�
   assert.doesNotMatch(managerSource, /\{selected && detail && \(/);
   assert.match(managerSource, /detailLoading && <p role="status">進捗情報を読み込み中…<\/p>/);
   assert.match(managerSource, /finally \{ setDetailLoading\(false\); \}/);
+  assert.match(managerSource, /console\.info\('\[ONE_TO_ONE_DETAIL_DIAGNOSTICS\]'/);
+  assert.match(managerSource, /clientElapsedMs: Math\.round\(performance\.now\(\) - detailStartedAt\)/);
+  assert.match(managerSource, /serverDiagnostics: result\.diagnostics/);
   assert.doesNotMatch(managerSource, /students\.(?:map|forEach)[\s\S]*?getOneToOneProgressDetail/);
 });
 

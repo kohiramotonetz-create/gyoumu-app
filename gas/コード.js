@@ -2189,10 +2189,25 @@ function buildOneToOneProgressReadContextFromRows_(eventRows, unitRows) {
   return { eventRows, unitRows, eventsByUserSubjectField, unitsByEventId };
 }
 
-function buildOneToOneProgressReadContext_(sheets) {
+function buildOneToOneProgressReadContext_(sheets, diagnostics) {
+  let startedAt = Date.now();
   const eventRows = sheets[ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME].getDataRange().getValues();
+  if (diagnostics) {
+    diagnostics.eventsReadMs = (diagnostics.eventsReadMs || 0) + Date.now() - startedAt;
+    diagnostics.eventsRows = Math.max(0, eventRows.length - 1);
+    diagnostics.eventsReadCount = (diagnostics.eventsReadCount || 0) + 1;
+  }
+  startedAt = Date.now();
   const unitRows = sheets[ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME].getDataRange().getValues();
-  return buildOneToOneProgressReadContextFromRows_(eventRows, unitRows);
+  if (diagnostics) {
+    diagnostics.progressUnitsReadMs = (diagnostics.progressUnitsReadMs || 0) + Date.now() - startedAt;
+    diagnostics.progressUnitsRows = Math.max(0, unitRows.length - 1);
+    diagnostics.progressUnitsReadCount = (diagnostics.progressUnitsReadCount || 0) + 1;
+  }
+  startedAt = Date.now();
+  const context = buildOneToOneProgressReadContextFromRows_(eventRows, unitRows);
+  if (diagnostics) diagnostics.processingMs = (diagnostics.processingMs || 0) + Date.now() - startedAt;
+  return context;
 }
 
 function inspectOneToOneProgressSheetRows_(sheet, rows) {
@@ -2302,12 +2317,17 @@ function runInspectOneToOneProgressPerformance() {
   console.log(JSON.stringify(result, null, 2));
 }
 
-function readOneToOneProgressState_(userId, subjectId, grade, sheets, fieldId, readContext, sharedAxis) {
+function readOneToOneProgressState_(userId, subjectId, grade, sheets, fieldId, readContext, sharedAxis, diagnostics) {
   const normalizedFieldId = String(fieldId || "").trim();
+  let startedAt = Date.now();
   const axis = sharedAxis || getOneToOneSchoolUnitAxis_(grade, subjectId, normalizedFieldId);
+  if (diagnostics) diagnostics.axisMs = (diagnostics.axisMs || 0) + Date.now() - startedAt;
+  startedAt = Date.now();
   const axisById = Object.create(null);
   axis.forEach(unit => { axisById[unit.unitId] = unit; });
-  const context = readContext || buildOneToOneProgressReadContext_(sheets);
+  if (diagnostics) diagnostics.processingMs = (diagnostics.processingMs || 0) + Date.now() - startedAt;
+  const context = readContext || buildOneToOneProgressReadContext_(sheets, diagnostics);
+  startedAt = Date.now();
   const key = `${userId}\t${subjectId}\t${normalizedFieldId}`;
   const events = (context.eventsByUserSubjectField[key] || []).slice();
   const current = type => {
@@ -2316,23 +2336,34 @@ function readOneToOneProgressState_(userId, subjectId, grade, sheets, fieldId, r
     const order = Math.max(...orders);
     return axis.find(unit => unit.unitOrder === order) || { unitId: null, unitOrder: order };
   };
-  return { axis, axisById, fieldId: normalizedFieldId, events: events.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt)), schoolCurrent: current("school"), netzCurrent: current("netz") };
+  const state = { axis, axisById, fieldId: normalizedFieldId, events: events.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt)), schoolCurrent: current("school"), netzCurrent: current("netz") };
+  if (diagnostics) diagnostics.processingMs = (diagnostics.processingMs || 0) + Date.now() - startedAt;
+  return state;
 }
 
-function getOneToOneProgressState_(userId, subjectId, fieldId, userContexts, providedTarget) {
+function getOneToOneProgressState_(userId, subjectId, fieldId, userContexts, providedTarget, diagnostics) {
   const normalizedUserId = normalizeUserId(userId);
+  let startedAt = Date.now();
   const target = providedTarget && providedTarget.userId === normalizedUserId && providedTarget.role === "student" && !providedTarget.deleted
     ? providedTarget
     : findOneToOneSubjectStudent_(normalizedUserId, userContexts);
   if (!target) throw new Error("対象生徒が見つかりません");
+  if (diagnostics) diagnostics.targetLookupMs = (diagnostics.targetLookupMs || 0) + Date.now() - startedAt;
+  startedAt = Date.now();
   if (!getOneToOneSubjects(target.userId, userContexts, target).subjectIds.includes(subjectId)) throw new Error("未受講の科目です");
+  if (diagnostics) {
+    diagnostics.subjectCheckMs = (diagnostics.subjectCheckMs || 0) + Date.now() - startedAt;
+    diagnostics.targetAndSubjectMs = (diagnostics.targetAccessMs || 0) + diagnostics.targetLookupMs + diagnostics.subjectCheckMs;
+  }
+  startedAt = Date.now();
   const sheets = assertOneToOneProgressSheets_();
+  if (diagnostics) diagnostics.progressSheetsMs = Date.now() - startedAt;
   if (subjectId === "social" && !fieldId) {
     const fields = Object.create(null);
-    ONE_TO_ONE_SOCIAL_FIELDS.forEach(field => { fields[field.fieldId] = readOneToOneProgressState_(target.userId, subjectId, target.grade, sheets, field.fieldId); });
+    ONE_TO_ONE_SOCIAL_FIELDS.forEach(field => { fields[field.fieldId] = readOneToOneProgressState_(target.userId, subjectId, target.grade, sheets, field.fieldId, null, null, diagnostics); });
     return { userId: target.userId, subjectId, fields };
   }
-  return readOneToOneProgressState_(target.userId, subjectId, target.grade, sheets, fieldId);
+  return readOneToOneProgressState_(target.userId, subjectId, target.grade, sheets, fieldId, null, null, diagnostics);
 }
 
 function selectOneToOneSchoolProgressUnits_(axis, currentOrder, toUnitId, correctionUnitIds) {
@@ -2443,10 +2474,12 @@ function serializeOneToOneProgressState_(state) {
 
 function handleOneToOneProgressAction_(data) {
   const trace = data.__oneToOneMatrixTrace || null;
+  const detailTrace = data.__oneToOneDetailTrace || null;
+  const authDiagnostics = trace ? trace.timings : detailTrace ? detailTrace.timings : null;
   if (trace) logOneToOneMatrixTrace_(trace, "AUTH_START", { elapsedMs: Date.now() - trace.startedAt });
   let session;
   try {
-    session = requireOneToOneProgressSession_(data.sessionToken, true, trace && trace.timings);
+    session = requireOneToOneProgressSession_(data.sessionToken, true, authDiagnostics);
   } catch (error) {
     if (trace) logOneToOneMatrixTrace_(trace, "AUTH_ERROR", { authTotalMs: trace.timings.authTotalMs == null ? Date.now() - trace.startedAt : trace.timings.authTotalMs });
     throw error;
@@ -2481,9 +2514,23 @@ function handleOneToOneProgressAction_(data) {
   const userId = normalizeUserId(data.userId);
   const subjectId = String(data.subjectId || "").trim();
   const fieldId = String(data.fieldId || "").trim();
+  let startedAt = Date.now();
   const target = findOneToOneSubjectStudent_(userId, session.userContexts);
   assertOneToOneProgressStudentAccess_(session, target, data.action !== "getOneToOneProgressDetail");
-  if (data.action === "getOneToOneProgressDetail") return Object.assign({ result: "success", userId, subjectId, sessionExpiresAt: session.sessionExpiresAt }, serializeOneToOneProgressState_(getOneToOneProgressState_(userId, subjectId, fieldId, session.userContexts, target)));
+  if (detailTrace) detailTrace.timings.targetAccessMs = Date.now() - startedAt;
+  if (data.action === "getOneToOneProgressDetail") {
+    const timings = detailTrace ? detailTrace.timings : null;
+    const state = getOneToOneProgressState_(userId, subjectId, fieldId, session.userContexts, target, timings);
+    startedAt = Date.now();
+    const serializedState = serializeOneToOneProgressState_(state);
+    const payload = Object.assign({ result: "success", userId, subjectId, sessionExpiresAt: session.sessionExpiresAt }, serializedState);
+    if (!timings) return payload;
+    JSON.stringify(payload);
+    timings.responseBuildMs = Date.now() - startedAt;
+    timings.authMs = timings.authTotalMs;
+    timings.totalMs = Date.now() - detailTrace.startedAt;
+    return Object.assign({}, payload, { diagnostics: Object.assign({ action: "getOneToOneProgressDetail" }, timings) });
+  }
   if (data.action === "addOneToOneSchoolProgress") return Object.assign({ result: "success" }, appendOneToOneProgressEvent_(data, session, "school"));
   if (data.action === "addOneToOneNetzProgress") return Object.assign({ result: "success" }, appendOneToOneProgressEvent_(data, session, "netz"));
   if (data.action === "voidOneToOneProgressEvent") return Object.assign({ result: "success" }, voidOneToOneProgressEvent_(data, session, ""));
@@ -4320,14 +4367,44 @@ function doPost(e) {
     data.__oneToOneMatrixTrace = oneToOneMatrixTrace;
     logOneToOneMatrixTrace_(oneToOneMatrixTrace, "START");
   }
+  const oneToOneDetailTrace = data.action === "getOneToOneProgressDetail" ? {
+    startedAt: Date.now(),
+    timings: {
+      apiKeyMs: 0,
+      sessionReadMs: 0,
+      sessionLookupMs: 0,
+      authContextLoadMs: 0,
+      sessionExtendMs: 0,
+      authTotalMs: 0,
+      authMs: 0,
+      targetAccessMs: 0,
+      targetLookupMs: 0,
+      subjectCheckMs: 0,
+      targetAndSubjectMs: 0,
+      progressSheetsMs: 0,
+      axisMs: 0,
+      eventsReadMs: 0,
+      eventsRows: 0,
+      eventsReadCount: 0,
+      progressUnitsReadMs: 0,
+      progressUnitsRows: 0,
+      progressUnitsReadCount: 0,
+      processingMs: 0,
+      responseBuildMs: 0,
+      totalMs: 0
+    }
+  } : null;
 
+  const apiKeyStartedAt = Date.now();
   const props = PropertiesService.getScriptProperties();
   const validApiKey = props.getProperty('MY_API_KEY');
+  if (oneToOneDetailTrace) oneToOneDetailTrace.timings.apiKeyMs = Date.now() - apiKeyStartedAt;
 
   if (!data.apiKey || data.apiKey !== validApiKey) {
     const error = { result: "error", message: "認証エラー" };
     return oneToOneMatrixTrace ? responseOneToOneMatrixTrace_(error, oneToOneMatrixTrace) : responseJSON(error);
   }
+  if (oneToOneDetailTrace) data.__oneToOneDetailTrace = oneToOneDetailTrace;
 
   const kotoreContentActions = ["getPublishedKotoreContents", "listKotoreContentsAdmin", "getKotoreContentAdmin", "saveKotoreContentDraft", "publishKotoreContent", "deleteKotoreNotice"];
   if (kotoreContentActions.includes(data.action)) {

@@ -164,8 +164,13 @@ export default function OneToOneProgressManager({ GAS_URL, API_KEY, sessionToken
     setDetailLoading(true);
     setSelectedSubjectId(subjectId);
     setSelectedFieldId(effectiveFieldId);
+    const detailStartedAt = performance.now();
     try {
       const result = await request('getOneToOneProgressDetail', { userId: student.userId, subjectId, fieldId: effectiveFieldId });
+      console.info('[ONE_TO_ONE_DETAIL_DIAGNOSTICS]', {
+        clientElapsedMs: Math.round(performance.now() - detailStartedAt),
+        serverDiagnostics: result.diagnostics,
+      });
       setDetail(result);
       if (nextMode === 'school') {
         const currentOrder = result.axis.find(unit => unit.unitId === result.schoolCurrentUnitId)?.unitOrder || 0;
