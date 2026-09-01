@@ -20,6 +20,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - 1対1認証contextのmaster別区間診断（Issue番号未割当）
   - 1対1進捗Detail diagnostics配送修正（Issue番号未割当）
   - 1対1認証contextのSpreadsheet多重I/O削減（Issue番号未割当）
+  - 講師ホーム進捗summaryのセッション内キャッシュ（Issue番号未割当）
 - 個トレメニュー: 「丸付け・質問待ち／個トレ進捗管理／模範解答／お知らせ／個トレの仕方」の5アイコン型へ刷新し、旧個トレ進捗管理と個トレ2の入口を個トレメニューへ統合。模範解答を検索・教材一覧・PDF表示の3ペインへ再構成した。
 - コンテンツ管理: admin向けに、お知らせ、個トレの仕方、メニューの使い方のMarkdown編集、下書き／公開分離、Google Drive画像アップロード・公開、各種パスワード管理を追加した。
 - 講師ホーム: 既存1対1進捗データから順調／要注意／遅れを「生徒×科目」単位で集計し、全`assignedSchools`を対象とする動的ドーナツ、進捗遅れ生徒対応、状態別進捗一覧を追加。社会は地理・歴史・公民の比較可能分野から最も悪い状態を1科目の代表判定とする。
@@ -84,6 +85,13 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### 講師ホーム進捗summaryのセッション内キャッシュ（Issue番号未割当）
+
+- 状態: フロント修正と自動検証まで実施。Git commit／push、Vercel deploy、本番確認は未実施。
+- 原因: `HomeDashboard`が画面切替のたびにmountされ、その内部`useEffect`が毎回`getTeacherHomeProgressSummary`を実行していた。
+- 修正: summaryのdata／初回loading／手動更新中／error／成功時刻をログイン中維持される`TeacherView`へ移し、初回に1回だけ取得する。Home再表示は保持済みdataを利用し、「データ更新」操作時だけ同じAPIを1回再実行する。
+- UX／互換: 手動更新中・更新失敗時も既存dataを維持し、成功時だけsummary全体とブラウザ取得成功時刻を差し替える。状態別一覧と進捗遅れ生徒対応は同じsummaryを共有する。Reactメモリstateのみを使い、GAS・API・Spreadsheet・集計仕様は変更しない。
 
 ### 1対1認証contextのSpreadsheet多重I/O削減（Issue番号未割当）
 

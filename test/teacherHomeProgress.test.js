@@ -31,15 +31,36 @@ test('状態一覧は符号付き差と現在単元を講師向けに表示す�
   assert.equal(formatTeacherHomeProgressUnit({ textName: '教材', chapter: '第1章', section: '第1節', unitName: '式', page: '12' }), '教材 / 第1章 / 第1節 / 式 / p.12');
 });
 
-test('ホームは専用actionを1requestで取得し権限外scope値を送らない', () => {
-  const source = read('../src/components/HomeDashboard.jsx');
-  assert.match(source, /action: 'getTeacherHomeProgressSummary'/);
-  assert.match(source, /apiKey: API_KEY, sessionToken/);
-  assert.doesNotMatch(source, /action: 'getTeacherHomeProgressSummary'[\s\S]{0,120}(?:schools|assignedSchools|role)\s*:/);
-  assert.match(source, /AUTHORIZATION_ERROR/);
-  assert.match(source, /進捗状況を取得できませんでした/);
-  assert.match(source, /対象となる1対1進捗がありません/);
-  assert.match(source, /比較可能な進捗がありません/);
+test('summary取得はTeacherViewが所有しHomeDashboard mountから分離する', () => {
+  const teacher = read('../src/TeacherView.jsx');
+  const home = read('../src/components/HomeDashboard.jsx');
+  assert.equal((teacher.match(/action: 'getTeacherHomeProgressSummary'/g) || []).length, 1);
+  assert.match(teacher, /apiKey: API_KEY, sessionToken/);
+  assert.doesNotMatch(teacher, /action: 'getTeacherHomeProgressSummary'[\s\S]{0,120}(?:schools|assignedSchools|role)\s*:/);
+  assert.doesNotMatch(home, /getTeacherHomeProgressSummary|axios|useEffect/);
+  assert.match(teacher, /AUTHORIZATION_ERROR/);
+  assert.match(home, /進捗状況を取得できませんでした/);
+  assert.match(home, /対象となる1対1進捗がありません/);
+  assert.match(home, /比較可能な進捗がありません/);
+});
+
+test('TeacherViewは初回1回取得・session cache・手動更新を管理する', () => {
+  const teacher = read('../src/TeacherView.jsx');
+  const home = read('../src/components/HomeDashboard.jsx');
+  assert.match(teacher, /homeProgressState[\s\S]*loaded: false[\s\S]*refreshing: false[\s\S]*updatedAt: null/);
+  assert.match(teacher, /homeProgressRequestRef\.current/);
+  assert.match(teacher, /if \(homeProgressRequestRef\.current\) return/);
+  assert.match(teacher, /!homeProgressState\.loaded && !homeProgressState\.loading && !homeProgressState\.error/);
+  assert.match(teacher, /loading: !current\.data, refreshing: Boolean\(current\.data\)/);
+  assert.match(teacher, /loaded: Boolean\(current\.data\)[\s\S]*error: '進捗状況を取得できませんでした'/);
+  assert.match(teacher, /const updatedAt = new Date\(\)/);
+  assert.match(teacher, /homeProgressOwnerRef\.current !== requestOwner/);
+  assert.match(teacher, /setHomeProgressData\(null\)/);
+  assert.match(home, /onRefreshProgress/);
+  assert.match(home, /更新中…/);
+  assert.match(home, /disabled=\{progressState\.loading \|\| progressState\.refreshing\}/);
+  assert.match(home, /表示中のデータを維持しています/);
+  assert.doesNotMatch(`${teacher}\n${home}`, /localStorage|sessionStorage|indexedDB/i);
 });
 
 test('ホームは3状態button・動的ドーナツ・遅れ対応・未設定disabledを持つ', () => {
@@ -58,6 +79,8 @@ test('TeacherViewはsidebarを増やさず共通状態一覧とプロフィー�
   const list = read('../src/components/TeacherHomeProgressStudentList.jsx');
   assert.match(teacher, /home-progress-list/);
   assert.match(teacher, /<TeacherHomeProgressStudentList/);
+  assert.match(teacher, /data=\{homeProgressData\}/);
+  assert.match(teacher, /setHomeProgressData\(response\.data\)/);
   assert.doesNotMatch(teacher, /label:\s*'進捗.*一覧'/);
   assert.match(list, /statusFilter/);
   assert.match(list, /source="home-progress-list"/);

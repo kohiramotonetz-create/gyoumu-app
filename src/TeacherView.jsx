@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useEffect, useRef, useMemo } from 'react'
+import { lazy, Suspense, useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import axios from 'axios'
 import PasswordManager from './components/PasswordManager.jsx'
 import { styles } from './styles/teacherViewStyles.js'
@@ -60,11 +60,61 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   const [notificationRefresh, setNotificationRefresh] = useState(null);
   const [homeProgressData, setHomeProgressData] = useState(null);
   const [homeProgressStatus, setHomeProgressStatus] = useState('behind');
+  const [homeProgressState, setHomeProgressState] = useState({ loaded: false, loading: false, refreshing: false, error: '', data: null, updatedAt: null });
   const schools = ALL_SCHOOLS;
   const availableAssignedSchools = useMemo(() => Array.isArray(assignedSchools) && assignedSchools.length > 0
     ? assignedSchools
     : school ? [school] : [], [assignedSchools, school]);
   const timeoutRef = useRef(null);
+  const homeProgressRequestRef = useRef(false);
+  const homeProgressOwnerRef = useRef(sessionToken);
+
+  const loadHomeProgress = useCallback(async () => {
+    if (homeProgressRequestRef.current) return;
+    const requestOwner = sessionToken;
+    homeProgressRequestRef.current = true;
+    setHomeProgressState(current => ({ ...current, loading: !current.data, refreshing: Boolean(current.data), error: '' }));
+    try {
+      const response = await axios.post(GAS_URL, JSON.stringify({ action: 'getTeacherHomeProgressSummary', apiKey: API_KEY, sessionToken }), { headers: { 'Content-Type': 'text/plain' }, timeout: 30000 });
+      if (response.data?.result !== 'success') {
+        const error = new Error(response.data?.message || '進捗状況を取得できませんでした');
+        error.code = response.data?.code;
+        throw error;
+      }
+      if (homeProgressOwnerRef.current !== requestOwner) return;
+      const updatedAt = new Date();
+      setHomeProgressState({ loaded: true, loading: false, refreshing: false, error: '', data: response.data, updatedAt });
+      setHomeProgressData(response.data);
+    } catch (error) {
+      if (homeProgressOwnerRef.current !== requestOwner) return;
+      if (error.code === 'AUTHORIZATION_ERROR') {
+        handleLogout();
+        return;
+      }
+      setHomeProgressState(current => ({ ...current, loaded: Boolean(current.data), loading: false, refreshing: false, error: '進捗状況を取得できませんでした' }));
+    } finally {
+      if (homeProgressOwnerRef.current === requestOwner) homeProgressRequestRef.current = false;
+    }
+  }, [handleLogout, sessionToken]);
+
+  useEffect(() => {
+    if (homeProgressOwnerRef.current === sessionToken) return;
+    homeProgressOwnerRef.current = sessionToken;
+    homeProgressRequestRef.current = false;
+    setHomeProgressState({ loaded: false, loading: false, refreshing: false, error: '', data: null, updatedAt: null });
+    setHomeProgressData(null);
+  }, [sessionToken]);
+
+  useEffect(() => {
+    const canLoad = ['admin', 'head-teacher', 'teacher'].includes(role) && Array.isArray(availableAssignedSchools);
+    if (!canLoad) {
+      setHomeProgressState(current => current.error
+        ? current
+        : { ...current, loaded: false, loading: false, refreshing: false, error: '進捗状況を取得できませんでした' });
+      return;
+    }
+    if (!homeProgressState.loaded && !homeProgressState.loading && !homeProgressState.error) loadHomeProgress();
+  }, [availableAssignedSchools, homeProgressState.error, homeProgressState.loaded, homeProgressState.loading, loadHomeProgress, role]);
 
   useEffect(() => {
     const syncHash = () => {
@@ -203,14 +253,9 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
             {!profileRoute && <>
             {activeContent === 'home' && <HomeDashboard
               userName={userName}
-              GAS_URL={GAS_URL}
-              API_KEY={API_KEY}
-              sessionToken={sessionToken}
-              role={role}
-              assignedSchools={availableAssignedSchools}
-              onSessionExpired={handleLogout}
+              progressState={homeProgressState}
+              onRefreshProgress={loadHomeProgress}
               onOpenProgressStatus={openHomeProgressStatus}
-              onProgressData={setHomeProgressData}
             />}
             {activeContent === 'home-progress-list' && <TeacherHomeProgressStudentList
               key={homeProgressStatus}

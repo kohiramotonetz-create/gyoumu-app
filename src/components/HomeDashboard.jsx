@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useState } from 'react'
-import axios from 'axios'
 import VersionLabel from './common/VersionLabel.jsx'
 import { buildTeacherHomeProgressDonut, TEACHER_HOME_PROGRESS_STATUSES } from '../utils/teacherHomeProgress.js'
 
@@ -52,7 +50,7 @@ function ProgressError({ onRetry }) {
 
 function ProgressPanel({ progressState, onRetry, onOpenProgressStatus }) {
   if (progressState.loading) return <ProgressLoading />
-  if (progressState.error) return <ProgressError onRetry={onRetry} />
+  if (progressState.error && !progressState.data) return <ProgressError onRetry={onRetry} />
   const data = progressState.data
   const summary = data?.summary
   if (!summary || summary.targetEntryCount === 0) return <div className="home-progress-state">対象となる1対1進捗がありません</div>
@@ -73,7 +71,7 @@ function ProgressPanel({ progressState, onRetry, onOpenProgressStatus }) {
 
 function ActionItems({ progressState, onOpenProgressStatus }) {
   if (progressState.loading) return <div className="home-actions__state" role="status">対応項目を読み込み中…</div>
-  if (progressState.error) return <div className="home-actions__state">進捗遅れ件数を取得できませんでした</div>
+  if (progressState.error && !progressState.data) return <div className="home-actions__state">進捗遅れ件数を取得できませんでした</div>
   const behind = progressState.data?.summary?.counts?.behind || 0
   return <div className="home-actions__list">
     <button type="button" className="home-action-row" onClick={() => onOpenProgressStatus('behind', progressState.data)}>
@@ -85,47 +83,15 @@ function ActionItems({ progressState, onOpenProgressStatus }) {
   </div>
 }
 
-export default function HomeDashboard({ userName, GAS_URL, API_KEY, sessionToken, role, assignedSchools, onSessionExpired, onOpenProgressStatus, onProgressData }) {
+export default function HomeDashboard({ userName, progressState, onRefreshProgress, onOpenProgressStatus }) {
   const now = new Date()
   const dateText = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }).format(now)
-  const [requestVersion, setRequestVersion] = useState(0)
-  const [progressState, setProgressState] = useState({ loading: true, error: '', data: null })
-  const loadProgress = useCallback(async signal => {
-    setProgressState({ loading: true, error: '', data: null })
-    try {
-      const response = await axios.post(GAS_URL, JSON.stringify({ action: 'getTeacherHomeProgressSummary', apiKey: API_KEY, sessionToken }), { headers: { 'Content-Type': 'text/plain' }, timeout: 30000, signal })
-      if (response.data?.result !== 'success') {
-        const error = new Error(response.data?.message || '進捗状況を取得できませんでした')
-        error.code = response.data?.code
-        throw error
-      }
-      setProgressState({ loading: false, error: '', data: response.data })
-      onProgressData?.(response.data)
-    } catch (error) {
-      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
-      if (error.code === 'AUTHORIZATION_ERROR') onSessionExpired?.()
-      setProgressState({ loading: false, error: '進捗状況を取得できませんでした', data: null })
-    }
-  }, [API_KEY, GAS_URL, onProgressData, onSessionExpired, sessionToken])
-
-  useEffect(() => {
-    if (!['admin', 'head-teacher', 'teacher'].includes(role) || !Array.isArray(assignedSchools)) {
-      setProgressState({ loading: false, error: '進捗状況を取得できませんでした', data: null })
-      return undefined
-    }
-    const controller = new AbortController()
-    loadProgress(controller.signal)
-    return () => controller.abort()
-  }, [assignedSchools, loadProgress, requestVersion, role])
-
-  const retry = () => setRequestVersion(value => value + 1)
-  const updatedAt = progressState.data?.generatedAt ? new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(progressState.data.generatedAt)) : '未取得'
+  const updatedAt = progressState.updatedAt ? new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short' }).format(progressState.updatedAt) : '未取得'
   return <div className="home-dashboard">
     <section className="home-greeting">
       <h1>おはようございます、{userName} 先生！ <span className="home-greeting__sun"><Icon name="sun" size={29} /></span></h1>
       <div className="home-greeting__meta">
         <span>{dateText}</span>
-        <span className="home-greeting__updated"><Icon name="calendar" size={18} /> 最終データ更新：{updatedAt}</span>
       </div>
     </section>
 
@@ -141,8 +107,9 @@ export default function HomeDashboard({ userName, GAS_URL, API_KEY, sessionToken
       </article>
 
       <article className="home-panel home-progress">
-        <header><Icon name="chart" size={30} /><h2>進捗状況</h2></header>
-        <ProgressPanel progressState={progressState} onRetry={retry} onOpenProgressStatus={onOpenProgressStatus} />
+        <header><div className="home-panel__title"><Icon name="chart" size={30} /><h2>進捗状況</h2></div><div className="home-progress__refresh"><span><Icon name="calendar" size={16} /> 最終更新：{updatedAt}</span><button type="button" onClick={onRefreshProgress} disabled={progressState.loading || progressState.refreshing}>{progressState.refreshing ? '更新中…' : 'データ更新'}</button></div></header>
+        {progressState.error && progressState.data && <div className="home-progress__refresh-error" role="alert">更新できませんでした。表示中のデータを維持しています。</div>}
+        <ProgressPanel progressState={progressState} onRetry={onRefreshProgress} onOpenProgressStatus={onOpenProgressStatus} />
       </article>
     </section>
 
