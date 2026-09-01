@@ -18,6 +18,7 @@ import { parseStudentProfileHash } from './utils/studentProfileNavigation.js'
 import HomeDashboard, { Icon } from './components/HomeDashboard.jsx'
 import TeacherHomeProgressStudentList from './components/TeacherHomeProgressStudentList.jsx'
 import './TeacherView.css'
+import { canManageAccounts, isPrivilegedStaffRole, isStaffRole } from './utils/roles.js'
 
 const KoToreMenu = lazy(() => import('./components/KoToreMenu.jsx'))
 const KotoreAdminWorkspace = lazy(() => import('./components/KotoreAdminWorkspace.jsx'))
@@ -106,7 +107,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   }, [sessionToken]);
 
   useEffect(() => {
-    const canLoad = ['admin', 'head-teacher', 'teacher'].includes(role) && Array.isArray(availableAssignedSchools);
+    const canLoad = isStaffRole(role) && Array.isArray(availableAssignedSchools);
     if (!canLoad) {
       setHomeProgressState(current => current.error
         ? current
@@ -165,11 +166,11 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     { id: 'app-usage', label: 'アプリ利用チェック', icon: '📱' },
     { id: 'school-progress', label: '学校進捗チェック', icon: '🏫' },
     { id: 'one-to-one-progress', label: '1対1進捗チェック', icon: '🤝' },
+    { id: 'passwords', label: '各種パスワード', icon: '🔑' },
   ];
 
   const adminMenuItems = [
     { id: 'create-account', label: 'アカウント管理', icon: '👤' },
-    { id: 'passwords', label: '各種パスワード', icon: '🔑' },
     { id: 'kotore-admin', label: '個トレコンテンツ管理', icon: '⚙️', adminOnly: true },
     { id: 'manual', label: 'スタッフマニュアル', icon: '📖', isLink: true, url: 'https://morning-hoverfly-7d7.notion.site/22187fb597ea8051a617cc4850365bd9?pvs=74' }, 
     { id: 'takamatsu-staff', label: '高松スタッフ(SharePoint)', icon: '🏢', isLink: true, url: 'https://edunetz.sharepoint.com/sites/takamatustaff/SitePages/CollabHome.aspx?ga=1' },
@@ -181,9 +182,9 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   const menuItems = useMemo(() => {
     if (role === 'admin') {
       return [...baseMenuItems, CAMP_MENU_ITEM, ...adminMenuItems];
-    } else if (role === 'head-teacher') {
-      const headTeacherExtensions = adminMenuItems.filter(item => item.id === 'create-account' || item.id === 'test-review-check');
-      return [...baseMenuItems, CAMP_MENU_ITEM, ...headTeacherExtensions];
+    } else if (role === 'head-teacher' || role === 'general') {
+      const staffExtensions = adminMenuItems.filter(item => ['create-account', 'test-review-check', 'sukimakun-permissions', 'academic-results', 'manual', 'takamatsu-staff'].includes(item.id));
+      return [...baseMenuItems, CAMP_MENU_ITEM, ...staffExtensions];
     }
     return baseMenuItems;
   }, [role]);
@@ -226,7 +227,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     <div className="teacher-shell">
       <header className={`teacher-header ${!isSidebarOpen ? 'teacher-header--wide' : ''}`}>
         <div className="teacher-header__user">
-          {(role === 'admin' || role === 'head-teacher') && <span className="teacher-role-badge">社員・スタッフ</span>}
+          {isPrivilegedStaffRole(role) && <span className="teacher-role-badge">社員・スタッフ</span>}
           <span className="teacher-header__name">{userName} 先生</span>
           <button className="teacher-icon-button teacher-notification" onClick={fetchNotifications} aria-label="通知を更新"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></button>
         </div>
@@ -267,7 +268,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
               <NoticeManager notices={[]} styles={styles} />
             )}
 
-            {activeContent === 'create-account' && (
+            {activeContent === 'create-account' && canManageAccounts(role) && (
               <AccountManagement
                 styles={styles}
                 GAS_URL={GAS_URL}
@@ -289,19 +290,21 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
                 styles={styles}
                 notificationRefresh={notificationRefresh}
                 onSessionExpired={handleLogout}
+                role={role}
               /></Suspense>
             )}
 
-            {activeContent === 'test-review-check' && (role === 'admin' || role === 'head-teacher') && (
+            {activeContent === 'test-review-check' && isPrivilegedStaffRole(role) && (
               <TestReviewManager 
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}
+                sessionToken={sessionToken}
                 assignedSchools={availableAssignedSchools}
                 styles={styles}
               />
             )}
 
-            {activeContent === 'sukimakun-permissions' && role === 'admin' && (
+            {activeContent === 'sukimakun-permissions' && isPrivilegedStaffRole(role) && (
               <SukimakunPermissionManager
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}
@@ -312,7 +315,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
               />
             )}
 
-            {activeContent === 'academic-results' && role === 'admin' && (
+            {activeContent === 'academic-results' && isPrivilegedStaffRole(role) && (
               <AcademicResultsManager
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}
@@ -323,7 +326,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
               />
             )}
 
-            {activeContent === 'camp-training' && (role === 'admin' || role === 'head-teacher') && (
+            {activeContent === 'camp-training' && isPrivilegedStaffRole(role) && (
               <CampTrainingManager
                 GAS_URL={GAS_URL}
                 API_KEY={API_KEY}

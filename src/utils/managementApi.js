@@ -8,9 +8,14 @@ export async function postManagementAction(GAS_URL, payload, timeout = 30000) {
 }
 
 export function getManagementErrorMessage(data, fallback) {
-  if (data?.code === 'AUTHORIZATION_ERROR') return '管理セッションが無効または期限切れです'
+  if (data?.code === 'AUTHENTICATION_ERROR') return '管理セッションが無効または期限切れです'
+  if (data?.code === 'AUTHORIZATION_ERROR') return data?.message || 'この操作を行う権限がありません'
   if (data?.code === 'CONFLICT') return '別の更新が反映されています。再読み込みしてから編集してください。'
   return data?.message || fallback
+}
+
+export function isManagementSessionExpired(data) {
+  return data?.code === 'AUTHENTICATION_ERROR'
 }
 
 export function getKotoreManagementErrorMessage(data, fallback) {

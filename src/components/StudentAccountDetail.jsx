@@ -5,11 +5,12 @@ import GradeSelect from './common/GradeSelect.jsx';
 import { AccountStatusBadge } from './AccountListUi.jsx';
 import { formatAccountDate, getAccountStatus } from '../utils/accountManagement.js';
 import { isValidNameKana, normalizeNameKana } from '../utils/nameKana.js';
+import { getManagementErrorMessage } from '../utils/managementApi.js';
 import { ONE_TO_ONE_SUBJECTS, areSameOneToOneSubjects, normalizeOneToOneSubjectIds, toggleOneToOneSubject } from '../utils/oneToOneSubjects.js';
 
 const REQUEST_TIMEOUT_MS = 15000;
 
-export default function StudentAccountDetail({ account, GAS_URL, API_KEY, sessionToken, onBack, onSaved, onDirtyChange }) {
+export default function StudentAccountDetail({ account, GAS_URL, API_KEY, sessionToken, onBack, onSaved, onDeleted, onDirtyChange }) {
   const initialForm = useMemo(() => ({ name: String(account.name || ''), nameKana: String(account.nameKana || ''), school: String(account.school || ''), grades: account.grade ? [String(account.grade)] : [], enabled: account.enabled === true }), [account]);
   const [form, setForm] = useState(initialForm);
   const [editing, setEditing] = useState(false);
@@ -80,7 +81,7 @@ export default function StudentAccountDetail({ account, GAS_URL, API_KEY, sessio
     savingRef.current = true; setSaving(true); setStatus({ type: '', message: '' });
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({ action: 'updateStudentAccount', apiKey: API_KEY, sessionToken, userId: account.userId, school: form.school, grade: form.grades[0], name: normalizedName, nameKana: normalizedKana, enabled: form.enabled }), { headers: { 'Content-Type': 'text/plain' }, timeout: REQUEST_TIMEOUT_MS });
-      if (response.data?.result !== 'success') throw new Error(response.data?.code === 'AUTHORIZATION_ERROR' ? '管理セッションが切れています。再ログインしてください。' : response.data?.message || '保存に失敗しました。');
+      if (response.data?.result !== 'success') throw new Error(getManagementErrorMessage(response.data, '保存に失敗しました。'));
       const updated = { ...account, name: normalizedName, nameKana: normalizedKana, school: form.school, grade: form.grades[0], enabled: form.enabled };
       setForm({ name: updated.name, nameKana: updated.nameKana, school: updated.school, grades: [updated.grade], enabled: updated.enabled });
       onSaved(updated); setStatus({ type: 'success', message: '基本情報を保存しました。' });
@@ -101,6 +102,16 @@ export default function StudentAccountDetail({ account, GAS_URL, API_KEY, sessio
       setStatus({ type: 'error', message: requestError?.code === 'ECONNABORTED' ? '通信がタイムアウトしました。' : requestError?.message || '受講科目の保存に失敗しました。' });
     } finally { setSubjectsSaving(false); }
   };
+  const deleteAccount = async () => {
+    if (saving || !window.confirm('この生徒アカウントを削除しますか？')) return;
+    setSaving(true); setStatus({ type: '', message: '' });
+    try {
+      const response = await axios.post(GAS_URL, JSON.stringify({ action: 'deleteStudentAccount', apiKey: API_KEY, sessionToken, userId: account.userId }), { headers: { 'Content-Type': 'text/plain' }, timeout: REQUEST_TIMEOUT_MS });
+      if (response.data?.result !== 'success') throw new Error(response.data?.message || '削除に失敗しました。');
+      onDeleted?.({ ...account, enabled: false, deletedAt: new Date().toISOString() });
+    } catch (requestError) { setStatus({ type: 'error', message: requestError?.message || '削除に失敗しました。' }); }
+    finally { setSaving(false); }
+  };
 
   return <aside className="account-detail-panel" aria-label={`${account.name}のアカウント詳細`}>
     <header className="account-detail-header"><div><h2>{account.name}</h2><p>ID: {account.userId}</p></div><button type="button" className="account-icon-button" aria-label="詳細を閉じる" onClick={closePanel}>×</button></header>
@@ -111,7 +122,7 @@ export default function StudentAccountDetail({ account, GAS_URL, API_KEY, sessio
       <section className="account-detail-section"><h3>アカウント状態</h3><AccountStatusBadge status={getAccountStatus(account)} /></section>
       <section className="account-detail-section"><h3>1対1受講科目</h3>{subjectsLoading ? <div role="status">取得中です。</div> : subjectsLoadFailed ? <button type="button" className="account-secondary-button" onClick={loadSubjects}>再試行</button> : <p>{ONE_TO_ONE_SUBJECTS.filter(subject => subjectIds.includes(subject.subjectId)).map(subject => subject.label).join('、') || '登録なし'}</p>}</section>
       <section className="account-detail-section"><h3>管理情報</h3><dl className="account-detail-list"><div><dt>登録日時</dt><dd>{formatAccountDate(account.createdAt)}</dd></div><div><dt>更新日時</dt><dd>{formatAccountDate(account.updatedAt)}</dd></div></dl></section>
-      {!deleted ? <div className="account-detail-actions"><button type="button" className="account-secondary-button" onClick={() => setEditing(true)}>編集する</button></div> : null}
+      {!deleted ? <div className="account-detail-actions"><button type="button" className="account-secondary-button" onClick={() => setEditing(true)}>編集する</button><button type="button" className="account-secondary-button" onClick={deleteAccount} disabled={saving}>削除する</button></div> : null}
     </> : <form className="account-detail-form" onSubmit={save}>
       <label className="account-form-field">氏名<input className="account-control" value={form.name} aria-invalid={Boolean(fieldErrors.name)} onChange={event => { setForm(value => ({ ...value, name: event.target.value })); setFieldErrors(value => ({ ...value, name: '' })); }}/>{fieldErrors.name ? <span className="account-field-error">{fieldErrors.name}</span> : null}</label>
       <label className="account-form-field">フリガナ<input className="account-control" value={form.nameKana} aria-invalid={Boolean(fieldErrors.nameKana)} onChange={event => { setForm(value => ({ ...value, nameKana: event.target.value })); setFieldErrors(value => ({ ...value, nameKana: '' })); }} onBlur={() => setForm(value => ({ ...value, nameKana: normalizeNameKana(value.nameKana) }))}/>{fieldErrors.nameKana ? <span className="account-field-error">{fieldErrors.nameKana}</span> : null}</label>

@@ -167,7 +167,7 @@ test('前日に0問の保存行があればデータありとして前日比を�
 test('入力取得APIはadminの年度・季節・日を既存取得処理へ渡す', () => {
   let received = null;
   const userContexts = [{ userId: 'admin', role: 'admin' }, { userId: '001234', role: 'student', enabled: true, deleted: false }];
-  context.requireAdminSession = () => ({ userId: 'admin', role: 'admin', userContexts });
+  context.requirePrivilegedStaffSession_ = () => ({ userId: 'admin', role: 'admin', userContexts });
   context.getActiveCampStudents_ = originalGetActiveCampStudents;
   context.buildCampRanking_ = (year, season, mode, activeStudents) => {
     received = { year, season, mode, activeStudents };
@@ -243,7 +243,7 @@ test('入力取得の正常経路はマスターを1回だけ取得し各合宿�
     { userId: '000001', role: 'student', enabled: true, deleted: false, name: 'A', nameKana: 'エー', school: '栗林', grade: '中３' }
   ];
   const counts = { masterSets: 0, fallbackMasterSets: 0, participants: 0, inputs: 0, rankings: 0, locks: 0, releases: 0 };
-  context.requireAdminSession = () => { counts.masterSets++; return { userId: 'admin', role: 'admin', userContexts }; };
+  context.requirePrivilegedStaffSession_ = () => { counts.masterSets++; return { userId: 'admin', role: 'admin', userContexts }; };
   context.getUserAuthContexts_ = () => { counts.fallbackMasterSets++; return []; };
   context.getActiveCampStudents_ = originalGetActiveCampStudents;
   context.getCampParticipantIds_ = () => { counts.participants++; return new Set(['000001']); };
@@ -256,10 +256,12 @@ test('入力取得の正常経路はマスターを1回だけ取得し各合宿�
   assert.deepEqual(counts, { masterSets: 1, fallbackMasterSets: 0, participants: 1, inputs: 1, rankings: 1, locks: 1, releases: 1 });
 });
 
-test('入力取得APIはhead-teacherを拒否する', () => {
-  context.requireAdminSession = originalRequireAdminSession;
-  context.validateManagementSession = () => ({ userId: 'staff', role: 'head-teacher' });
-  assert.throws(() => vm.runInContext('handleCampAction_({action:"getCampTrainingInput",year:2026,season:"夏",day:1,sessionToken:"token"})', context));
+test('入力取得APIはhead-teacherとgeneralを許可しteacherを拒否する', () => {
+  context.requirePrivilegedStaffSession_ = () => ({ userId: 'staff', role: 'head-teacher', userContexts: [] });
+  assert.doesNotThrow(() => vm.runInContext('handleCampAction_({action:"getCampTrainingInput",year:2026,season:"夏",day:1,sessionToken:"token"})', context));
+  context.requirePrivilegedStaffSession_ = () => { throw new Error('閲覧権限が必要です'); };
+  assert.throws(() => vm.runInContext('handleCampAction_({action:"getCampTrainingInput",year:2026,season:"夏",day:1,sessionToken:"token"})', context), /閲覧権限/);
+  context.requirePrivilegedStaffSession_ = () => ({ userId: 'admin', role: 'admin' });
 });
 
 test('合宿シート未作成は専用エラーコードで判別できる', () => {

@@ -9,12 +9,12 @@ function AccountIcon() {
 }
 
 export default function AccountManagement(props) {
-  const isAdmin = props.role === 'admin';
   const [tab, setTab] = useState('students');
   const [dirty, setDirty] = useState(false);
   const tabs = [
     { id: 'students', label: '生徒情報' },
-    ...(isAdmin ? [{ id: 'staff', label: '講師情報' }, { id: 'registration', label: '新規アカウント' }] : []),
+    { id: 'staff', label: '講師情報' },
+    { id: 'registration', label: '新規アカウント' },
   ];
 
   const selectTab = nextTab => {
@@ -42,9 +42,9 @@ export default function AccountManagement(props) {
       >{item.label}</button>)}
     </div>
     <div id={`account-panel-${tab}`} role="tabpanel" aria-labelledby={`account-tab-${tab}`}>
-      {tab === 'students' ? <StudentAccountList {...props} onCreate={isAdmin ? () => selectTab('registration') : undefined} onDirtyChange={setDirty} /> : null}
-      {tab === 'staff' && isAdmin ? <StaffAccountList {...props} onCreate={() => selectTab('registration')} onDirtyChange={setDirty} /> : null}
-      {tab === 'registration' && isAdmin ? <AccountRegistration {...props} onDirtyChange={setDirty} /> : null}
+      {tab === 'students' ? <StudentAccountList {...props} onCreate={() => selectTab('registration')} onDirtyChange={setDirty} /> : null}
+      {tab === 'staff' ? <StaffAccountList {...props} onCreate={() => selectTab('registration')} onDirtyChange={setDirty} /> : null}
+      {tab === 'registration' ? <AccountRegistration {...props} onDirtyChange={setDirty} /> : null}
     </div>
   </div>;
 }

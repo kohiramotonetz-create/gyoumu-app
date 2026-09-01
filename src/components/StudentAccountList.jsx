@@ -7,6 +7,7 @@ import StudentProfileLink from './common/StudentProfileLink.jsx';
 import { AccountPagination, AccountStatusBadge } from './AccountListUi.jsx';
 import { compareStudentAccounts } from '../utils/studentAccountOrdering.js';
 import { formatAccountDate, getAccountStatus, matchesAccountQuery, paginateAccounts } from '../utils/accountManagement.js';
+import { getManagementErrorMessage, isManagementSessionExpired } from '../utils/managementApi.js';
 
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -29,8 +30,8 @@ export default function StudentAccountList({ GAS_URL, API_KEY, sessionToken, onC
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({ action: 'getStudentAccounts', apiKey: API_KEY, sessionToken }), { headers: { 'Content-Type': 'text/plain' }, timeout: REQUEST_TIMEOUT_MS, signal });
       if (response.data?.result !== 'success' || !Array.isArray(response.data.accounts)) {
-        const sessionExpired = response.data?.code === 'AUTHORIZATION_ERROR';
-        setError({ sessionExpired, message: sessionExpired ? '管理セッションが切れています。再ログインしてください。' : response.data?.message || '生徒情報を取得できませんでした。' });
+        const sessionExpired = isManagementSessionExpired(response.data);
+        setError({ sessionExpired, message: getManagementErrorMessage(response.data, '生徒情報を取得できませんでした。') });
         return;
       }
       setAccounts(response.data.accounts);
@@ -67,6 +68,7 @@ export default function StudentAccountList({ GAS_URL, API_KEY, sessionToken, onC
   };
   const closeDetail = () => { setDirty(false); setSelectedAccountId(null); };
   const saveAccount = updated => setAccounts(items => items.map(item => item.userId === updated.userId ? updated : item));
+  const deleteAccount = updated => { saveAccount(updated); setSelectedAccountId(null); };
 
   return <div className={`account-list-layout ${selectedAccount ? 'account-list-layout--detail' : ''}`}>
     <section className="account-list-panel" aria-label="生徒情報一覧">
@@ -93,6 +95,6 @@ export default function StudentAccountList({ GAS_URL, API_KEY, sessionToken, onC
         <AccountPagination result={result} onPageChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1); }} />
       </> : null}
     </section>
-    {selectedAccount ? <StudentAccountDetail key={selectedAccount.userId} account={selectedAccount} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onBack={closeDetail} onSaved={saveAccount} onDirtyChange={setDirty} /> : null}
+    {selectedAccount ? <StudentAccountDetail key={selectedAccount.userId} account={selectedAccount} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onBack={closeDetail} onSaved={saveAccount} onDeleted={deleteAccount} onDirtyChange={setDirty} /> : null}
   </div>;
 }

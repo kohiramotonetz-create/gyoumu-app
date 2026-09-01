@@ -6,10 +6,11 @@ import { AccountPagination, AccountStatusBadge } from './AccountListUi.jsx';
 import { ALL_SCHOOLS } from '../constants/organization.js';
 import { normalizeNameKana } from '../utils/nameKana.js';
 import { formatAccountDate, getAccountStatus, matchesAccountQuery, paginateAccounts } from '../utils/accountManagement.js';
+import { getManagementErrorMessage, isManagementSessionExpired } from '../utils/managementApi.js';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const SCHOOL_ORDER = new Map(ALL_SCHOOLS.map((school, index) => [school, index]));
-const ROLE_ORDER = { teacher: 0, 'head-teacher': 1, admin: 2 };
+const ROLE_ORDER = { teacher: 0, 'head-teacher': 1, general: 2, admin: 3 };
 
 function compareStaffAccounts(left, right) {
   const schoolDifference = (SCHOOL_ORDER.get(left.primarySchool) ?? Number.MAX_SAFE_INTEGER) - (SCHOOL_ORDER.get(right.primarySchool) ?? Number.MAX_SAFE_INTEGER);
@@ -25,7 +26,8 @@ function compareStaffAccounts(left, right) {
   return String(left.name || '').localeCompare(String(right.name || ''), 'ja') || String(left.userId || '').localeCompare(String(right.userId || ''), 'ja');
 }
 
-export default function StaffAccountList({ GAS_URL, API_KEY, sessionToken, onCreate, onDirtyChange }) {
+export default function StaffAccountList({ GAS_URL, API_KEY, sessionToken, onCreate, onDirtyChange, role: actorRole }) {
+  const isAdmin = actorRole === 'admin';
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -43,8 +45,8 @@ export default function StaffAccountList({ GAS_URL, API_KEY, sessionToken, onCre
     try {
       const response = await axios.post(GAS_URL, JSON.stringify({ action: 'getStaffAccounts', apiKey: API_KEY, sessionToken }), { headers: { 'Content-Type': 'text/plain' }, timeout: REQUEST_TIMEOUT_MS, signal });
       if (response.data?.result !== 'success' || !Array.isArray(response.data.accounts)) {
-        const sessionExpired = response.data?.code === 'AUTHORIZATION_ERROR';
-        setError({ sessionExpired, message: sessionExpired ? '管理セッションが切れています。再ログインしてください。' : response.data?.message || '講師情報を取得できませんでした。' });
+        const sessionExpired = isManagementSessionExpired(response.data);
+        setError({ sessionExpired, message: getManagementErrorMessage(response.data, '講師情報を取得できませんでした。') });
         return;
       }
       setAccounts(response.data.accounts);
@@ -72,12 +74,13 @@ export default function StaffAccountList({ GAS_URL, API_KEY, sessionToken, onCre
   };
   const closeDetail = () => { setDirty(false); setSelectedAccountId(null); };
   const saveAccount = updated => setAccounts(items => items.map(item => item.userId === updated.userId ? updated : item));
+  const deleteAccount = updated => { saveAccount(updated); setSelectedAccountId(null); };
 
   return <div className={`account-list-layout ${selectedAccount ? 'account-list-layout--detail' : ''}`}>
     <section className="account-list-panel" aria-label="講師情報一覧">
       <div className="account-filter-toolbar">
         <label>主担当校舎<SchoolSelect className="account-control" value={school} onChange={event => { setSchool(event.target.value); resetPage(); }} showAssignedOptions={false} placeholder="すべて"/></label>
-        <label>role<select className="account-control" value={roleFilter} onChange={event => { setRoleFilter(event.target.value); resetPage(); }}><option value="all">すべて</option><option value="teacher">teacher</option><option value="head-teacher">head-teacher</option><option value="admin">admin</option></select></label>
+        {isAdmin ? <label>アカウント種別<select className="account-control" value={roleFilter} onChange={event => { setRoleFilter(event.target.value); resetPage(); }}><option value="all">すべて</option><option value="teacher">講師</option><option value="head-teacher">特別スタッフ</option><option value="general">社員・スタッフ</option><option value="admin">管理者</option></select></label> : null}
         <label>状態<select className="account-control" value={status} onChange={event => { setStatus(event.target.value); resetPage(); }}><option value="all">すべて</option><option value="enabled">有効</option><option value="disabled">無効</option><option value="deleted">削除済み</option></select></label>
         <label className="account-filter-toolbar__search">講師名・ID検索<input className="account-control" value={query} onChange={event => { setQuery(event.target.value); resetPage(); }} placeholder="氏名・フリガナ・IDで検索"/><span aria-hidden="true">⌕</span></label>
       </div>
@@ -87,11 +90,11 @@ export default function StaffAccountList({ GAS_URL, API_KEY, sessionToken, onCre
       {!loading && !error && accounts.length === 0 ? <div className="account-empty">登録済みの講師アカウントがありません。</div> : null}
       {!loading && !error && accounts.length > 0 && result.totalItems === 0 ? <div className="account-empty">条件に一致する講師がいません。条件を変更してください。</div> : null}
       {!loading && !error && result.totalItems > 0 ? <>
-        <div className="account-table-scroll"><table className="account-table"><thead><tr><th scope="col">講師名</th><th scope="col">ID</th><th scope="col">主担当校舎</th><th scope="col">role</th><th scope="col">状態</th><th scope="col">更新日時</th><th scope="col">操作</th></tr></thead>
-          <tbody>{result.items.map(account => <tr key={account.userId} className={selectedAccountId === account.userId ? 'account-table__row--selected' : ''}><td className="account-table__name">{account.name}</td><td>{account.userId}</td><td>{account.primarySchool || '未設定'}</td><td>{account.role}</td><td><AccountStatusBadge status={getAccountStatus(account)}/></td><td>{formatAccountDate(account.updatedAt)}</td><td><button type="button" className="account-row-button" aria-label={`${account.name}の詳細を開く`} onClick={() => selectAccount(account.userId)}>›</button></td></tr>)}</tbody>
+        <div className="account-table-scroll"><table className="account-table"><thead><tr><th scope="col">講師名</th><th scope="col">ID</th><th scope="col">主担当校舎</th>{isAdmin ? <th scope="col">アカウント種別</th> : null}<th scope="col">状態</th><th scope="col">更新日時</th><th scope="col">操作</th></tr></thead>
+          <tbody>{result.items.map(account => <tr key={account.userId} className={selectedAccountId === account.userId ? 'account-table__row--selected' : ''}><td className="account-table__name">{account.name}</td><td>{account.userId}</td><td>{account.primarySchool || '未設定'}</td>{isAdmin ? <td>{account.role}</td> : null}<td><AccountStatusBadge status={getAccountStatus(account)}/></td><td>{formatAccountDate(account.updatedAt)}</td><td><button type="button" className="account-row-button" aria-label={`${account.name}の詳細を開く`} onClick={() => selectAccount(account.userId)}>›</button></td></tr>)}</tbody>
         </table></div><AccountPagination result={result} onPageChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1); }}/>
       </> : null}
     </section>
-    {selectedAccount ? <StaffAccountDetail key={selectedAccount.userId} account={selectedAccount} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onBack={closeDetail} onSaved={saveAccount} onDirtyChange={setDirty}/> : null}
+    {selectedAccount ? <StaffAccountDetail key={selectedAccount.userId} account={selectedAccount} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} actorRole={actorRole} onBack={closeDetail} onSaved={saveAccount} onDeleted={deleteAccount} onDirtyChange={setDirty}/> : null}
   </div>;
 }

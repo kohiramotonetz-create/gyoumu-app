@@ -65,11 +65,11 @@ test('保存済みとの比較は空欄と0を区別する', () => {
   assert.equal(areAcademicScoresEqual(left, right), false);
 });
 
-test('管理画面はadmin限定メニュー・9科目表・未保存一括保存を持つ', () => {
+test('学校成績画面は特定staffメニュー・9科目表・未保存一括保存を持つ', () => {
   const teacherView = fs.readFileSync(new URL('../src/TeacherView.jsx', import.meta.url), 'utf8');
   const manager = fs.readFileSync(new URL('../src/components/AcademicResultsManager.jsx', import.meta.url), 'utf8');
   assert.match(teacherView, /academic-results.*adminOnly: true/);
-  assert.match(teacherView, /activeContent === 'academic-results' && role === 'admin'/);
+  assert.match(teacherView, /activeContent === 'academic-results' && isPrivilegedStaffRole\(role\)/);
   assert.match(manager, /parseAcademicScorePaste/);
   assert.match(manager, /未保存の変更/);
   assert.match(manager, /一括保存/);

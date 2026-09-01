@@ -3,6 +3,7 @@ import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
 import { isValidNameKana, normalizeNameKana } from '../utils/nameKana.js';
+import { getManagementErrorMessage } from '../utils/managementApi.js';
 
 const TIMEOUT_MS = 15000;
 const emptyForm = () => ({ userId: '', name: '', nameKana: '', school: '', grades: [], role: 'teacher' });
@@ -12,7 +13,7 @@ function UserGlyph() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>;
 }
 
-export default function AccountRegistration({ GAS_URL, API_KEY, sessionToken, onDirtyChange }) {
+export default function AccountRegistration({ GAS_URL, API_KEY, sessionToken, onDirtyChange, role: actorRole }) {
   const [type, setType] = useState('student');
   const [form, setForm] = useState(emptyForm);
   const [schoolToAdd, setSchoolToAdd] = useState('');
@@ -95,7 +96,7 @@ export default function AccountRegistration({ GAS_URL, API_KEY, sessionToken, on
       : { action: 'createStaffAccount', apiKey: API_KEY, sessionToken, userId: form.userId, name: form.name.trim(), nameKana: normalizedKana, role: form.role, assignedSchools };
     try {
       const response = await axios.post(GAS_URL, JSON.stringify(payload), { headers: { 'Content-Type': 'text/plain' }, timeout: TIMEOUT_MS });
-      if (response.data?.result !== 'success') throw new Error(response.data?.code === 'AUTHORIZATION_ERROR' ? '管理セッションが切れたか、管理者権限がありません。' : response.data?.message || '登録に失敗しました。');
+      if (response.data?.result !== 'success') throw new Error(getManagementErrorMessage(response.data, '登録に失敗しました。'));
       setCreated({ userId: response.data.userId, password: response.data.password });
       setStatus({ type: 'success', message: 'アカウントを作成しました。' }); setForm(emptyForm()); setAssignedSchools([]); setSchoolToAdd(''); setIdStatus({ state: 'idle', message: '' }); setFieldErrors({}); setTimeout(() => idInputRef.current?.focus(), 0);
     } catch (requestError) {
@@ -120,7 +121,7 @@ export default function AccountRegistration({ GAS_URL, API_KEY, sessionToken, on
         {type === 'student' ? <label className="account-form-field">所属校舎<SchoolSelect className="account-control" value={form.school} showAssignedOptions={false} onChange={event => { setForm(value => ({ ...value, school: event.target.value })); setFieldErrors(value => ({ ...value, school: '' })); }}/>{fieldErrors.school ? <span className="account-field-error">{fieldErrors.school}</span> : null}</label> : null}
         <label className="account-form-field">フリガナ<input className="account-control" value={form.nameKana} aria-invalid={Boolean(fieldErrors.nameKana)} onChange={event => { setForm(value => ({ ...value, nameKana: event.target.value })); setFieldErrors(value => ({ ...value, nameKana: '' })); }} onBlur={() => setForm(value => ({ ...value, nameKana: normalizeNameKana(value.nameKana) }))} placeholder="例）ヤマダ　タロウ"/>{fieldErrors.nameKana ? <span className="account-field-error">{fieldErrors.nameKana}</span> : null}</label>
         {type === 'student' ? <label className="account-form-field">学年<GradeSelect className="account-control" value={form.grades} includeGroups={false} onChange={grades => { setForm(value => ({ ...value, grades })); setFieldErrors(value => ({ ...value, grade: '' })); }}/>{fieldErrors.grade ? <span className="account-field-error">{fieldErrors.grade}</span> : null}</label> : <>
-          <label className="account-form-field">role<select className="account-control" value={form.role} onChange={event => setForm(value => ({ ...value, role: event.target.value }))}><option value="teacher">teacher</option><option value="head-teacher">head-teacher</option><option value="admin">admin</option></select></label>
+          {actorRole === 'admin' ? <label className="account-form-field">アカウント種別<select className="account-control" value={form.role} onChange={event => setForm(value => ({ ...value, role: event.target.value }))}><option value="teacher">講師</option><option value="head-teacher">特別スタッフ</option><option value="general">社員・スタッフ</option><option value="admin">管理者</option></select></label> : null}
           <div className="account-form-field account-form-field--wide">担当校舎<div className="account-school-editor"><div className="account-school-editor__add"><SchoolSelect className="account-control" value={schoolToAdd} showAssignedOptions={false} onChange={event => setSchoolToAdd(event.target.value)}/><button type="button" className="account-secondary-button" onClick={addSchool}>追加</button></div>{assignedSchools.map(item => <div className="account-school-editor__row" key={item.school}><span>{item.school}</span><label><input type="radio" name="primarySchool" checked={item.isPrimary} onChange={() => setPrimary(item.school)}/>主担当</label><button type="button" className="account-icon-button" aria-label={`${item.school}を削除`} onClick={() => removeSchool(item.school)}>×</button></div>)}</div>{fieldErrors.assignedSchools ? <span className="account-field-error">{fieldErrors.assignedSchools}</span> : null}</div>
         </>}
       </div>

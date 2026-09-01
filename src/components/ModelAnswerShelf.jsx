@@ -1,12 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import axios from 'axios'
 import { modelAnswerBooks } from '../constants/data.js'
 import { filterModelAnswerBooks, inferModelAnswerSubject } from '../utils/kotoreContent.js'
 import './KoToreMenu.css'
+import { canViewModelAnswers } from '../utils/roles.js'
 
 const GRADES = ['中1', '中2', '中3']
 const SUBJECTS = ['英語', '数学', '国語', '理科', '社会']
 
-export default function ModelAnswerShelf() {
+export default function ModelAnswerShelf({ role, GAS_URL, API_KEY, sessionToken, onSessionExpired }) {
+  const [access, setAccess] = useState(() => canViewModelAnswers(role)
+    ? { loading: true, allowed: false, error: '' }
+    : { loading: false, allowed: false, error: '模範解答を閲覧する権限がありません。' })
   const [grade, setGrade] = useState('中1')
   const [subject, setSubject] = useState('')
   const [query, setQuery] = useState('')
@@ -16,6 +21,25 @@ export default function ModelAnswerShelf() {
   const [pdfState, setPdfState] = useState({ pdf: '', loaded: false, failed: false })
   const selectedBook = books.find(book => book.id === selectedId) || books[0] || null
   const selectedPdfState = selectedBook?.pdf === pdfState.pdf ? pdfState : { pdf: selectedBook?.pdf || '', loaded: false, failed: false }
+
+  useEffect(() => {
+    if (!canViewModelAnswers(role)) return undefined
+    let active = true
+    axios.post(GAS_URL, JSON.stringify({ action: 'authorizeModelAnswerAccess', apiKey: API_KEY, sessionToken }), { headers: { 'Content-Type': 'text/plain' }, timeout: 15000 })
+      .then(response => {
+        if (!active) return
+        if (response.data?.result !== 'success') {
+          if (response.data?.code === 'AUTHORIZATION_ERROR') onSessionExpired?.()
+          throw new Error(response.data?.message || '模範解答を閲覧する権限がありません。')
+        }
+        setAccess({ loading: false, allowed: true, error: '' })
+      })
+      .catch(error => { if (active) setAccess({ loading: false, allowed: false, error: error.message || '模範解答を開けませんでした。' }) })
+    return () => { active = false }
+  }, [API_KEY, GAS_URL, onSessionExpired, role, sessionToken])
+
+  if (access.loading) return <div className="kotore-message" role="status">模範解答の閲覧権限を確認中…</div>
+  if (!access.allowed) return <div className="kotore-message kotore-message--error" role="alert">{access.error}</div>
 
   return <section className="model-answer-page" aria-labelledby="model-answer-title">
     <header className="kotore-subpage__header"><div><h2 id="model-answer-title">模範解答</h2><p>学年・科目・教材を選択して、既存の模範解答PDFを確認できます。</p></div></header>

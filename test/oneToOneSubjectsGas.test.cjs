@@ -187,19 +187,19 @@ test('未登録生徒を拒否し、登録済み生徒の空設定は空配列�
   assert.throws(() => vm.runInContext('getOneToOneSubjects("999999")', context), /見つかりません/);
 });
 
-test('取得・更新actionはadminセッションを必須とする', () => {
+test('取得・更新actionはアカウント管理staffを許可しteacherを拒否する', () => {
   context.getOneToOneSubjects = () => ({ subjectIds: ['english'], warnings: {} });
   context.replaceOneToOneSubjects_ = (_userId, ids) => ({ subjectIds: ids });
-  context.requireAdminSession = token => {
-    if (token !== 'admin-token') throw new Error('管理者権限が必要です');
-    return { userId: 'admin', role: 'admin' };
+  context.requireAccountManagerSession_ = token => {
+    if (token === 'teacher-token') throw new Error('アカウント管理権限が必要です');
+    return { userId: token, role: token === 'admin-token' ? 'admin' : token };
   };
   context.__getRequest = { action: 'getOneToOneSubjects', sessionToken: 'admin-token', userId: '001200' };
   assert.deepEqual(Array.from(vm.runInContext('handleNewAccountAdminAction_(__getRequest).subjectIds', context)), ['english']);
   context.__updateRequest = { action: 'updateOneToOneSubjects', sessionToken: 'admin-token', userId: '001200', subjectIds: ['math'] };
   assert.deepEqual(Array.from(vm.runInContext('handleNewAccountAdminAction_(__updateRequest).subjectIds', context)), ['math']);
   context.__getRequest.sessionToken = 'teacher-token';
-  assert.throws(() => vm.runInContext('handleNewAccountAdminAction_(__getRequest)', context), /管理者権限/);
+  assert.throws(() => vm.runInContext('handleNewAccountAdminAction_(__getRequest)', context), /アカウント管理権限/);
   context.getOneToOneSubjects = originalGetOneToOneSubjects;
   context.replaceOneToOneSubjects_ = originalReplaceOneToOneSubjects;
 });

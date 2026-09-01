@@ -12,7 +12,7 @@ const GRADE_OPTIONS = [
   '大学受験'
 ];
 
-const TestReviewManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) => {
+const TestReviewManager = ({ styles, GAS_URL, API_KEY, sessionToken, assignedSchools = [] }) => {
   const [selectedSchool, setSelectedSchool] = useState('');
   const [selectedGrades, setSelectedGrades] = useState([]); // 複数選択用
   const [selectedTest, setSelectedTest] = useState('2学期中間／前期期末');
@@ -47,6 +47,7 @@ const TestReviewManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) =
       const response = await axios.post(GAS_URL, JSON.stringify({
         action: "getTestReviewMatrix",
         apiKey: API_KEY,
+        sessionToken,
         school: selectedSchool,
         grades: selectedGrades,
         testName: selectedTest,
@@ -57,7 +58,7 @@ const TestReviewManager = ({ styles, GAS_URL, API_KEY, assignedSchools = [] }) =
         setMatrix(response.data.matrix);
         setHasSearched(true);
       }
-    } catch (e) {
+    } catch {
       alert("通信エラーが発生しました");
     } finally {
       setLoading(false);

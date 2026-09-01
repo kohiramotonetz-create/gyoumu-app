@@ -6,6 +6,7 @@ import ModelAnswerShelf from './ModelAnswerShelf.jsx'
 import KoToreContentViewer from './KoToreContentViewer.jsx'
 import { MarkdownRenderer } from './common/KotoreMarkdown.jsx'
 import { isAuthorizationResponse, normalizeKotoreContentResponse } from '../utils/kotoreContent.js'
+import { canViewModelAnswers } from '../utils/roles.js'
 import './KoToreMenu.css'
 
 const CARDS = [
@@ -20,7 +21,7 @@ const getPublishedContentError = data => /unknown action/i.test(String(data?.mes
   ? '個トレコンテンツを取得できませんでした。管理者へお問い合わせください。'
   : data?.message || '個トレコンテンツを取得できませんでした'
 
-export default function KoToreMenu({ GAS_URL, API_KEY, sessionToken, unit, schools, assignedSchools, styles, notificationRefresh, onSessionExpired }) {
+export default function KoToreMenu({ GAS_URL, API_KEY, sessionToken, unit, schools, assignedSchools, styles, notificationRefresh, onSessionExpired, role }) {
   const [view, setView] = useState('home')
   const [contentState, setContentState] = useState({ loading: true, error: '', data: normalizeKotoreContentResponse({}) })
 
@@ -39,7 +40,20 @@ export default function KoToreMenu({ GAS_URL, API_KEY, sessionToken, unit, schoo
     return () => { active = false }
   }, [GAS_URL, API_KEY, sessionToken, onSessionExpired])
 
-  if (view !== 'home') return <div className="kotore-workspace"><button type="button" className="kotore-back-button" onClick={() => setView('home')}>← 個トレメニュートップへ</button>{view === 'waiting' && <NotificationManager GAS_URL={GAS_URL} API_KEY={API_KEY} unit={unit} schools={schools} refreshResult={notificationRefresh} />}{view === 'progress' && <KoToreProgressTracker styles={styles} GAS_URL={GAS_URL} API_KEY={API_KEY} assignedSchools={assignedSchools} profileSource="notifications" />}{view === 'answers' && <ModelAnswerShelf />}{view === 'notices' && <KoToreContentViewer type="notice" content={contentState.data.notices} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} />}{view === 'guide' && <KoToreContentViewer type="guide" content={contentState.data.guide} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} />}</div>
+  if (view !== 'home') return <div className="kotore-workspace">
+    <button type="button" className="kotore-back-button" onClick={() => setView('home')}>← 個トレメニュートップへ</button>
+    {view === 'waiting' && <NotificationManager GAS_URL={GAS_URL} API_KEY={API_KEY} unit={unit} schools={schools} refreshResult={notificationRefresh} />}
+    {view === 'progress' && <KoToreProgressTracker styles={styles} GAS_URL={GAS_URL} API_KEY={API_KEY} assignedSchools={assignedSchools} profileSource="notifications" />}
+    {view === 'answers' && canViewModelAnswers(role) && <ModelAnswerShelf role={role} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} />}
+    {view === 'notices' && <KoToreContentViewer type="notice" content={contentState.data.notices} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} />}
+    {view === 'guide' && <KoToreContentViewer type="guide" content={contentState.data.guide} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} />}
+  </div>
 
-  return <section className="kotore-home" aria-labelledby="kotore-home-title"><header className="kotore-home__header"><h1 id="kotore-home-title">個トレメニュートップ</h1><p>個別ミッショントレーニング（個トレ）の運営に関する機能をまとめたメニューです。</p></header><div className="kotore-home__cards">{CARDS.map(card => <button type="button" key={card.id} className={`kotore-home-card kotore-home-card--${card.tone}`} onClick={() => setView(card.id)}><span className="kotore-home-card__icon" aria-hidden="true">{card.icon}</span><strong>{card.title}</strong><span>{card.description}</span><span className="kotore-home-card__arrow" aria-hidden="true">›</span></button>)}</div><section className="kotore-menu-guide" aria-labelledby="kotore-menu-guide-title"><h2 id="kotore-menu-guide-title">個トレメニューの使い方</h2>{contentState.loading ? <div className="kotore-message" role="status">使い方を取得中…</div> : contentState.error ? <div className="kotore-message kotore-message--error" role="alert">{contentState.error}</div> : contentState.data.menuGuide ? <MarkdownRenderer markdown={contentState.data.menuGuide.publishedMarkdown} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} /> : <div className="kotore-message">公開中の「メニューの使い方」はありません。</div>}</section>{contentState.data.serverTime && <p className="kotore-home__updated">最終取得：{new Date(contentState.data.serverTime).toLocaleString('ja-JP')}</p>}</section>
+  const cards = CARDS.filter(card => card.id !== 'answers' || canViewModelAnswers(role))
+  return <section className="kotore-home" aria-labelledby="kotore-home-title">
+    <header className="kotore-home__header"><h1 id="kotore-home-title">個トレメニュートップ</h1><p>個別ミッショントレーニング（個トレ）の運営に関する機能をまとめたメニューです。</p></header>
+    <div className="kotore-home__cards">{cards.map(card => <button type="button" key={card.id} className={`kotore-home-card kotore-home-card--${card.tone}`} onClick={() => setView(card.id)}><span className="kotore-home-card__icon" aria-hidden="true">{card.icon}</span><strong>{card.title}</strong><span>{card.description}</span><span className="kotore-home-card__arrow" aria-hidden="true">›</span></button>)}</div>
+    <section className="kotore-menu-guide" aria-labelledby="kotore-menu-guide-title"><h2 id="kotore-menu-guide-title">個トレメニューの使い方</h2>{contentState.loading ? <div className="kotore-message" role="status">使い方を取得中…</div> : contentState.error ? <div className="kotore-message kotore-message--error" role="alert">{contentState.error}</div> : contentState.data.menuGuide ? <MarkdownRenderer markdown={contentState.data.menuGuide.publishedMarkdown} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} /> : <div className="kotore-message">公開中の「メニューの使い方」はありません。</div>}</section>
+    {contentState.data.serverTime && <p className="kotore-home__updated">最終取得：{new Date(contentState.data.serverTime).toLocaleString('ja-JP')}</p>}
+  </section>
 }

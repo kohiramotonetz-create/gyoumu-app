@@ -19,10 +19,12 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - 1対1進捗Detail diagnostics配送修正（Issue番号未割当）
   - 1対1認証contextのSpreadsheet多重I/O削減（Issue番号未割当）
   - 講師ホーム進捗summaryのセッション内キャッシュ（Issue番号未割当）
+  - アカウント種別・権限整理とgeneral role追加（Issue番号未割当）
 - 操作応答: 丸付け・質問待ちは対応開始API成功後に対象行だけを即時更新し、処理中表示、二重操作防止、5秒pollingと他ユーザー更新の同期、古いpolling responseによる巻き戻り防止を両立した。1対1ネッツ進捗は選択単元を制御stateで保持し、教材の正式単元名を範囲選択へ表示する。
 - Detail UX／性能: 学校進捗・ネッツ進捗・履歴はdialogを直ちに開いて対象生徒だけをlazy loadする。Detail request内で認証contextを再利用し、認証4マスターのvaluesをrequest-scoped snapshotとして共有して、重複した`getUserAuthContexts_()`、`getLastRow()`、`getLastColumn()`、`getValues()`を削減した。既存認証・権限・API・Spreadsheet構造は維持する。
 - 講師ホーム: 進捗summaryをログイン時に1回取得して`TeacherView`のReactメモリstateへ保持し、Home復帰時の自動再取得を廃止した。「データ更新」時だけ旧データを維持したまま再取得し、成功時刻を表示する。logout／session変更時はcacheを破棄し、localStorage等は使用しない。
-- Version表示: 共通`VersionLabel`の正本を`Version 4.3.2`へ更新。追加の性能最適化、GAS変更、API変更、Spreadsheet変更、student-app変更は含まない。
+- アカウント・権限: 正式roleへ`general`を追加し、staff共通機能、特定staff機能、admin専用機能を明示的に分離した。head-teacher／generalは生徒情報・講師情報・新規アカウントを利用できるが、管理対象はstudent／teacherだけに限定し、上位staffの一覧・作成・編集・role変更・削除をGASでも拒否する。非admin UIには内部roleを表示せず、実セッション失効と権限不足を別のAPIエラーとして扱う。模範解答はgeneral／adminだけを許可する。
+- Version表示: 共通`VersionLabel`の正本は`Version 4.3.2`を維持。今回のアカウント権限整理にはGAS認可変更を含むが、Spreadsheet構造・本番データ・student-appは変更しない。
 
 ### v4.3.1 - 2026-08-31
 
@@ -94,6 +96,15 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### アカウント種別・権限整理とgeneral role追加（Issue番号未割当）
+
+- 状態: Frontend／GAS修正と自動検証まで実施。Git commit／push、clasp push、GAS／Vercel deploy、本番Spreadsheet変更、本番確認は未実施。
+- role: `student`、`teacher`、`head-teacher`、`general`、`admin`の5種類を正式値とし、`general`を社員・スタッフ標準roleとしてlogin、管理session、認証context、staff向け機能へ追加した。
+- 権限制御: head-teacher／general／adminへアカウント管理、テスト振り返り、合宿、学校成績、スキマ君利用設定、スタッフ資料を許可する。模範解答はFrontend入口・直接描画とGAS session認可の両方でgeneral／adminだけに限定する。コンテンツ編集、パスワード編集、システム管理はadmin専用を維持する。
+- アカウント管理: 非admin管理者へ返すstaff一覧をteacherだけに絞り、作成・編集・削除対象もstudent／teacherだけに限定する。非admin UIには上位staff roleを表示せずrole変更を提供しない。adminは全staff roleの一覧・作成・編集・role変更・削除を継続する。
+- データ／deploy: Spreadsheet構造と既存アカウントデータは変更しない。既存adminからgeneralへのrole変更は別工程で、対象確認後にadmin権限のアカウント管理または管理されたデータ移行として実施する。
+- Version: Version 4.3.2に収録。
 
 ### 講師ホーム進捗summaryのセッション内キャッシュ（Issue番号未割当）
 

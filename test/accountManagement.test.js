@@ -53,6 +53,19 @@ test('生徒・講師一覧は一覧を残して詳細を開き既存APIとsessi
   assert.doesNotMatch(staff, /if \(selectedAccount\) return/);
 });
 
+test('アカウント管理はセッション失効と権限不足を別のエラーとして表示する', () => {
+  const api = read('../src/utils/managementApi.js');
+  const student = read('../src/components/StudentAccountList.jsx');
+  const staff = read('../src/components/StaffAccountList.jsx');
+  assert.match(api, /AUTHENTICATION_ERROR/);
+  assert.match(api, /AUTHORIZATION_ERROR/);
+  assert.match(api, /isManagementSessionExpired/);
+  assert.match(student, /isManagementSessionExpired\(response\.data\)/);
+  assert.match(staff, /isManagementSessionExpired\(response\.data\)/);
+  assert.doesNotMatch(student, /code === 'AUTHORIZATION_ERROR'.*管理セッション/);
+  assert.doesNotMatch(staff, /code === 'AUTHORIZATION_ERROR'.*管理セッション/);
+});
+
 test('詳細は最終ログインやパスワード再設定を表示せず既存更新APIを使う', () => {
   const student = read('../src/components/StudentAccountDetail.jsx');
   const staff = read('../src/components/StaffAccountDetail.jsx');

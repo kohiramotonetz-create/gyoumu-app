@@ -106,7 +106,11 @@ const ACCOUNT_MASTER_SHEET_SPECS = [
   { name: "講師マスター", headers: ["userId", "name", "nameKana", "createdAt", "updatedAt"], textColumns: [1], dateColumns: [4, 5] },
   { name: "講師担当校舎", headers: ["userId", "school", "isPrimary", "enabled", "createdAt", "updatedAt", "updatedBy"], textColumns: [1, 7], dateColumns: [5, 6] }
 ];
-const ACCOUNT_MIGRATION_ROLES = ["admin", "head-teacher", "teacher", "student"];
+const ACCOUNT_MIGRATION_ROLES = ["admin", "general", "head-teacher", "teacher", "student"];
+const STAFF_ROLES_ = ["teacher", "head-teacher", "general", "admin"];
+const ACCOUNT_MANAGER_ROLES_ = ["head-teacher", "general", "admin"];
+const PRIVILEGED_STAFF_ROLES_ = ["head-teacher", "general", "admin"];
+const NON_ADMIN_MANAGEABLE_ACCOUNT_ROLES_ = ["student", "teacher"];
 const LEGACY_ALLOWED_ADMIN_USER_IDS = ["admin"];
 const ACCOUNT_MIGRATION_METADATA_PROPERTY = "ACCOUNT_MIGRATION_METADATA";
 const ACCOUNT_MIGRATION_SOURCE_SHEET_NAME = "シート1";
@@ -194,7 +198,7 @@ function diagnoseLegacyAccountData() {
   const rows = sheet.getDataRange().getValues();
   const dataRows = rows.slice(1).map((row, index) => ({ row, sheetRow: index + 2 }))
     .filter(item => item.row.slice(0, 13).some(value => String(value == null ? "" : value).trim() !== ""));
-  const roleCounts = { admin: 0, "head-teacher": 0, teacher: 0, student: 0 };
+  const roleCounts = { admin: 0, general: 0, "head-teacher": 0, teacher: 0, student: 0 };
   const counts = {
     unknownRole: 0, emptyUserId: 0, duplicateUserId: 0, normalizedDuplicateUserId: 0,
     shorterThanSixDigitId: 0, longerThanSixDigitId: 0, nonNumericUserId: 0, leadingZeroUserId: 0,
@@ -351,7 +355,7 @@ function previewLegacyAccountMigration() {
   }
   const accountRows = ACCOUNT_MIGRATION_ROLES.reduce((total, role) => total + diagnosis.roleCounts[role], 0);
   const studentRows = diagnosis.roleCounts.student;
-  const staffRows = diagnosis.roleCounts.admin + diagnosis.roleCounts["head-teacher"] + diagnosis.roleCounts.teacher;
+  const staffRows = diagnosis.roleCounts.admin + diagnosis.roleCounts.general + diagnosis.roleCounts["head-teacher"] + diagnosis.roleCounts.teacher;
   const sheet = getLegacyAccountSheet_();
   const staffSchoolRows = sheet.getDataRange().getValues().slice(1).filter(row => {
     const role = String(row[10] || "").trim();
@@ -613,7 +617,7 @@ function buildLegacyAccountMigrationData_(legacySheet, migratedAt, migrationId) 
     if (row[3] !== "") throw new Error("Student nameKana must be empty");
   });
   staffRows.forEach(row => {
-    if (!["admin", "head-teacher", "teacher"].includes(accountRoleById[row[0]])) {
+    if (!STAFF_ROLES_.includes(accountRoleById[row[0]])) {
       throw new Error("Staff profile role mismatch");
     }
     if (row[2] !== "") throw new Error("Staff nameKana must be empty");
@@ -849,8 +853,8 @@ function compareLegacyMigration() {
     if (!isEnabledValue(row[3])) addMismatch("STAFF_SCHOOL_NOT_ENABLED", userId);
   });
 
-  const legacyRoleCounts = { admin: 0, "head-teacher": 0, teacher: 0, student: 0 };
-  const accountRoleCounts = { admin: 0, "head-teacher": 0, teacher: 0, student: 0 };
+  const legacyRoleCounts = { admin: 0, general: 0, "head-teacher": 0, teacher: 0, student: 0 };
+  const accountRoleCounts = { admin: 0, general: 0, "head-teacher": 0, teacher: 0, student: 0 };
   legacyRows.forEach(row => { legacyRoleCounts[String(row[10] || "").trim()]++; });
   accountRows.forEach(row => {
     const role = String(row[4] || "").trim();
@@ -860,10 +864,10 @@ function compareLegacyMigration() {
     if (legacyRoleCounts[role] !== accountRoleCounts[role]) addMismatch(`ROLE_COUNT_MISMATCH_${role}`, "");
   });
   const legacyStaffPasswordUpdatedCount = legacyRows.filter(row =>
-    ["admin", "head-teacher", "teacher"].includes(String(row[10] || "").trim()) && getMigrationComparableValue_(row[7]) !== ""
+    STAFF_ROLES_.includes(String(row[10] || "").trim()) && getMigrationComparableValue_(row[7]) !== ""
   ).length;
   const migratedStaffPasswordUpdatedCount = accountRows.filter(row =>
-    ["admin", "head-teacher", "teacher"].includes(String(row[4] || "").trim()) && getMigrationComparableValue_(row[3]) !== ""
+    STAFF_ROLES_.includes(String(row[4] || "").trim()) && getMigrationComparableValue_(row[3]) !== ""
   ).length;
   if (legacyStaffPasswordUpdatedCount !== migratedStaffPasswordUpdatedCount) {
     addMismatch("PASSWORD_UPDATED_AT_COUNT_MISMATCH", "");
@@ -886,7 +890,7 @@ function compareLegacyMigration() {
       accountRows: accountRows.length,
       legacyStudentRows: legacyRoleCounts.student,
       studentRows: studentRows.length,
-      legacyStaffRows: legacyRoleCounts.admin + legacyRoleCounts["head-teacher"] + legacyRoleCounts.teacher,
+      legacyStaffRows: legacyRoleCounts.admin + legacyRoleCounts.general + legacyRoleCounts["head-teacher"] + legacyRoleCounts.teacher,
       staffRows: staffRows.length,
       staffSchoolRows: staffSchoolRows.length,
       legacyRoleCounts,
@@ -1031,7 +1035,7 @@ function getAccountDiagnosisValueKey_(value) {
 }
 
 function summarizeLegacyUnknownColumn_(dataRows, columnIndex) {
-  const roleCounts = { admin: 0, "head-teacher": 0, teacher: 0, student: 0, unknown: 0 };
+  const roleCounts = { admin: 0, general: 0, "head-teacher": 0, teacher: 0, student: 0, unknown: 0 };
   const typeCounts = { string: 0, number: 0, boolean: 0, date: 0, other: 0 };
   const valueGroups = Object.create(null);
   const rowSamples = [];
@@ -1108,7 +1112,7 @@ function runAccountDiagnosisDetails() {
       if (!/^\d+$/.test(comparableRawUserId)) nonNumericUserIds.push(detail);
     }
 
-    if (["teacher", "head-teacher", "admin"].includes(role)) {
+    if (STAFF_ROLES_.includes(role)) {
       const columnFValue = item.row[5];
       if (columnFValue != null && String(columnFValue).trim() !== "") {
         staffColumnF.push({
@@ -1162,7 +1166,7 @@ function runAccountUnknownColumnsSummary() {
   });
 
   const summarizeColumn = columnIndex => {
-    const roleCounts = { admin: 0, "head-teacher": 0, teacher: 0, student: 0, unknown: 0 };
+    const roleCounts = { admin: 0, general: 0, "head-teacher": 0, teacher: 0, student: 0, unknown: 0 };
     const typeCounts = { string: 0, number: 0, boolean: 0, date: 0, other: 0 };
     const valueGroups = Object.create(null);
     let valueCount = 0;
@@ -1541,7 +1545,7 @@ function compareLegacyAndNewAuthData() {
   const newUsers = getNewAuthData_().contexts;
   const newById = Object.create(null);
   newUsers.forEach(user => { newById[user.userId] = user; });
-  const roleCounts = { legacy: { admin: 0, "head-teacher": 0, teacher: 0, student: 0 }, new: { admin: 0, "head-teacher": 0, teacher: 0, student: 0 } };
+  const roleCounts = { legacy: { admin: 0, general: 0, "head-teacher": 0, teacher: 0, student: 0 }, new: { admin: 0, general: 0, "head-teacher": 0, teacher: 0, student: 0 } };
   const mismatchCounts = Object.create(null);
   const mismatchSamples = [];
   const addMismatch = (type, userId) => {
@@ -1661,14 +1665,40 @@ function requireAdminSession(sessionToken, includeUserContexts) {
   return session;
 }
 
+function requireAccountManagerSession_(sessionToken, includeUserContexts) {
+  const session = validateManagementSession(sessionToken, true, includeUserContexts);
+  if (!ACCOUNT_MANAGER_ROLES_.includes(session.role)) throw new Error("アカウント管理権限が必要です");
+  return session;
+}
+
+function canAccountManagerAccessRole_(actorRole, targetRole) {
+  return actorRole === "admin" || (["head-teacher", "general"].includes(actorRole) && NON_ADMIN_MANAGEABLE_ACCOUNT_ROLES_.includes(String(targetRole || "")));
+}
+
+function requirePrivilegedStaffSession_(sessionToken, includeUserContexts) {
+  const session = validateManagementSession(sessionToken, true, includeUserContexts);
+  if (!PRIVILEGED_STAFF_ROLES_.includes(session.role)) throw new Error("閲覧権限が必要です");
+  return session;
+}
+
+function requireModelAnswerSession_(sessionToken) {
+  const session = validateManagementSession(sessionToken, true);
+  if (!["general", "admin"].includes(session.role)) throw new Error("模範解答の閲覧権限が必要です");
+  return session;
+}
+
 function requireCampViewerSession(sessionToken) {
   const session = validateManagementSession(sessionToken, true);
-  if (!["admin", "head-teacher"].includes(session.role)) throw new Error("合宿ランキングの閲覧権限が必要です");
+  if (!PRIVILEGED_STAFF_ROLES_.includes(session.role)) throw new Error("合宿ランキングの閲覧権限が必要です");
   return session;
 }
 
 function isManagementAuthorizationError(error) {
-  return /管理セッション|管理者権限|閲覧権限/.test(String(error && error.message || ""));
+  return /管理セッション|管理者権限|アカウント管理権限|閲覧権限|操作できません|変更できません|作成できません|not manageable|not allowed/.test(String(error && error.message || ""));
+}
+
+function isManagementSessionError_(error) {
+  return /管理セッションが必要です|管理セッションが無効または期限切れです|管理セッションの利用者が存在しません/.test(String(error && error.message || ""));
 }
 
 function getCampApiErrorCode_(error) {
@@ -2083,7 +2113,7 @@ function logOneToOneMatrixTrace_(trace, stage, details) {
 
 function requireOneToOneProgressSession_(sessionToken, includeUserContexts, diagnostics) {
   const session = validateManagementSession(sessionToken, true, includeUserContexts, diagnostics);
-  if (!["admin", "head-teacher", "teacher"].includes(session.role)) throw new Error("1対1進捗の利用権限がありません");
+  if (!STAFF_ROLES_.includes(session.role)) throw new Error("1対1進捗の利用権限がありません");
   return session;
 }
 
@@ -2809,7 +2839,7 @@ function validateStudentInput_(data) {
 }
 
 function validateStaffInput_(data) {
-  return { name: validateName_(data.name, "Name"), nameKana: validateKana_(data.nameKana), role: validateRole_(data.role, ["teacher", "head-teacher", "admin"]), assignedSchools: validateAssignedSchools_(data.assignedSchools) };
+  return { name: validateName_(data.name, "Name"), nameKana: validateKana_(data.nameKana), role: validateRole_(data.role, ["teacher", "head-teacher", "general", "admin"]), assignedSchools: validateAssignedSchools_(data.assignedSchools) };
 }
 
 function validateNewAccountUserId_(value, accountRows) {
@@ -2835,8 +2865,8 @@ function validateAccountMasterState_(state) {
   const roleById = Object.create(null);
   state.accounts.forEach(row => { roleById[normalizeUserId(row[0])] = validateRole_(row[4], ACCOUNT_MIGRATION_ROLES); });
   state.students.forEach(row => { if (roleById[normalizeUserId(row[0])] !== "student") throw new Error("Student reference is invalid"); });
-  state.staff.forEach(row => { if (!["teacher", "head-teacher", "admin"].includes(roleById[normalizeUserId(row[0])])) throw new Error("Staff reference is invalid"); });
-  state.assignments.forEach(row => { if (!["teacher", "head-teacher", "admin"].includes(roleById[normalizeUserId(row[0])])) throw new Error("Staff school reference is invalid"); });
+  state.staff.forEach(row => { if (!STAFF_ROLES_.includes(roleById[normalizeUserId(row[0])])) throw new Error("Staff reference is invalid"); });
+  state.assignments.forEach(row => { if (!STAFF_ROLES_.includes(roleById[normalizeUserId(row[0])])) throw new Error("Staff school reference is invalid"); });
 }
 
 function executeAccountTransaction_(buildNextState) {
@@ -2885,6 +2915,9 @@ function getSafeAccountValidationMessage_(error) {
     "Deleted account cannot be re-enabled": "削除済みアカウントは再有効化できません",
     "Account was not found": "対象アカウントが見つかりません",
     "Account type does not match": "アカウント種別が一致しません",
+    "Role is not manageable": "このアカウント種別は作成できません",
+    "Target role is not manageable": "このアカウントは操作できません",
+    "Role change is not allowed": "アカウント種別は変更できません",
     "Student profile was not found": "生徒情報が見つかりません",
     "Staff profile was not found": "講師情報が見つかりません",
     "1対1受講科目シートが未セットアップです": "1対1受講科目のセットアップが必要です",
@@ -2898,14 +2931,15 @@ function getSafeAccountValidationMessage_(error) {
 }
 
 function handleNewAccountAdminAction_(data) {
-  const admin = requireAdminSession(data.sessionToken);
+  const actor = requireAccountManagerSession_(data.sessionToken);
+  const isAdmin = actor.role === "admin";
   const action = data.action;
   if (action === "getOneToOneSubjects") {
     const state = getOneToOneSubjects(data.userId);
     return { result: "success", userId: normalizeUserId(data.userId), subjectIds: state.subjectIds, warnings: state.warnings };
   }
   if (action === "updateOneToOneSubjects") {
-    const state = replaceOneToOneSubjects_(data.userId, data.subjectIds, admin.userId);
+    const state = replaceOneToOneSubjects_(data.userId, data.subjectIds, actor.userId);
     return { result: "success", userId: normalizeUserId(data.userId), subjectIds: state.subjectIds };
   }
   if (action === "checkUserIdAvailable") {
@@ -2917,7 +2951,7 @@ function handleNewAccountAdminAction_(data) {
   if (action === "getStudentAccounts" || action === "getStaffAccounts") {
     const users = getNewAuthData_().contexts;
     if (action === "getStudentAccounts") return { result: "success", accounts: users.filter(user => user.role === "student").map(user => ({ userId: user.userId, school: user.school, grade: user.grade, name: user.name, nameKana: user.nameKana, enabled: user.enabled, createdAt: user.createdAt, updatedAt: user.updatedAt, deletedAt: user.deletedAt })) };
-    return { result: "success", accounts: users.filter(user => user.role !== "student").map(user => ({ userId: user.userId, name: user.name, nameKana: user.nameKana, role: user.role, assignedSchools: user.assignedSchools, primarySchool: user.school, enabled: user.enabled, createdAt: user.createdAt, updatedAt: user.updatedAt, deletedAt: user.deletedAt })) };
+    return { result: "success", accounts: users.filter(user => user.role !== "student" && canAccountManagerAccessRole_(actor.role, user.role)).map(user => ({ userId: user.userId, name: user.name, nameKana: user.nameKana, role: user.role, assignedSchools: user.assignedSchools, primarySchool: user.school, enabled: user.enabled, createdAt: user.createdAt, updatedAt: user.updatedAt, deletedAt: user.deletedAt })) };
   }
   return executeAccountTransaction_(state => {
     const now = new Date();
@@ -2932,9 +2966,10 @@ function handleNewAccountAdminAction_(data) {
         state.students.push([userId, input.school, input.name, input.nameKana, input.grade, now, now]);
       } else {
         const input = validateStaffInput_(data);
+        if (!canAccountManagerAccessRole_(actor.role, input.role)) throw new Error("Role is not manageable");
         state.accounts.push([userId, password, true, "", input.role, true, "", "", now, now, ""]);
         state.staff.push([userId, input.name, input.nameKana, now, now]);
-        input.assignedSchools.forEach(item => state.assignments.push([userId, item.school, item.isPrimary, true, now, now, admin.userId]));
+        input.assignedSchools.forEach(item => state.assignments.push([userId, item.school, item.isPrimary, true, now, now, actor.userId]));
       }
       return { result: "success", userId, password };
     }
@@ -2942,6 +2977,7 @@ function handleNewAccountAdminAction_(data) {
     const account = state.accounts[accountIndex];
     const isStudent = account[4] === "student";
     if ((action.includes("Student")) !== isStudent) throw new Error("Account type does not match");
+    if (!canAccountManagerAccessRole_(actor.role, account[4])) throw new Error("Target role is not manageable");
     if (action.startsWith("delete")) {
       account[5] = false; account[6] = ""; account[7] = ""; account[9] = now; account[10] = now;
       if (!isStudent) {
@@ -2963,11 +2999,14 @@ function handleNewAccountAdminAction_(data) {
       if (index < 0) throw new Error("Student profile was not found");
       state.students[index] = [targetId, input.school, input.name, input.nameKana, input.grade, state.students[index][5], now];
     } else {
-      const input = validateStaffInput_(data); account[4] = input.role;
+      const input = validateStaffInput_(data);
+      const currentRole = String(account[4] || "");
+      if (!isAdmin && (currentRole !== "teacher" || input.role !== "teacher")) throw new Error("Role change is not allowed");
+      account[4] = input.role;
       const index = state.staff.findIndex(row => normalizeUserId(row[0]) === targetId); if (index < 0) throw new Error("Staff profile was not found");
       state.staff[index] = [targetId, input.name, input.nameKana, state.staff[index][3], now];
       state.assignments = state.assignments.filter(row => normalizeUserId(row[0]) !== targetId);
-      input.assignedSchools.forEach(item => state.assignments.push([targetId, item.school, item.isPrimary, true, now, now, admin.userId]));
+      input.assignedSchools.forEach(item => state.assignments.push([targetId, item.school, item.isPrimary, true, now, now, actor.userId]));
     }
     return { result: "success", userId: targetId };
   });
@@ -3190,12 +3229,12 @@ function handleCampAction_(data) {
   if (data.action === "getCampTrainingInput") {
     const day = validateCampDay_(data.day);
     return withCampReadLock_(() => {
-      const admin = requireAdminSession(data.sessionToken, true);
+      const admin = requirePrivilegedStaffSession_(data.sessionToken, true);
       const activeStudents = getActiveCampStudents_(admin.userContexts);
       return { result: "success", rows: buildCampRanking_(year, season, String(day), activeStudents) };
     });
   }
-  const admin = requireAdminSession(data.sessionToken);
+  const admin = requirePrivilegedStaffSession_(data.sessionToken);
   if (data.action === "getCampParticipants") {
     return withCampReadLock_(() => {
       const participantIds = getCampParticipantIds_(year, season);
@@ -3520,7 +3559,7 @@ function getAcademicResultsForStudent_(userId, options) {
 }
 
 function handleAcademicResultAction_(data) {
-  const admin = requireAdminSession(data.sessionToken);
+  const admin = requirePrivilegedStaffSession_(data.sessionToken);
   if (data.action === "getAcademicResultTests") {
     const schoolYear = data.schoolYear === "" || data.schoolYear == null ? null : validateAcademicYear_(data.schoolYear);
     const includeDisabled = data.includeDisabled === true;
@@ -3536,7 +3575,7 @@ function handleAcademicResultAction_(data) {
 
 function requireStudentProfileSession_(sessionToken) {
   const session = validateManagementSession(sessionToken, true, true);
-  if (!["admin", "head-teacher", "teacher"].includes(session.role)) throw new Error("生徒プロフィールの閲覧権限がありません");
+  if (!STAFF_ROLES_.includes(session.role)) throw new Error("生徒プロフィールの閲覧権限がありません");
   return session;
 }
 
@@ -3704,7 +3743,7 @@ function createKotoreApiError_(code, message) {
 
 function requireKotoreStaffSession_(sessionToken) {
   const session = validateManagementSession(sessionToken, true);
-  if (!["admin", "head-teacher", "teacher"].includes(session.role)) throw createKotoreApiError_("AUTHORIZATION_ERROR", "閲覧権限がありません");
+  if (!STAFF_ROLES_.includes(session.role)) throw createKotoreApiError_("AUTHORIZATION_ERROR", "閲覧権限がありません");
   return session;
 }
 
@@ -4605,6 +4644,15 @@ function doPost(e) {
     }
   }
 
+  if (data.action === "authorizeModelAnswerAccess") {
+    try {
+      const session = requireModelAnswerSession_(data.sessionToken);
+      return responseJSON({ result: "success", sessionExpiresAt: session.sessionExpiresAt });
+    } catch (error) {
+      return responseJSON({ result: "error", code: "AUTHORIZATION_ERROR", message: "模範解答を閲覧する権限がありません" });
+    }
+  }
+
   // AI判定は既存アプリ認証キーで保護し、GeminiキーはScript Propertiesから取得する。
   if (data.action === "checkAnswersWithGemini") {
     try {
@@ -4626,8 +4674,13 @@ function doPost(e) {
     try {
       return responseJSON(handleNewAccountAdminAction_(data));
     } catch (error) {
+      const sessionError = isManagementSessionError_(error);
       const authorizationError = isManagementAuthorizationError(error);
-      return responseJSON({ result: "error", code: authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR", message: authorizationError ? "管理者権限が必要です" : getSafeAccountValidationMessage_(error) });
+      return responseJSON({
+        result: "error",
+        code: sessionError ? "AUTHENTICATION_ERROR" : authorizationError ? "AUTHORIZATION_ERROR" : "VALIDATION_ERROR",
+        message: sessionError ? "管理セッションが無効または期限切れです" : authorizationError ? "このアカウントを管理する権限がありません" : getSafeAccountValidationMessage_(error)
+      });
     }
   }
 
@@ -4703,11 +4756,11 @@ function doPost(e) {
           school: rows[i][0],
           name: rows[i][4],
           grade: rows[i][5],
-          isInitial: ["admin", "teacher", "head-teacher"].includes(currentRole) && isEnabledValue(rows[i][8]),
+          isInitial: STAFF_ROLES_.includes(currentRole) && isEnabledValue(rows[i][8]),
           role: currentRole,
           assignedSchools: findUserRecord(inputId).assignedSchools
         };
-        if (["admin", "head-teacher", "teacher"].includes(currentRole)) {
+        if (STAFF_ROLES_.includes(currentRole)) {
           try {
             const managementSession = createManagementSession(inputId, currentRole);
             loginResult.sessionToken = managementSession.sessionToken;
@@ -4748,7 +4801,7 @@ function doPost(e) {
 
   if (data.action === "getSukimakunPermissionMatrix") {
     try {
-      const adminSession = requireAdminSession(data.sessionToken);
+      const adminSession = requirePrivilegedStaffSession_(data.sessionToken);
       const school = typeof data.school === "string" ? data.school.trim() : "";
       const grade = normalizeGrade(data.grade);
       const isSupportedGrade = /^(小[1-6]|中[1-3]|高[1-3]|大学受験)$/.test(grade);
@@ -4809,7 +4862,7 @@ function doPost(e) {
 
   if (data.action === "updateSukimakunPermissions") {
     try {
-      const adminSession = requireAdminSession(data.sessionToken);
+      const adminSession = requirePrivilegedStaffSession_(data.sessionToken);
       const targetUserId = normalizeUserId(data.targetUserId);
       if (!targetUserId || !Array.isArray(data.allowedContentIds)) {
         return responseJSON({ result: "error", code: "VALIDATION_ERROR", message: "対象生徒と利用権限を正しく指定してください" });
@@ -5034,6 +5087,7 @@ function doPost(e) {
   // --- 11. 講師：テスト振り返り状況マトリックス取得 ---
   if (data.action === "getTestReviewMatrix") {
     try {
+      requirePrivilegedStaffSession_(data.sessionToken);
       const userRowsData = rows;
 
       const ssReview = openSpreadsheetByProperty("TEST_REVIEW_SPREADSHEET_ID");

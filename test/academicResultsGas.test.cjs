@@ -65,16 +65,20 @@ test('学年グループは既存の正式学年検証を使い順序を維持�
   assert.throws(() => vm.runInContext('validateGrades_("中１,不正")', context), /Grade is invalid/);
 });
 
-test('学校成績actionはadminセッションを必須とする', () => {
-  context.requireAdminSession = token => {
-    if (token !== 'admin-token') throw new Error('管理者権限が必要です');
-    return { userId: 'admin', role: 'admin' };
+test('学校成績actionはhead-teacher・general・adminセッションを許可しteacherを拒否する', () => {
+  context.requirePrivilegedStaffSession_ = token => {
+    if (token === 'teacher-token') throw new Error('閲覧権限が必要です');
+    return { userId: token, role: token };
   };
   context.getAcademicTestRecords_ = () => [];
   context.__request = { action: 'getAcademicResultTests', sessionToken: 'admin-token', includeDisabled: true };
   assert.deepEqual(Array.from(vm.runInContext('handleAcademicResultAction_(__request).tests', context)), []);
+  for (const role of ['head-teacher', 'general', 'admin']) {
+    context.__request.sessionToken = role;
+    assert.deepEqual(Array.from(vm.runInContext('handleAcademicResultAction_(__request).tests', context)), []);
+  }
   context.__request.sessionToken = 'teacher-token';
-  assert.throws(() => vm.runInContext('handleAcademicResultAction_(__request)', context), /管理者権限/);
+  assert.throws(() => vm.runInContext('handleAcademicResultAction_(__request)', context), /閲覧権限/);
 });
 
 test('テスト作成はUUID・作成順を使い年度×名称重複を拒否する', () => {

@@ -4,6 +4,7 @@ import Login from './Login'
 import TeacherView from './TeacherView'
 import StudentView from './StudentView'
 import './App.css'
+import { isStaffRole } from './utils/roles.js'
 
 // 環境変数からGASのURLを取得
 const GAS_URL = import.meta.env.VITE_GAS_URL;
@@ -65,7 +66,7 @@ function App() {
       };
 
       const response = await axios.post(GAS_URL, JSON.stringify(payload), { // ← payload を使う！
-  　　headers: { 'Content-Type': 'text/plain' } 
+    headers: { 'Content-Type': 'text/plain' }
 });
 
       if (response.data.result === "success") {
@@ -85,7 +86,7 @@ function App() {
         setUnit(detectedUnit);
 
         // GASの実効isInitialに加え、クライアント側でもstaff roleに限定する。
-        if (response.data.isInitial === true && ['admin', 'teacher', 'head-teacher'].includes(currentRole)) {
+        if (response.data.isInitial === true && isStaffRole(currentRole)) {
           setStep('change-password');
         } else {
           setStep('menu');
@@ -120,8 +121,8 @@ function App() {
       };
       
       const response = await axios.post(GAS_URL, JSON.stringify(payload), { // ← payload を使う！
-  　　headers: { 'Content-Type': 'text/plain' } 
-　　　});
+        headers: { 'Content-Type': 'text/plain' }
+      });
 
       if (response.data.result === "success") {
         alert("パスワードを更新しました。");
@@ -129,7 +130,7 @@ function App() {
       } else {
         alert("更新に失敗しました。");
       }
-    } catch (e) {
+    } catch {
       alert("通信エラーが発生しました。");
     } finally {
       setLoading(false);
@@ -192,7 +193,7 @@ function App() {
             />
           )}
           {/* 【修正箇所】新権限 head-teacher の場合も TeacherView を表示する */}
-          {(role === 'teacher' || role === 'admin' || role === 'head-teacher') && (
+          {isStaffRole(role) && (
             <div className="view-container">
               <TeacherView 
                 userName={userName} 
