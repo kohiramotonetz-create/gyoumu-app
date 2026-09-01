@@ -19,6 +19,7 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - 1対1進捗Detailの実GAS区間診断（Issue番号未割当）
   - 1対1認証contextのmaster別区間診断（Issue番号未割当）
   - 1対1進捗Detail diagnostics配送修正（Issue番号未割当）
+  - 1対1認証contextのSpreadsheet多重I/O削減（Issue番号未割当）
 - 個トレメニュー: 「丸付け・質問待ち／個トレ進捗管理／模範解答／お知らせ／個トレの仕方」の5アイコン型へ刷新し、旧個トレ進捗管理と個トレ2の入口を個トレメニューへ統合。模範解答を検索・教材一覧・PDF表示の3ペインへ再構成した。
 - コンテンツ管理: admin向けに、お知らせ、個トレの仕方、メニューの使い方のMarkdown編集、下書き／公開分離、Google Drive画像アップロード・公開、各種パスワード管理を追加した。
 - 講師ホーム: 既存1対1進捗データから順調／要注意／遅れを「生徒×科目」単位で集計し、全`assignedSchools`を対象とする動的ドーナツ、進捗遅れ生徒対応、状態別進捗一覧を追加。社会は地理・歴史・公民の比較可能分野から最も悪い状態を1科目の代表判定とする。
@@ -83,6 +84,13 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
 - student-app影響: 直接ログインとトークンログインで同じ利用権限を適用。
 
 ## Issue History
+
+### 1対1認証contextのSpreadsheet多重I/O削減（Issue番号未割当）
+
+- 状態: GAS修正と自動検証まで実施。Git commit／push、clasp push、GAS再デプロイ、本番性能確認は未実施。
+- 原因: 移行済みアカウント4マスターの通常認証経路で、各sheetのヘッダー検証とデータ取得が分離され、合計でsheet lookup 4回、`getLastRow()` 12回、`getLastColumn()` 8回、`getValues()` 8回のSpreadsheet I/Oが発生していた。
+- 修正: 通常認証専用のrequest-scoped snapshotを導入し、各masterをsheet lookup、last row、last column、範囲read各1回で取得する。同じvaluesをヘッダー検証、data rows抽出、profile／assignedSchools結合へ再利用する。移行・setup用helperとlegacy fallbackは変更しない。
+- 診断／互換: 既存`authContextDiagnostics`を維持し、統合read用の`valuesRangeMs`、`valuesReadMs`、`valuesReadCount`を追加する。認証・role・削除判定・担当校舎制限・API・Spreadsheet構造は変更しない。
 
 ### 1対1進捗Detail diagnostics配送修正（Issue番号未割当）
 

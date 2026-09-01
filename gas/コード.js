@@ -377,6 +377,7 @@ function getAuthContextMasterDiagnostics_(diagnostics, sheetName) {
     sheetLookupMs: 0, sheetLookupCount: 0,
     lastRowMs: 0, lastRowCount: 0,
     lastColumnMs: 0, lastColumnCount: 0,
+    valuesRangeMs: 0, valuesReadMs: 0, valuesReadCount: 0,
     headerRangeMs: 0, headerReadMs: 0, headerReadCount: 0,
     dataRangeMs: 0, dataReadMs: 0, dataReadCount: 0,
     rows: 0
@@ -430,6 +431,56 @@ function assertAccountMigrationSheets_(requireEmpty, diagnostics) {
     sheets[spec.name] = sheet;
   });
   return sheets;
+}
+
+function readAccountAuthSnapshots_(diagnostics) {
+  // eslint-disable-next-line no-undef
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const snapshots = Object.create(null);
+  ACCOUNT_MASTER_SHEET_SPECS.forEach(spec => {
+    const masterDiagnostics = getAuthContextMasterDiagnostics_(diagnostics, spec.name);
+    let startedAt = Date.now();
+    const sheet = spreadsheet.getSheetByName(spec.name);
+    if (masterDiagnostics) {
+      masterDiagnostics.sheetLookupMs += Date.now() - startedAt;
+      masterDiagnostics.sheetLookupCount += 1;
+    }
+    if (!sheet) throw new Error(`Required migration sheet is missing: ${spec.name}`);
+
+    startedAt = Date.now();
+    const lastRow = sheet.getLastRow();
+    if (masterDiagnostics) {
+      masterDiagnostics.lastRowMs += Date.now() - startedAt;
+      masterDiagnostics.lastRowCount += 1;
+    }
+    startedAt = Date.now();
+    const lastColumn = sheet.getLastColumn();
+    if (masterDiagnostics) {
+      masterDiagnostics.lastColumnMs += Date.now() - startedAt;
+      masterDiagnostics.lastColumnCount += 1;
+    }
+    if (lastColumn !== spec.headers.length || lastRow < 1) {
+      throw new Error(`Migration sheet header mismatch: ${spec.name}`);
+    }
+
+    startedAt = Date.now();
+    const valuesRange = sheet.getRange(1, 1, lastRow, lastColumn);
+    if (masterDiagnostics) masterDiagnostics.valuesRangeMs += Date.now() - startedAt;
+    startedAt = Date.now();
+    const values = valuesRange.getValues();
+    if (masterDiagnostics) {
+      masterDiagnostics.valuesReadMs += Date.now() - startedAt;
+      masterDiagnostics.valuesReadCount += 1;
+    }
+    const header = (values[0] || []).map(String);
+    if (header.join("\t") !== spec.headers.join("\t")) {
+      throw new Error(`Migration sheet header mismatch: ${spec.name}`);
+    }
+    const rows = values.slice(1);
+    if (masterDiagnostics) masterDiagnostics.rows = rows.length;
+    snapshots[spec.name] = { sheet, values, header, rows, rowCount: lastRow, columnCount: lastColumn };
+  });
+  return snapshots;
 }
 
 function normalizeLegacyMigrationBoolean_(value, fieldName) {
@@ -1389,11 +1440,15 @@ function appendStudentPermissionInfo(result, userId, role) {
 }
 
 function getNewAuthData_(diagnostics) {
-  const sheets = assertAccountMigrationSheets_(false, diagnostics);
-  const accounts = getAccountMigrationDataRows_(sheets["アカウントマスター"], getAuthContextMasterDiagnostics_(diagnostics, "アカウントマスター"));
-  const students = getAccountMigrationDataRows_(sheets["生徒マスター"], getAuthContextMasterDiagnostics_(diagnostics, "生徒マスター"));
-  const staff = getAccountMigrationDataRows_(sheets["講師マスター"], getAuthContextMasterDiagnostics_(diagnostics, "講師マスター"));
-  const assignments = getAccountMigrationDataRows_(sheets["講師担当校舎"], getAuthContextMasterDiagnostics_(diagnostics, "講師担当校舎"));
+  const snapshots = readAccountAuthSnapshots_(diagnostics);
+  const sheets = Object.keys(snapshots).reduce((result, name) => {
+    result[name] = snapshots[name].sheet;
+    return result;
+  }, Object.create(null));
+  const accounts = snapshots["アカウントマスター"].rows;
+  const students = snapshots["生徒マスター"].rows;
+  const staff = snapshots["講師マスター"].rows;
+  const assignments = snapshots["講師担当校舎"].rows;
   const processingStartedAt = Date.now();
   const studentById = Object.create(null);
   const staffById = Object.create(null);
@@ -1441,7 +1496,7 @@ function getUserAuthContexts_(diagnostics) {
     if (diagnostics) {
       diagnostics.totalMs = Date.now() - startedAt;
       const masters = [diagnostics.account, diagnostics.student, diagnostics.teacher, diagnostics.teacherSchools].filter(Boolean);
-      const measuredMs = masters.reduce((sum, item) => sum + item.sheetLookupMs + item.lastRowMs + item.lastColumnMs + item.headerRangeMs + item.headerReadMs + item.dataRangeMs + item.dataReadMs, 0)
+      const measuredMs = masters.reduce((sum, item) => sum + item.sheetLookupMs + item.lastRowMs + item.lastColumnMs + item.valuesRangeMs + item.valuesReadMs + item.headerRangeMs + item.headerReadMs + item.dataRangeMs + item.dataReadMs, 0)
         + (diagnostics.processingMs || 0);
       diagnostics.otherMs = Math.max(0, diagnostics.totalMs - measuredMs);
     }

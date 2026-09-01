@@ -122,7 +122,7 @@ test('管理セッション診断はread・lookup・認証context・期限延長
   assert.equal(diagnostics.lockUsed, false);
 });
 
-test('認証context診断は4マスターのheader・data readとcontext加工を個人情報なしで分解する', () => {
+test('認証contextは4マスターを各1回だけreadし同じsnapshotから検証・結合・診断する', () => {
   const authContext = createTeacherHomeContext();
   const rowsBySheet = {
     'アカウントマスター': [
@@ -149,14 +149,11 @@ test('認証context診断は4マスターのheader・data readとcontext加工�
     __sheets = Object.create(null);
     Object.keys(__rowsBySheet).forEach(name => {
       const rows = __rowsBySheet[name];
-      const counters = __masterCounters[name] = { headerReads: 0, dataReads: 0, lastRows: 0, lastColumns: 0, lookups: 0 };
+      const counters = __masterCounters[name] = { valueReads: 0, lastRows: 0, lastColumns: 0, lookups: 0 };
       __sheets[name] = {
         getLastRow: () => { counters.lastRows += 1; return rows.length; },
         getLastColumn: () => { counters.lastColumns += 1; return rows[0].length; },
-        getRange: row => ({ getValues: () => {
-          if (row === 1) { counters.headerReads += 1; return [rows[0]]; }
-          counters.dataReads += 1; return rows.slice(1);
-        } })
+        getRange: () => ({ getValues: () => { counters.valueReads += 1; return rows; } })
       };
     });
     SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: name => {
@@ -167,6 +164,12 @@ test('認証context診断は4マスターのheader・data readとcontext加工�
     __authContexts = getUserAuthContexts_(__authContextDiagnostics);
   `, authContext);
   assert.equal(authContext.__authContexts.length, 2);
+  const teacherContext = authContext.__authContexts.find(item => item.userId === 'teacher1');
+  const studentContext = authContext.__authContexts.find(item => item.userId === '001200');
+  assert.deepEqual(Array.from(teacherContext.assignedSchools), ['校舎A']);
+  assert.equal(teacherContext.name, '講師');
+  assert.equal(studentContext.school, '校舎A');
+  assert.equal(studentContext.grade, '中２');
   for (const [sheetName, key, expectedRows] of [
     ['アカウントマスター', 'account', 2],
     ['生徒マスター', 'student', 1],
@@ -174,14 +177,20 @@ test('認証context診断は4マスターのheader・data readとcontext加工�
     ['講師担当校舎', 'teacherSchools', 1],
   ]) {
     const counters = authContext.__masterCounters[sheetName];
-    assert.deepEqual({ ...counters }, { headerReads: 1, dataReads: 1, lastRows: 3, lastColumns: 2, lookups: 1 });
+    assert.deepEqual({ ...counters }, { valueReads: 1, lastRows: 1, lastColumns: 1, lookups: 1 });
     const diagnostics = authContext.__authContextDiagnostics[key];
-    for (const valueKey of ['sheetLookupMs','sheetLookupCount','lastRowMs','lastRowCount','lastColumnMs','lastColumnCount','headerRangeMs','headerReadMs','headerReadCount','dataRangeMs','dataReadMs','dataReadCount','rows']) {
+    for (const valueKey of ['sheetLookupMs','sheetLookupCount','lastRowMs','lastRowCount','lastColumnMs','lastColumnCount','valuesRangeMs','valuesReadMs','valuesReadCount','headerRangeMs','headerReadMs','headerReadCount','dataRangeMs','dataReadMs','dataReadCount','rows']) {
       assert.equal(typeof diagnostics[valueKey], 'number');
       assert.ok(diagnostics[valueKey] >= 0);
     }
     assert.equal(diagnostics.rows, expectedRows);
-    for (const countKey of ['sheetLookupCount','lastRowCount','lastColumnCount','headerReadCount','dataReadCount','rows']) assert.ok(Number.isInteger(diagnostics[countKey]));
+    assert.equal(diagnostics.sheetLookupCount, 1);
+    assert.equal(diagnostics.lastRowCount, 1);
+    assert.equal(diagnostics.lastColumnCount, 1);
+    assert.equal(diagnostics.valuesReadCount, 1);
+    assert.equal(diagnostics.headerReadCount, 0);
+    assert.equal(diagnostics.dataReadCount, 0);
+    for (const countKey of ['sheetLookupCount','lastRowCount','lastColumnCount','valuesReadCount','headerReadCount','dataReadCount','rows']) assert.ok(Number.isInteger(diagnostics[countKey]));
   }
   for (const key of ['processingMs', 'totalMs', 'otherMs']) {
     assert.equal(typeof authContext.__authContextDiagnostics[key], 'number');
@@ -189,6 +198,26 @@ test('認証context診断は4マスターのheader・data readとcontext加工�
   }
   const serialized = JSON.stringify(authContext.__authContextDiagnostics);
   assert.doesNotMatch(serialized, /teacher1|001200|校舎A|生徒|講師|セイト|コウシ|secret/);
+});
+
+test('認証context snapshot失敗時も移行前legacy fallbackを維持する', () => {
+  const fallbackContext = createTeacherHomeContext();
+  fallbackContext.__legacyRows = [
+    Array(13).fill(''),
+    ['校舎A', '001200', 'セイト', '', '生徒', '中２', '', '', false, 'secret', 'student', '', ''],
+  ];
+  vm.runInContext(`
+    SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: () => null }) };
+    canUseLegacyAuthFallback_ = () => true;
+    getLegacyAccountSheet_ = () => ({ getDataRange: () => ({ getValues: () => __legacyRows }) });
+    __fallbackDiagnostics = {};
+    __fallbackContexts = getUserAuthContexts_(__fallbackDiagnostics);
+  `, fallbackContext);
+  assert.equal(fallbackContext.__fallbackContexts.length, 1);
+  assert.equal(fallbackContext.__fallbackContexts[0].userId, '001200');
+  assert.equal(fallbackContext.__fallbackContexts[0].role, 'student');
+  assert.equal(fallbackContext.__fallbackDiagnostics.legacyFallbackReadCount, 1);
+  assert.equal(fallbackContext.__fallbackDiagnostics.legacyFallbackRows, 1);
 });
 
 test('Detailは認証で取得したuserContextsと対象生徒を再利用してアカウントcontextを1回だけ読む', () => {
