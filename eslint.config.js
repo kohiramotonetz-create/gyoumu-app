@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', '.codex-worktrees/**']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -24,6 +24,38 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+    },
+  },
+  {
+    files: ['gas/**/*.{js,gs}'],
+    linterOptions: {
+      reportUnusedDisableDirectives: 'off',
+    },
+    languageOptions: {
+      parserOptions: {
+        sourceType: 'script',
+      },
+      globals: {
+        CacheService: 'readonly',
+        ContentService: 'readonly',
+        DriveApp: 'readonly',
+        Logger: 'readonly',
+        LockService: 'readonly',
+        PropertiesService: 'readonly',
+        ScriptApp: 'readonly',
+        Session: 'readonly',
+        SpreadsheetApp: 'readonly',
+        UrlFetchApp: 'readonly',
+        Utilities: 'readonly',
+      },
+    },
+    rules: {
+      'no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        caughtErrors: 'none',
+        vars: 'local',
+        varsIgnorePattern: '^(?:[A-Z_]|authTest$|doPost$|initialize|run|setup)',
+      }],
     },
   },
 ])
