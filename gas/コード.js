@@ -43,6 +43,8 @@ const ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME = "1対1進捗イベント";
 const ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME = "1対1進捗単元";
 const ONE_TO_ONE_PROGRESS_EVENT_HEADERS = ["eventId", "userId", "subjectId", "progressType", "lessonDate", "recordedAt", "recordedBy", "status", "correctedAt", "correctedBy", "correctionReason", "replacementEventId", "requestId", "fieldId"];
 const ONE_TO_ONE_PROGRESS_UNIT_HEADERS = ["eventId", "unitId", "unitOrder", "textNameSnapshot", "chapterSnapshot", "sectionSnapshot", "unitNameSnapshot", "pageSnapshot"];
+const INSTRUCTION_DATA_SHEET_NAME = "指導データ貼り付け";
+const INSTRUCTION_DATA_HEADERS = ["MAIL", "日付", "PT", "時間", "", "教室", "ブ", "区分", "生徒名", "講師名", "", "結果", "", "タスク"];
 const ONE_TO_ONE_SOCIAL_FIELDS = [{ fieldId: "history", label: "歴史" }, { fieldId: "geography", label: "地理" }, { fieldId: "civics", label: "公民" }];
 const ACADEMIC_TEST_SHEET_NAME = "学校成績テスト";
 const ACADEMIC_RESULT_SHEET_NAME = "学校成績";
@@ -2097,6 +2099,20 @@ function runSetupOneToOneProgressSheetsSummary() {
   console.log(JSON.stringify(setupOneToOneProgressSheets(), null, 2));
 }
 
+// eslint-disable-next-line no-unused-vars
+function setupInstructionDataPasteSheet() {
+  // eslint-disable-next-line no-undef
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const result = { createdSheets: [], initializedHeaders: [], warnings: [] };
+  ensureSheetWithHeaders(spreadsheet, INSTRUCTION_DATA_SHEET_NAME, INSTRUCTION_DATA_HEADERS, result);
+  return result;
+}
+
+// eslint-disable-next-line no-unused-vars
+function runSetupInstructionDataPasteSheetSummary() {
+  console.log(JSON.stringify(setupInstructionDataPasteSheet(), null, 2));
+}
+
 function normalizeOneToOneMatrixDiagnosticRequestId_(value) {
   const text = String(value || "").trim();
   if (/^[a-zA-Z0-9_-]{1,100}$/.test(text)) return text;
@@ -2242,17 +2258,72 @@ function resolveTeacherHomeAssignedSchools_(session) {
     .filter(Boolean)));
 }
 
+function normalizeInstructionPersonName_(value) {
+  return String(value == null ? "" : value).trim().replace(/[ \u3000]/g, "");
+}
+
+function readTeacherInstructionStudentNames_(actor) {
+  // eslint-disable-next-line no-undef
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(INSTRUCTION_DATA_SHEET_NAME);
+  if (!sheet) return { available: false, studentNames: new Set(), sourceRowCount: 0, matchedRowCount: 0 };
+  const rows = sheet.getDataRange().getValues();
+  if (!rows.length) return { available: false, studentNames: new Set(), sourceRowCount: 0, matchedRowCount: 0 };
+  const headers = rows[0].map(value => String(value || "").trim());
+  const studentIndex = headers.indexOf("生徒名");
+  const teacherIndex = headers.indexOf("講師名");
+  if (studentIndex < 0 || teacherIndex < 0) throw new Error("指導データ貼り付けシートに生徒名または講師名列がありません");
+  const teacherName = normalizeInstructionPersonName_(actor && actor.name);
+  const studentNames = new Set();
+  let matchedRowCount = 0;
+  rows.slice(1).forEach(row => {
+    if (!teacherName || normalizeInstructionPersonName_(row[teacherIndex]) !== teacherName) return;
+    const studentName = normalizeInstructionPersonName_(row[studentIndex]);
+    if (!studentName) return;
+    matchedRowCount += 1;
+    studentNames.add(studentName);
+  });
+  return { available: true, studentNames, sourceRowCount: Math.max(0, rows.length - 1), matchedRowCount };
+}
+
+function emptyTeacherHomeProgressSummary_(session, schools, assignmentScope) {
+  const counts = { good: 0, warning: 0, behind: 0 };
+  return {
+    result: "success",
+    scope: Object.assign({ schools, label: schools.length ? `担当${schools.length}校` : "担当校舎なし" }, assignmentScope || {}),
+    summary: { targetEntryCount: 0, comparableEntryCount: 0, excludedEntryCount: 0, counts, percentages: calculateTeacherHomeProgressPercentages_(counts) },
+    items: [],
+    excludedCounts: { noProgress: 0, partialProgress: 0, axisUnavailable: 0 },
+    generatedAt: new Date().toISOString(),
+    sessionExpiresAt: session.sessionExpiresAt
+  };
+}
+
 function buildTeacherHomeProgressSummary_(session) {
   const schools = resolveTeacherHomeAssignedSchools_(session);
+  const actor = (session.userContexts || []).find(user => user.userId === session.userId && user.enabled && !user.deleted);
+  if (!actor) throw new Error("管理セッションの利用者が存在しません");
+  const assignment = session.role === "teacher" ? readTeacherInstructionStudentNames_(actor) : null;
+  const middleGradePattern = /^中[1-3]$/;
+  const schoolSet = new Set(schools);
+  const baseStudents = (session.userContexts || []).filter(user => user.role === "student" && user.enabled && !user.deleted
+    && middleGradePattern.test(normalizeGrade(user.grade)));
+  const assignedStudents = assignment
+    ? baseStudents.filter(user => assignment.studentNames.has(normalizeInstructionPersonName_(user.name)))
+    : baseStudents.filter(user => schoolSet.has(String(user.school || "").trim()));
+  const assignmentScope = assignment ? {
+    assignmentBased: true,
+    assignmentDataAvailable: assignment.available,
+    assignedStudentCount: assignedStudents.length,
+    instructionSourceRowCount: assignment.sourceRowCount,
+    instructionMatchedRowCount: assignment.matchedRowCount,
+    label: assignment.available ? `今月の担当生徒${assignedStudents.length}名` : "今月の担当生徒データなし"
+  } : null;
+  if (assignment && assignedStudents.length === 0) return emptyTeacherHomeProgressSummary_(session, schools, assignmentScope);
   const subjectRows = assertOneToOneSubjectSheet_().getDataRange().getValues();
   const subjectState = buildOneToOneSubjectStateMap_(subjectRows).states;
   const sheets = assertOneToOneProgressSheets_();
   const readContext = buildOneToOneProgressReadContext_(sheets);
-  const middleGradePattern = /^中[1-3]$/;
-  const schoolSet = new Set(schools);
-  const targetStudents = (session.userContexts || []).filter(user => user.role === "student"
-    && user.enabled && !user.deleted && schoolSet.has(String(user.school || "").trim())
-    && middleGradePattern.test(normalizeGrade(user.grade)) && (subjectState[user.userId] || []).length > 0);
+  const targetStudents = assignedStudents.filter(user => (subjectState[user.userId] || []).length > 0);
   const axisCache = Object.create(null);
   const getAxis = (grade, subjectId, fieldId) => {
     const key = `${normalizeGrade(grade)}\t${subjectId}\t${fieldId || ""}`;
@@ -2313,7 +2384,7 @@ function buildTeacherHomeProgressSummary_(session) {
     || ONE_TO_ONE_SUBJECT_IDS.indexOf(left.subjectId) - ONE_TO_ONE_SUBJECT_IDS.indexOf(right.subjectId));
   return {
     result: "success",
-    scope: { schools, label: schools.length ? `担当${schools.length}校` : "担当校舎なし" },
+    scope: Object.assign({ schools, label: schools.length ? `担当${schools.length}校` : "担当校舎なし" }, assignmentScope || {}),
     summary: {
       targetEntryCount,
       comparableEntryCount: items.length,

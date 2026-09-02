@@ -472,6 +472,106 @@ test('講師ホームはroleに関係なくsession本人の全assignedSchoolsだ
   assert.deepEqual(Array.from(vm.runInContext('resolveTeacherHomeAssignedSchools_(__session)', homeContext)), []);
 });
 
+test('指導データは講師名と生徒名を空白正規化し対象生徒を重複除去する', () => {
+  const homeContext = createTeacherHomeContext();
+  let reads = 0;
+  const rows = [
+    ['MAIL', '日付', 'PT', '時間', '', '教室', 'ブ', '区分', '生徒名', '講師名', '', '結果', '', 'タスク'],
+    ['x', '', '', '', '', '', '', '通常', ' 生徒　一郎 ', '山田 太郎', '', '実施', '', ''],
+    ['y', '', '', '', '', '', '', '取消', '生徒 一郎', ' 山田　太郎 ', '', '取消', '', ''],
+    ['z', '', '', '', '', '', '', '', '生徒　二郎', '別講師', '', '', '', '']
+  ];
+  homeContext.SpreadsheetApp = {
+    getActiveSpreadsheet: () => ({
+      getSheetByName: name => name === '指導データ貼り付け'
+        ? { getDataRange: () => ({ getValues: () => { reads += 1; return rows; } }) }
+        : null
+    })
+  };
+  homeContext.__actor = { name: ' 山田　太郎 ' };
+  const result = vm.runInContext('readTeacherInstructionStudentNames_(__actor)', homeContext);
+  assert.equal(reads, 1);
+  assert.equal(result.available, true);
+  assert.equal(result.sourceRowCount, 3);
+  assert.equal(result.matchedRowCount, 2);
+  assert.deepEqual(Array.from(result.studentNames), ['生徒一郎']);
+  assert.equal(vm.runInContext('normalizeInstructionPersonName_(" 山田　太郎 ")', homeContext), '山田太郎');
+});
+
+test('teacherは指導データ未作成または担当0件を正常な0件summaryとして扱う', () => {
+  const homeContext = createTeacherHomeContext();
+  let progressSheetReads = 0;
+  homeContext.SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: () => null }) };
+  homeContext.__session = {
+    userId: 'staff', role: 'teacher', sessionExpiresAt: '2026-09-30T00:00:00.000Z',
+    userContexts: [
+      { userId: 'staff', role: 'teacher', enabled: true, deleted: false, name: '山田 太郎', assignedSchools: ['校舎A'] },
+      { userId: '001200', role: 'student', enabled: true, deleted: false, name: '生徒 一郎', school: '校舎A', grade: '中２' }
+    ]
+  };
+  homeContext.assertOneToOneSubjectSheet_ = () => { progressSheetReads += 1; throw new Error('進捗シートを読んではならない'); };
+  const result = vm.runInContext('buildTeacherHomeProgressSummary_(__session)', homeContext);
+  assert.equal(progressSheetReads, 0);
+  assert.deepEqual({ ...result.summary.counts }, { good: 0, warning: 0, behind: 0 });
+  assert.equal(result.scope.assignmentBased, true);
+  assert.equal(result.scope.assignmentDataAvailable, false);
+  assert.equal(result.scope.assignedStudentCount, 0);
+  assert.deepEqual(Array.from(result.items), []);
+});
+
+test('teacherホームは指導データの担当生徒だけを生徒×科目で再集計する', () => {
+  const homeContext = createTeacherHomeContext();
+  const axis = vm.runInContext('getOneToOneSchoolUnitAxis_("中２", "math")', homeContext);
+  const subjectRows = [['userId','subjectId','enabled','createdAt','updatedAt','updatedBy'], ['001200','math',true,'','',''], ['001201','math',true,'','','']];
+  const eventRows = [['eventId','userId','subjectId','progressType','lessonDate','recordedAt','recordedBy','status','correctedAt','correctedBy','correctionReason','replacementEventId','requestId','fieldId']];
+  const unitRows = [['eventId','unitId','unitOrder','textNameSnapshot','chapterSnapshot','sectionSnapshot','unitNameSnapshot','pageSnapshot']];
+  const add = (id, userId, type, order) => {
+    eventRows.push([id,userId,'math',type,'',new Date(),'staff','ACTIVE','','','','',`r-${id}`,'']);
+    const unit = axis[order - 1];
+    unitRows.push([id,unit.unitId,order,unit.textName,unit.chapter,unit.section,unit.unitName,unit.page]);
+  };
+  add('a-s','001200','school',4); add('a-n','001200','netz',3);
+  add('b-s','001201','school',2); add('b-n','001201','netz',4);
+  const sheet = rows => ({ getDataRange: () => ({ getValues: () => rows }) });
+  homeContext.SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: () => sheet([
+    ['MAIL','','','','','','','','生徒名','講師名'],
+    ['','','','','','','','','担当 生徒','山田　太郎']
+  ]) }) };
+  homeContext.__subjectSheet = sheet(subjectRows);
+  homeContext.__eventSheet = sheet(eventRows);
+  homeContext.__unitSheet = sheet(unitRows);
+  homeContext.__session = {
+    userId: 'staff', role: 'teacher', sessionExpiresAt: '2026-09-30T00:00:00.000Z',
+    userContexts: [
+      { userId: 'staff', role: 'teacher', enabled: true, deleted: false, name: '山田 太郎', assignedSchools: ['校舎A'] },
+      { userId: '001200', role: 'student', enabled: true, deleted: false, name: '担当　生徒', nameKana: 'タントウ', school: '校舎A', grade: '中２' },
+      { userId: '001201', role: 'student', enabled: true, deleted: false, name: '対象外 生徒', nameKana: 'タイショウガイ', school: '校舎A', grade: '中２' }
+    ]
+  };
+  vm.runInContext(`
+    assertOneToOneSubjectSheet_ = () => __subjectSheet;
+    assertOneToOneProgressSheets_ = () => ({
+      [ONE_TO_ONE_PROGRESS_EVENT_SHEET_NAME]: __eventSheet,
+      [ONE_TO_ONE_PROGRESS_UNIT_SHEET_NAME]: __unitSheet
+    });
+  `, homeContext);
+  const result = vm.runInContext('buildTeacherHomeProgressSummary_(__session)', homeContext);
+  assert.equal(result.scope.assignedStudentCount, 1);
+  assert.equal(result.summary.comparableEntryCount, 1);
+  assert.deepEqual({ ...result.summary.counts }, { good: 0, warning: 0, behind: 1 });
+  assert.deepEqual(Array.from(result.items, item => item.userId), ['001200']);
+});
+
+test('担当生徒filterはteacherだけに適用し他staff roleは既存assignedSchools経路を維持する', () => {
+  assert.match(source, /session\.role === "teacher" \? readTeacherInstructionStudentNames_\(actor\) : null/);
+  assert.match(source, /assignment[\s\S]*baseStudents\.filter\(user => assignment\.studentNames\.has/);
+  assert.match(source, /baseStudents\.filter\(user => schoolSet\.has/);
+  assert.match(source, /INSTRUCTION_DATA_SHEET_NAME = "指導データ貼り付け"/);
+  assert.match(source, /setupInstructionDataPasteSheet/);
+  const headers = vm.runInContext('INSTRUCTION_DATA_HEADERS', context);
+  assert.deepEqual(Array.from(headers), ['MAIL', '日付', 'PT', '時間', '', '教室', 'ブ', '区分', '生徒名', '講師名', '', '結果', '', 'タスク']);
+});
+
 test('講師ホーム集計は生徒×科目・社会最悪状態を1件で集計しシートを各1回だけ読む', () => {
   const homeContext = createTeacherHomeContext();
   const mathAxis = vm.runInContext('getOneToOneSchoolUnitAxis_("中２", "math")', homeContext);
@@ -584,9 +684,9 @@ test('講師ホームは現行axisにないunitIdを保存済みunitOrderで復�
   homeContext.__unitSheet = sheet(unitRows);
   homeContext.__mathAxis = mathAxis;
   homeContext.__session = {
-    userId: 'staff', role: 'teacher', sessionExpiresAt: '2026-08-31T00:00:00.000Z',
+    userId: 'staff', role: 'admin', sessionExpiresAt: '2026-08-31T00:00:00.000Z',
     userContexts: [
-      { userId: 'staff', role: 'teacher', enabled: true, deleted: false, assignedSchools: ['校舎A'] },
+      { userId: 'staff', role: 'admin', enabled: true, deleted: false, assignedSchools: ['校舎A'] },
       ...['001300','001301','001302','001303','001304','001305','001306'].map((userId, index) => ({ userId, role: 'student', enabled: true, deleted: false, school: '校舎A', grade: '中２', name: `生徒${index}`, nameKana: `セイト${index}` }))
     ]
   };

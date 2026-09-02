@@ -1,5 +1,6 @@
 import { MarkdownRenderer } from './common/KotoreMarkdown.jsx'
 import './KoToreMenu.css'
+import './KoToreMenu.css'
 
 export default function KoToreContentViewer({ type, content, GAS_URL, API_KEY, sessionToken, onSessionExpired }) {
   const title = type === 'notice' ? 'お知らせ' : '個トレの仕方'

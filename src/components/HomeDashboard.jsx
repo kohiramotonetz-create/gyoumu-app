@@ -1,5 +1,6 @@
 import VersionLabel from './common/VersionLabel.jsx'
-import { buildTeacherHomeProgressDonut, TEACHER_HOME_PROGRESS_STATUSES } from '../utils/teacherHomeProgress.js'
+import StudentProfileLink from './common/StudentProfileLink.jsx'
+import { buildTeacherHomeProgressDonut, formatTeacherHomeProgressDifference, formatTeacherHomeProgressUnit, TEACHER_HOME_PROGRESS_STATUSES } from '../utils/teacherHomeProgress.js'
 
 const Icon = ({ name, size = 24, strokeWidth = 2 }) => {
   const paths = {
@@ -83,17 +84,85 @@ function ActionItems({ progressState, onOpenProgressStatus }) {
   </div>
 }
 
-export default function HomeDashboard({ userName, progressState, onRefreshProgress, onOpenProgressStatus }) {
+function formatNoticeDate(value) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '日時未設定' : new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(date)
+}
+
+function noticeExcerpt(markdown) {
+  return String(markdown || '').replace(/[#>*_`()!-]/g, ' ').replace(/\s+/g, ' ').trim() || '詳細を確認してください。'
+}
+
+function TeacherAnnouncements({ noticeState, onOpenNotices }) {
+  const notices = Array.isArray(noticeState?.notices) ? noticeState.notices.slice(0, 3) : []
+  return <section className="home-panel home-announcements home-teacher-section">
+    <header><div><Icon name="megaphone" size={29} /><h2>お知らせ</h2></div><button type="button" className="home-header-link" onClick={onOpenNotices}>すべてのお知らせを見る <Icon name="arrow" size={18} /></button></header>
+    {noticeState?.loading ? <div className="home-teacher-empty" role="status">お知らせを読み込み中…</div>
+      : noticeState?.error ? <div className="home-teacher-empty home-teacher-empty--error" role="alert">お知らせを取得できませんでした</div>
+        : notices.length === 0 ? <div className="home-teacher-empty">現在、公開中のお知らせはありません。</div>
+          : <div className="home-announcement-grid">{notices.map((notice, index) => <button type="button" className="home-announcement-card" key={notice.contentId} onClick={onOpenNotices}>
+            <div className="home-announcement-card__meta">{index === 0 && <span>NEW</span>}{notice.importance === 'important' && <b>重要</b>}<time dateTime={notice.publishedAt || ''}>{formatNoticeDate(notice.publishedAt)}</time></div>
+            <div className="home-announcement-card__title"><strong>{notice.title}</strong><Icon name="chevron" size={19} /></div>
+            <p>{noticeExcerpt(notice.publishedMarkdown)}</p>
+          </button>)}</div>}
+  </section>
+}
+
+function TeacherStatusStudents({ progressState, onOpenProgressStatus, status }) {
+  const config = TEACHER_HOME_PROGRESS_STATUSES[status]
+  const items = Array.isArray(progressState.data?.items) ? progressState.data.items.filter(item => item.status === status) : []
+  const previewItems = items.slice(0, 5)
+  return <section className={`home-attention-group home-attention-group--${status}`}>
+    <header><h3>{status === 'behind' ? '進捗が遅れている生徒' : '進捗が要注意の生徒'}</h3><strong>{items.length}件</strong></header>
+    {progressState.loading ? <div className="home-teacher-empty" role="status">進捗を読み込み中…</div>
+      : progressState.error && !progressState.data ? <div className="home-teacher-empty home-teacher-empty--error">進捗を取得できませんでした</div>
+        : previewItems.length === 0 ? <div className="home-teacher-empty">該当する生徒はいません。</div>
+          : <div className="home-behind-students__table-wrap"><table><thead><tr><th>生徒</th><th>学年</th><th>校舎</th><th>科目</th><th>現在単元</th><th>差</th><th>状態</th></tr></thead><tbody>
+            {previewItems.map(item => <tr key={`${item.userId}-${item.subjectId}`}>
+              <td><StudentProfileLink userId={item.userId} source="home">{item.name}</StudentProfileLink></td>
+              <td>{item.grade}</td><td>{item.school}</td><td>{item.subjectLabel}</td>
+              <td><span><b>学校：</b>{formatTeacherHomeProgressUnit(item.schoolCurrent)}</span><span><b>ネッツ：</b>{formatTeacherHomeProgressUnit(item.netzCurrent)}</span></td>
+              <td className="home-behind-students__difference">{formatTeacherHomeProgressDifference(item.difference)}</td>
+              <td><span className={`home-behind-students__badge home-behind-students__badge--${status}`}>{config.label}</span></td>
+            </tr>)}
+          </tbody></table></div>}
+    <div className="home-teacher-section__footer"><button type="button" onClick={() => onOpenProgressStatus(status, progressState.data)} disabled={!progressState.data}>すべて表示 <Icon name="arrow" size={18} /></button></div>
+  </section>
+}
+
+function TeacherAttentionStudents({ progressState, onOpenProgressStatus }) {
+  const scope = progressState.data?.scope
+  const scopeText = scope?.assignmentBased ? scope.label : (scope?.label || '担当生徒')
+  return <section className="home-panel home-teacher-section home-behind-students">
+    <header><div className="home-panel__title"><Icon name="alert" size={30} /><h2>対応が必要な生徒</h2></div><div className="home-behind-students__scope">対象：{scopeText}</div></header>
+    {scope?.assignmentBased && !scope.assignmentDataAvailable && <div className="home-assignment-note">今月の担当生徒データがありません</div>}
+    <TeacherStatusStudents status="behind" progressState={progressState} onOpenProgressStatus={onOpenProgressStatus} />
+    <TeacherStatusStudents status="warning" progressState={progressState} onOpenProgressStatus={onOpenProgressStatus} />
+  </section>
+}
+
+function ProgressSection({ progressState, onRefreshProgress, onOpenProgressStatus, updatedAt, teacher = false }) {
+  return <article className={`home-panel home-progress ${teacher ? 'home-teacher-section' : ''}`}>
+    <header><div className="home-panel__title"><Icon name="chart" size={30} /><h2>進捗状況</h2></div><div className="home-progress__refresh"><span><Icon name="calendar" size={16} /> 最終更新：{updatedAt}</span><button type="button" onClick={onRefreshProgress} disabled={progressState.loading || progressState.refreshing}>{progressState.refreshing ? '更新中…' : 'データ更新'}</button></div></header>
+    {progressState.error && progressState.data && <div className="home-progress__refresh-error" role="alert">更新できませんでした。表示中のデータを維持しています。</div>}
+    <ProgressPanel progressState={progressState} onRetry={onRefreshProgress} onOpenProgressStatus={onOpenProgressStatus} />
+  </article>
+}
+
+export default function HomeDashboard({ userName, role, progressState, noticeState, onRefreshProgress, onOpenProgressStatus, onOpenNotices }) {
   const now = new Date()
   const dateText = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }).format(now)
   const updatedAt = progressState.updatedAt ? new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short' }).format(progressState.updatedAt) : '未取得'
+  const greeting = <section className="home-greeting"><h1>おはようございます、{userName} 先生！ <span className="home-greeting__sun"><Icon name="sun" size={29} /></span></h1><div className="home-greeting__meta"><span>{dateText}</span></div></section>
+  if (role === 'teacher') return <div className="home-dashboard home-dashboard--teacher">
+    {greeting}
+    <TeacherAnnouncements noticeState={noticeState} onOpenNotices={onOpenNotices} />
+    <TeacherAttentionStudents progressState={progressState} onOpenProgressStatus={onOpenProgressStatus} />
+    <ProgressSection teacher progressState={progressState} onRefreshProgress={onRefreshProgress} onOpenProgressStatus={onOpenProgressStatus} updatedAt={updatedAt} />
+    <VersionLabel />
+  </div>
   return <div className="home-dashboard">
-    <section className="home-greeting">
-      <h1>おはようございます、{userName} 先生！ <span className="home-greeting__sun"><Icon name="sun" size={29} /></span></h1>
-      <div className="home-greeting__meta">
-        <span>{dateText}</span>
-      </div>
-    </section>
+    {greeting}
 
     <section className="home-summary-grid" aria-label="サマリー">
       {Object.keys(variants).map(variant => <SummaryCard key={variant} variant={variant} />)}
@@ -106,11 +175,7 @@ export default function HomeDashboard({ userName, progressState, onRefreshProgre
         <div className="home-panel-link" aria-disabled="true">2件は未設定です</div>
       </article>
 
-      <article className="home-panel home-progress">
-        <header><div className="home-panel__title"><Icon name="chart" size={30} /><h2>進捗状況</h2></div><div className="home-progress__refresh"><span><Icon name="calendar" size={16} /> 最終更新：{updatedAt}</span><button type="button" onClick={onRefreshProgress} disabled={progressState.loading || progressState.refreshing}>{progressState.refreshing ? '更新中…' : 'データ更新'}</button></div></header>
-        {progressState.error && progressState.data && <div className="home-progress__refresh-error" role="alert">更新できませんでした。表示中のデータを維持しています。</div>}
-        <ProgressPanel progressState={progressState} onRetry={onRefreshProgress} onOpenProgressStatus={onOpenProgressStatus} />
-      </article>
+      <ProgressSection progressState={progressState} onRefreshProgress={onRefreshProgress} onOpenProgressStatus={onOpenProgressStatus} updatedAt={updatedAt} />
     </section>
 
     <section className="home-panel home-announcements">

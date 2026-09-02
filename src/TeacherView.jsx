@@ -4,6 +4,7 @@ import PasswordManager from './components/PasswordManager.jsx'
 import { styles } from './styles/teacherViewStyles.js'
 import TestReviewManager from './components/TestReviewManager.jsx'
 import NoticeManager from './components/NoticeManager.jsx'
+import KoToreContentViewer from './components/KoToreContentViewer.jsx'
 import AccountManagement from './components/AccountManagement.jsx'
 import SchoolProgressTracker from './components/SchoolProgressManager.jsx'
 import AppUsageTracker from './components/AppUsageTracker.jsx'
@@ -17,6 +18,7 @@ import { ALL_SCHOOLS } from './constants/organization.js'
 import { parseStudentProfileHash } from './utils/studentProfileNavigation.js'
 import HomeDashboard, { Icon } from './components/HomeDashboard.jsx'
 import TeacherHomeProgressStudentList from './components/TeacherHomeProgressStudentList.jsx'
+import { isAuthorizationResponse, normalizeKotoreContentResponse } from './utils/kotoreContent.js'
 import './TeacherView.css'
 import { canManageAccounts, isPrivilegedStaffRole, isStaffRole } from './utils/roles.js'
 
@@ -62,6 +64,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   const [homeProgressData, setHomeProgressData] = useState(null);
   const [homeProgressStatus, setHomeProgressStatus] = useState('behind');
   const [homeProgressState, setHomeProgressState] = useState({ loaded: false, loading: false, refreshing: false, error: '', data: null, updatedAt: null });
+  const [homeNoticeState, setHomeNoticeState] = useState({ loading: role === 'teacher', error: '', notices: [] });
   const schools = ALL_SCHOOLS;
   const availableAssignedSchools = useMemo(() => Array.isArray(assignedSchools) && assignedSchools.length > 0
     ? assignedSchools
@@ -116,6 +119,23 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     }
     if (!homeProgressState.loaded && !homeProgressState.loading && !homeProgressState.error) loadHomeProgress();
   }, [availableAssignedSchools, homeProgressState.error, homeProgressState.loaded, homeProgressState.loading, loadHomeProgress, role]);
+
+  useEffect(() => {
+    if (role !== 'teacher') return undefined;
+    let active = true;
+    setHomeNoticeState({ loading: true, error: '', notices: [] });
+    axios.post(GAS_URL, JSON.stringify({ action: 'getPublishedKotoreContents', apiKey: API_KEY, sessionToken, contentTypes: ['notice'] }), { headers: { 'Content-Type': 'text/plain' }, timeout: 30000 })
+      .then(response => {
+        if (!active) return;
+        if (response.data?.result !== 'success') {
+          if (isAuthorizationResponse(response.data)) handleLogout();
+          throw new Error(response.data?.message || 'お知らせを取得できませんでした');
+        }
+        setHomeNoticeState({ loading: false, error: '', notices: normalizeKotoreContentResponse(response.data).notices });
+      })
+      .catch(() => { if (active) setHomeNoticeState({ loading: false, error: 'お知らせを取得できませんでした', notices: [] }); });
+    return () => { active = false; };
+  }, [handleLogout, role, sessionToken]);
 
   useEffect(() => {
     const syncHash = () => {
@@ -254,9 +274,12 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
             {!profileRoute && <>
             {activeContent === 'home' && <HomeDashboard
               userName={userName}
+              role={role}
               progressState={homeProgressState}
+              noticeState={homeNoticeState}
               onRefreshProgress={loadHomeProgress}
               onOpenProgressStatus={openHomeProgressStatus}
+              onOpenNotices={() => setActiveContent('notices')}
             />}
             {activeContent === 'home-progress-list' && <TeacherHomeProgressStudentList
               key={homeProgressStatus}
@@ -265,7 +288,9 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
               onBack={() => setActiveContent('home')}
             />}
             {activeContent === 'notices' && (
-              <NoticeManager notices={[]} styles={styles} />
+              role === 'teacher'
+                ? <KoToreContentViewer type="notice" content={homeNoticeState.notices} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={handleLogout} />
+                : <NoticeManager notices={[]} styles={styles} />
             )}
 
             {activeContent === 'create-account' && canManageAccounts(role) && (

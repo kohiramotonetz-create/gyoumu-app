@@ -98,3 +98,31 @@ test('ホームCSSは固定gradientを廃止し操作可能状態とmobile表示
   assert.match(listCss, /overflow-x:auto/);
   assert.match(listCss, /@media \(max-width:767px\)/);
 });
+
+test('teacherホームだけ今日の確認順に再構成し担当summaryを遅れ・要注意各5件へ再利用する', () => {
+  const teacher = read('../src/TeacherView.jsx');
+  const home = read('../src/components/HomeDashboard.jsx');
+  assert.match(home, /if \(role === 'teacher'\)/);
+  assert.match(home, /TeacherAnnouncements[\s\S]*TeacherAttentionStudents[\s\S]*ProgressSection/);
+  assert.match(home, /filter\(item => item\.status === status\)/);
+  assert.match(home, /previewItems = items\.slice\(0, 5\)/);
+  assert.match(home, /status="behind"/);
+  assert.match(home, /status="warning"/);
+  assert.match(home, /対応が必要な生徒/);
+  assert.match(home, /StudentProfileLink/);
+  assert.match(home, /onOpenProgressStatus\(status, progressState\.data\)/);
+  assert.match(home, /Object\.keys\(variants\)/);
+  assert.equal((teacher.match(/action: 'getTeacherHomeProgressSummary'/g) || []).length, 1);
+  assert.doesNotMatch(home, /getOneToOneProgressDetail/);
+});
+
+test('teacherホームのお知らせは既存公開APIを1回利用し最大3件を表示する', () => {
+  const teacher = read('../src/TeacherView.jsx');
+  const home = read('../src/components/HomeDashboard.jsx');
+  assert.equal((teacher.match(/action: 'getPublishedKotoreContents'/g) || []).length, 1);
+  assert.match(teacher, /role !== 'teacher'/);
+  assert.match(teacher, /contentTypes: \['notice'\]/);
+  assert.match(home, /notices\.slice\(0, 3\)/);
+  assert.match(home, /すべてのお知らせを見る/);
+  assert.match(home, /notice\.importance === 'important'/);
+});
