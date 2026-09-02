@@ -74,7 +74,7 @@ React Routerは使用されていない。すべて基本URL`/`上で、`App`の
 | 対応キュー | 講師系全ロール | `NotificationManager` | 対応開始・完了 | なし |
 | 進捗確認 | 講師系全ロール | `KoToreProgressTracker`、`SchoolProgressManager` | 条件別一覧 | なし |
 | 利用状況確認 | 講師系全ロール | `AppUsageTracker`、`UsageDetailView` | 一覧・生徒詳細 | なし |
-| アカウント管理 | `admin`、`head-teacher` | `AccountGenerator` | 作成・検索・一括削除 | なし |
+| アカウント管理 | `admin`、`head-teacher`、`general` | `AccountManagement`、`AccountRegistration`、生徒／講師一覧・詳細 | 一覧、作成、編集、論理削除、1対1受講科目 | 管理セッションとrole別対象制限 |
 | テスト振り返り確認 | `admin`、`head-teacher` | `TestReviewManager` | 集計・詳細 | なし |
 | パスワード案内・模範解答 | `admin` | `PasswordManager`、`ModelAnswerShelf` | 外部案内・PDF表示 | あり |
 
@@ -117,7 +117,7 @@ GAS側でロール・担当校舎が再検証されているかは未確認。
 - `KoToreProgressTracker`：校舎・学年・教科・教材別個トレ進捗。
 - `SchoolProgressManager`：校舎・学年・教科別学校進度。
 - `AppUsageTracker`：アプリ別利用状況と生徒詳細。
-- `AccountGenerator`：講師・生徒アカウント作成、対象検索、一括削除。
+- `AccountManagement`：生徒情報、講師情報、新規アカウントの3タブを提供し、管理セッション対応APIで一覧・作成・編集・論理削除を行う。非admin管理者はstudent／teacherだけを管理し、adminは全roleを管理する。
 - `TestReviewManager`：年度・テスト・校舎・学年別振り返り確認。
 - `ModelAnswerShelf`：ローカルPDF表示。
 - `PasswordManager`：外部学習サービスのログイン案内表示。
@@ -140,9 +140,10 @@ GAS側でロール・担当校舎が再検証されているかは未確認。
 | `startSupport` | `TeacherView.handleStart` | `unit,queueNumber` | `result` | alert、単発 |
 | `deleteNotification` | `TeacherView.handleComplete` | `userId,userName,unit,queueNumber` | 利用なし | alert、単発 |
 | `issueToken` | `openSukimaKun` | `userId` | `token` | alert/console、単発 |
-| `createAccount` | `AccountGenerator.handleCreate` | `school,userId,userName,grade,password,role` | `result` | alert、単発 |
-| `getAccountsForDelete` | `fetchAccountsForDelete` | `school,grades` | `accounts` | alert、単発 |
-| `deleteAccountsBulk` | `handleDeleteSelected` | `userIds` | `result,message` | alert、単発 |
+| `createStudentAccount` / `createStaffAccount` | `AccountRegistration` | 管理セッション、ID、氏名・フリガナ、生徒属性またはstaff role・担当校舎 | `result,userId,password` | 画面内通知、単発 |
+| `getStudentAccounts` / `getStaffAccounts` | 生徒／講師一覧 | 管理セッション | `accounts` | 画面内通知、単発 |
+| `updateStudentAccount` / `updateStaffAccount` | 生徒／講師詳細 | 管理セッション、対象ID、更新内容 | `result,userId` | 画面内通知、単発 |
+| `deleteStudentAccount` / `deleteStaffAccount` | 生徒／講師詳細 | 管理セッション、対象ID | `result,userId` | 論理削除、単発 |
 | `getAppUsageMatrix` | `AppUsageTracker.fetchUsage` | `school,grade` | `apps,students` | alert/console、単発 |
 | `getKoToreProgressMatrix` | `KoToreProgressTracker` | `school,grade,subject,textName,masterUnits` | 応答全体 | alert、単発 |
 | `getSchoolProgressMatrix` | `SchoolProgressManager` | `school,grade,subject,masterUnits` | 応答全体 | alert、単発 |

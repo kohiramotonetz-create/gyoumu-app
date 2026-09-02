@@ -39,6 +39,18 @@ test('アカウント管理は3タブ構造でlegacy画面を新UIから除外�
   assert.doesNotMatch(source, /legacy/);
 });
 
+test('legacyアカウント管理actionを廃止し管理セッション対応APIへ一本化する', () => {
+  const gas = read('../gas/コード.js');
+  for (const action of ['createAccount', 'getAccountsForDelete', 'deleteAccountsBulk', 'deleteAccount']) {
+    assert.doesNotMatch(gas, new RegExp(`data\\.action === ["']${action}["']`));
+  }
+  for (const action of ['createStudentAccount', 'createStaffAccount', 'getStudentAccounts', 'getStaffAccounts', 'updateStudentAccount', 'updateStaffAccount', 'deleteStudentAccount', 'deleteStaffAccount']) {
+    assert.match(gas, new RegExp(`["']${action}["']`));
+  }
+  assert.match(gas, /requireAccountManagerSession_\(data\.sessionToken\)/);
+  assert.match(gas, /canAccountManagerAccessRole_/);
+});
+
 test('生徒・講師一覧は一覧を残して詳細を開き既存APIとsessionTokenを維持する', () => {
   const student = read('../src/components/StudentAccountList.jsx');
   const staff = read('../src/components/StaffAccountList.jsx');

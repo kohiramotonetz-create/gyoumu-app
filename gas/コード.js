@@ -5337,55 +5337,6 @@ function doPost(e) {
     }
   }
 
-  // --- 14. アカウント発行処理 ---
-  if (data.action === "createAccount") {
-    const userSheet = getLegacyAccountSheet_();
-    const accountLock = LockService.getDocumentLock();
-    try {
-      accountLock.waitLock(10000);
-      const lastRow = userSheet.getLastRow();
-      const nextRow = lastRow + 1;
-      const formattedUserId = formatUserIdForSheet(data.userId);
-      const normalizedCreatedUserId = normalizeUserId(formattedUserId);
-      const initialFlag = (data.role === "teacher");
-
-      const newRow = [
-        data.school,      
-        formattedUserId,  
-        "", "", 
-        data.userName,    
-        data.grade,       
-        "", "", 
-        initialFlag,      
-        data.password,    
-        data.role         
-      ];
-
-      userSheet.getRange(nextRow, 1, 1, newRow.length).setValues([newRow]);
-      try {
-        if (data.role === "student") {
-          initializeStudentPermissionsForUser(formattedUserId, "system:createAccount", true);
-        }
-      } catch {
-        const insertedRowUserId = normalizeUserId(userSheet.getRange(nextRow, 2).getValue());
-        const rollbackSucceeded = insertedRowUserId === normalizedCreatedUserId;
-        if (rollbackSucceeded) userSheet.deleteRow(nextRow);
-        return responseJSON({
-          result: "error",
-          code: rollbackSucceeded ? "PERMISSION_INITIALIZATION_ERROR" : "ACCOUNT_ROLLBACK_ERROR",
-          message: rollbackSucceeded
-            ? "アカウントを作成できませんでした。スキマ君利用権限の初期化を確認してください"
-            : "アカウント作成の復元を完了できませんでした。管理者へ確認してください"
-        });
-      }
-      return responseJSON({ result: "success", permissionsInitialized: data.role === "student" });
-    } catch (e) {
-      return responseJSON({ result: "error", message: e.toString() });
-    } finally {
-      if (accountLock.hasLock()) accountLock.releaseLock();
-    }
-  }
-
   // --- 15. 学校進捗マトリックスデータ取得 ---
   if (data.action === "getSchoolProgressMatrix") {
     try {
@@ -5580,80 +5531,6 @@ function doPost(e) {
       });
     } catch (e) {
       return responseJSON({ result: "error", message: "GASエラー: " + e.toString() });
-    }
-  }
-
-  // --- 18. アカウント削除処理 ---
-  if (data.action === "deleteAccount") {
-    try {
-      const userSheet = getLegacyAccountSheet_();
-      const lastRow = userSheet.getLastRow();
-      const targetId = String(data.userId || "").trim().replace(/^'/, ""); 
-
-      let targetRow = -1;
-      for (let i = 1; i < lastRow; i++) {
-        const sheetId = String(rows[i][1]).replace(/^'/, "").trim();
-        if (sheetId === targetId) {
-          targetRow = i + 1; 
-          break;
-        }
-      }
-
-      if (targetRow !== -1) {
-        userSheet.deleteRow(targetRow);
-        return responseJSON({ result: "success" });
-      } else {
-        return responseJSON({ result: "error", message: "該当するIDのアカウントが見つかりませんでした" });
-      }
-    } catch (e) {
-      return responseJSON({ result: "error", message: "GAS削除エラー: " + e.toString() });
-    }
-  }
-
-  // --- 19. 削除画面用のアカウント一覧取得 ---
-  if (data.action === "getAccountsForDelete") {
-    try {
-      const accounts = rows.slice(1).filter(row => {
-        const sSchool = String(row[0] || "").trim();      
-        const sGrade  = String(row[5] || "").trim();      
-        const sRole   = String(row[10] || "").trim().toLowerCase(); 
-        return (allowedSchools.includes(sSchool)) && (sRole === "student" || sRole === "teacher") && (targetGrades.includes(sGrade) || (sRole === "teacher" && targetGrades.includes("講師")));
-      }).map(row => ({
-        school: String(row[0] || "").trim(),
-        userId: String(row[1] || "").replace(/^'/, "").trim(), 
-        name: String(row[4] || "").trim(),                     
-        nameKana: String(row[2] || "").trim(),
-        grade: String(row[5] || "").trim()                     
-      })).sort(compareStudentsBySchoolGradeAndKana_);
-
-      return responseJSON({ result: "success", accounts: accounts });
-    } catch (e) {
-      return responseJSON({ result: "error", message: "GAS一覧取得エラー: " + e.toString() });
-    }
-  }
-
-  // --- 20. チェックボックスによる複数アカウント一括削除 ---
-  if (data.action === "deleteAccountsBulk") {
-    try {
-      const userSheet = getLegacyAccountSheet_();
-      const lastRow = userSheet.getLastRow();
-      const targetIds = data.userIds || []; 
-
-      if (targetIds.length === 0) {
-        return responseJSON({ result: "error", message: "削除対象のIDが指定されていません" });
-      }
-
-      let deleteCount = 0;
-      for (let i = lastRow - 1; i >= 1; i--) {
-        const sheetId = String(rows[i][1]).replace(/^'/, "").trim(); 
-        if (targetIds.includes(sheetId)) {
-          userSheet.deleteRow(i + 1); 
-          deleteCount++;
-        }
-      }
-      return responseJSON({ result: "success", deletedCount: deleteCount });
-    } catch (e) {
-      return responseJSON({ result: "error", message: "GAS一括削除エラー: " + e.toString() });
     }
   }
 
