@@ -153,6 +153,17 @@ test('メニューの使い方は未作成から公開し講師向けresponseへ
   assert.equal(result.menuGuide.publishedMarkdown, '# 使い方')
 })
 
+test('ホーム画面のお知らせは既存noticeと分離した固定Markdownとして公開できる', () => {
+  const { context } = makeEnvironment()
+  context.__homeNotice = { sessionToken: 'token', contentType: 'home-notice', title: 'ホーム画面のお知らせ', draftMarkdown: '# 連絡\n\n**重要**', importance: 'important' }
+  const published = vm.runInContext('mutateKotoreContent_(__homeNotice, true)', context)
+  assert.equal(published.content.contentId, 'kotore-home-notice')
+  context.__public = { sessionToken: 'token', contentTypes: ['notice', 'home-notice'] }
+  const result = vm.runInContext('getPublishedKotoreContents_(__public)', context)
+  assert.equal(result.homeNotice.publishedMarkdown, '# 連絡\n\n**重要**')
+  assert.deepEqual(Array.from(result.notices), [])
+})
+
 test('画像Sheet未作成のadmin一覧は空状態を返す', () => {
   const { context } = makeEnvironment()
   context.__images = { action: 'listKotoreContentImagesAdmin', sessionToken: 'token' }

@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import VersionLabel from './common/VersionLabel.jsx'
 import StudentProfileLink from './common/StudentProfileLink.jsx'
+import { MarkdownRenderer } from './common/KotoreMarkdown.jsx'
 import { buildTeacherHomeProgressDonut, formatTeacherHomeProgressDifference, formatTeacherHomeProgressUnit, TEACHER_HOME_PROGRESS_STATUSES } from '../utils/teacherHomeProgress.js'
 
 const Icon = ({ name, size = 24, strokeWidth = 2 }) => {
@@ -84,27 +86,17 @@ function ActionItems({ progressState, onOpenProgressStatus }) {
   </div>
 }
 
-function formatNoticeDate(value) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '日時未設定' : new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(date)
-}
-
-function noticeExcerpt(markdown) {
-  return String(markdown || '').replace(/[#>*_`()!-]/g, ' ').replace(/\s+/g, ' ').trim() || '詳細を確認してください。'
-}
-
-function TeacherAnnouncements({ noticeState, onOpenNotices }) {
-  const notices = Array.isArray(noticeState?.notices) ? noticeState.notices.slice(0, 3) : []
+function TeacherAnnouncements({ noticeState, GAS_URL, API_KEY, sessionToken, onSessionExpired }) {
+  const [expanded, setExpanded] = useState(false)
+  const homeNotice = noticeState?.homeNotice
+  const markdown = String(homeNotice?.publishedMarkdown || '')
+  const isLong = markdown.length > 800 || markdown.split('\n').length > 18
   return <section className="home-panel home-announcements home-teacher-section">
-    <header><div><Icon name="megaphone" size={29} /><h2>お知らせ</h2></div><button type="button" className="home-header-link" onClick={onOpenNotices}>すべてのお知らせを見る <Icon name="arrow" size={18} /></button></header>
+    <header><div><Icon name="megaphone" size={29} /><h2>お知らせ</h2></div></header>
     {noticeState?.loading ? <div className="home-teacher-empty" role="status">お知らせを読み込み中…</div>
       : noticeState?.error ? <div className="home-teacher-empty home-teacher-empty--error" role="alert">お知らせを取得できませんでした</div>
-        : notices.length === 0 ? <div className="home-teacher-empty">現在、公開中のお知らせはありません。</div>
-          : <div className="home-announcement-grid">{notices.map((notice, index) => <button type="button" className="home-announcement-card" key={notice.contentId} onClick={onOpenNotices}>
-            <div className="home-announcement-card__meta">{index === 0 && <span>NEW</span>}{notice.importance === 'important' && <b>重要</b>}<time dateTime={notice.publishedAt || ''}>{formatNoticeDate(notice.publishedAt)}</time></div>
-            <div className="home-announcement-card__title"><strong>{notice.title}</strong><Icon name="chevron" size={19} /></div>
-            <p>{noticeExcerpt(notice.publishedMarkdown)}</p>
-          </button>)}</div>}
+        : !markdown.trim() ? <div className="home-teacher-empty">現在お知らせはありません。</div>
+          : <><div className={`home-notice-markdown ${isLong && !expanded ? 'is-collapsed' : ''}`}><MarkdownRenderer markdown={markdown} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} /></div>{isLong && <div className="home-notice-toggle"><button type="button" onClick={() => setExpanded(value => !value)}>{expanded ? '閉じる' : 'もっと見る'}</button></div>}</>}
   </section>
 }
 
@@ -149,14 +141,14 @@ function ProgressSection({ progressState, onRefreshProgress, onOpenProgressStatu
   </article>
 }
 
-export default function HomeDashboard({ userName, role, progressState, noticeState, onRefreshProgress, onOpenProgressStatus, onOpenNotices }) {
+export default function HomeDashboard({ userName, role, progressState, noticeState, onRefreshProgress, onOpenProgressStatus, GAS_URL, API_KEY, sessionToken, onSessionExpired }) {
   const now = new Date()
   const dateText = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }).format(now)
   const updatedAt = progressState.updatedAt ? new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short' }).format(progressState.updatedAt) : '未取得'
   const greeting = <section className="home-greeting"><h1>おはようございます、{userName} 先生！ <span className="home-greeting__sun"><Icon name="sun" size={29} /></span></h1><div className="home-greeting__meta"><span>{dateText}</span></div></section>
   if (role === 'teacher') return <div className="home-dashboard home-dashboard--teacher">
     {greeting}
-    <TeacherAnnouncements noticeState={noticeState} onOpenNotices={onOpenNotices} />
+    <TeacherAnnouncements noticeState={noticeState} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} />
     <TeacherAttentionStudents progressState={progressState} onOpenProgressStatus={onOpenProgressStatus} />
     <ProgressSection teacher progressState={progressState} onRefreshProgress={onRefreshProgress} onOpenProgressStatus={onOpenProgressStatus} updatedAt={updatedAt} />
     <VersionLabel />

@@ -106,9 +106,9 @@ test('Markdown toolbarは選択範囲を維持して記法を挿入する', () =
   assert.match(source, />画像<\/button>/)
 })
 
-test('管理者トップは4実動カードと5つのdisabled張りぼてを分離する', () => {
+test('管理者トップはホーム専用お知らせを含む実動カードとdisabled張りぼてを分離する', () => {
   const source = read('../src/components/KotoreAdminWorkspace.jsx')
-  for (const label of ['お知らせを編集する', '個トレの仕方を編集する', 'メニューの使い方を編集する', '各種パスワード管理']) assert.match(source, new RegExp(label))
+  for (const label of ['お知らせを編集する', 'ホーム画面のお知らせを編集する', '個トレの仕方を編集する', 'メニューの使い方を編集する', '各種パスワード管理']) assert.match(source, new RegExp(label))
   for (const label of ['アカウント管理', 'スキマ君利用設定', '合宿メニュー管理', 'テスト振り返り確認', '学校成績確認']) assert.match(source, new RegExp(label))
   assert.match(source, /type="button" disabled/)
   assert.match(source, /role !== 'admin'/)

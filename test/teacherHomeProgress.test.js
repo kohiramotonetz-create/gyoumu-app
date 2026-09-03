@@ -116,13 +116,16 @@ test('teacherホームだけ今日の確認順に再構成し担当summaryを遅
   assert.doesNotMatch(home, /getOneToOneProgressDetail/);
 });
 
-test('teacherホームのお知らせは既存公開APIを1回利用し最大3件を表示する', () => {
+test('teacherホーム専用Markdownは既存noticeと分離し公開APIを1回だけ利用する', () => {
   const teacher = read('../src/TeacherView.jsx');
   const home = read('../src/components/HomeDashboard.jsx');
   assert.equal((teacher.match(/action: 'getPublishedKotoreContents'/g) || []).length, 1);
   assert.match(teacher, /role !== 'teacher'/);
-  assert.match(teacher, /contentTypes: \['notice'\]/);
-  assert.match(home, /notices\.slice\(0, 3\)/);
-  assert.match(home, /すべてのお知らせを見る/);
-  assert.match(home, /notice\.importance === 'important'/);
+  assert.match(teacher, /contentTypes: \['notice', 'home-notice'\]/);
+  assert.match(teacher, /homeNotice: contents\.homeNotice/);
+  assert.match(home, /<MarkdownRenderer markdown=\{markdown\}/);
+  assert.match(home, /現在お知らせはありません/);
+  assert.match(home, /もっと見る/);
+  assert.match(home, /閉じる/);
+  assert.doesNotMatch(home, /notices\.slice\(0, 3\)/);
 });

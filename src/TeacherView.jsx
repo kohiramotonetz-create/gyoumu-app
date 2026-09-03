@@ -64,7 +64,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   const [homeProgressData, setHomeProgressData] = useState(null);
   const [homeProgressStatus, setHomeProgressStatus] = useState('behind');
   const [homeProgressState, setHomeProgressState] = useState({ loaded: false, loading: false, refreshing: false, error: '', data: null, updatedAt: null });
-  const [homeNoticeState, setHomeNoticeState] = useState({ loading: role === 'teacher', error: '', notices: [] });
+  const [homeNoticeState, setHomeNoticeState] = useState({ loading: role === 'teacher', error: '', notices: [], homeNotice: null });
   const schools = ALL_SCHOOLS;
   const availableAssignedSchools = useMemo(() => Array.isArray(assignedSchools) && assignedSchools.length > 0
     ? assignedSchools
@@ -123,17 +123,18 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   useEffect(() => {
     if (role !== 'teacher') return undefined;
     let active = true;
-    setHomeNoticeState({ loading: true, error: '', notices: [] });
-    axios.post(GAS_URL, JSON.stringify({ action: 'getPublishedKotoreContents', apiKey: API_KEY, sessionToken, contentTypes: ['notice'] }), { headers: { 'Content-Type': 'text/plain' }, timeout: 30000 })
+    setHomeNoticeState({ loading: true, error: '', notices: [], homeNotice: null });
+    axios.post(GAS_URL, JSON.stringify({ action: 'getPublishedKotoreContents', apiKey: API_KEY, sessionToken, contentTypes: ['notice', 'home-notice'] }), { headers: { 'Content-Type': 'text/plain' }, timeout: 30000 })
       .then(response => {
         if (!active) return;
         if (response.data?.result !== 'success') {
           if (isAuthorizationResponse(response.data)) handleLogout();
           throw new Error(response.data?.message || 'お知らせを取得できませんでした');
         }
-        setHomeNoticeState({ loading: false, error: '', notices: normalizeKotoreContentResponse(response.data).notices });
+        const contents = normalizeKotoreContentResponse(response.data);
+        setHomeNoticeState({ loading: false, error: '', notices: contents.notices, homeNotice: contents.homeNotice });
       })
-      .catch(() => { if (active) setHomeNoticeState({ loading: false, error: 'お知らせを取得できませんでした', notices: [] }); });
+      .catch(() => { if (active) setHomeNoticeState({ loading: false, error: 'お知らせを取得できませんでした', notices: [], homeNotice: null }); });
     return () => { active = false; };
   }, [handleLogout, role, sessionToken]);
 
@@ -279,7 +280,10 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
               noticeState={homeNoticeState}
               onRefreshProgress={loadHomeProgress}
               onOpenProgressStatus={openHomeProgressStatus}
-              onOpenNotices={() => setActiveContent('notices')}
+              GAS_URL={GAS_URL}
+              API_KEY={API_KEY}
+              sessionToken={sessionToken}
+              onSessionExpired={handleLogout}
             />}
             {activeContent === 'home-progress-list' && <TeacherHomeProgressStudentList
               key={homeProgressStatus}

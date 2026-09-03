@@ -1,11 +1,13 @@
 export const KOTORE_CONTENT_TYPES = Object.freeze({
   NOTICE: 'notice',
+  HOME_NOTICE: 'home-notice',
   GUIDE: 'guide',
   MENU_GUIDE: 'menu-guide',
 })
 
 export const KOTORE_CONTENT_TYPE_LABELS = Object.freeze({
   notice: 'お知らせ',
+  'home-notice': 'ホーム画面のお知らせ',
   guide: '個トレの仕方',
   'menu-guide': 'メニューの使い方',
 })
@@ -40,6 +42,7 @@ export function filterModelAnswerBooks(books, filters) {
 export function normalizeKotoreContentResponse(data) {
   return {
     notices: Array.isArray(data?.notices) ? data.notices : [],
+    homeNotice: data?.homeNotice || null,
     guide: data?.guide || null,
     menuGuide: data?.menuGuide || null,
     serverTime: data?.serverTime || '',

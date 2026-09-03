@@ -5,6 +5,7 @@ import './KotoreAdmin.css'
 
 const CONTENT_CARDS = [
   { id: 'notice', title: 'お知らせを編集する', description: '個トレメニュー内のお知らせを作成・編集・公開します。', icon: '◁' },
+  { id: 'home-notice', title: 'ホーム画面のお知らせを編集する', description: 'teacherホーム最上部のお知らせを編集・公開します。', icon: '⌂' },
   { id: 'guide', title: '個トレの仕方を編集する', description: '個トレ運営ガイドを作成・編集・公開します。', icon: '▤' },
   { id: 'menu-guide', title: 'メニューの使い方を編集する', description: '個トレトップ下部の使い方案内を編集します。', icon: '◉' },
 ]

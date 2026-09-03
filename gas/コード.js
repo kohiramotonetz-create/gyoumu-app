@@ -59,9 +59,9 @@ const KOTORE_CONTENT_LEGACY_HEADERS = ["contentId", "contentType", "title", "dra
 const KOTORE_CONTENT_HEADERS = KOTORE_CONTENT_LEGACY_HEADERS.concat(["draftTitle", "draftImportance", "draftPublishStart", "draftPublishEnd"]);
 const KOTORE_CONTENT_IMAGE_HEADERS = ["imageId", "driveFileId", "originalName", "mimeType", "sizeBytes", "createdAt", "createdBy", "deletedAt", "deletedBy"];
 const PASSWORD_ENTRY_HEADERS = ["passwordEntryId", "category", "serviceName", "school", "url", "loginId", "password", "note", "creatorRule", "sortOrder", "enabled", "createdAt", "createdBy", "updatedAt", "updatedBy", "deletedAt"];
-const KOTORE_CONTENT_TYPES = ["notice", "guide", "menu-guide"];
+const KOTORE_CONTENT_TYPES = ["notice", "home-notice", "guide", "menu-guide"];
 const KOTORE_CONTENT_IMPORTANCE = ["normal", "important"];
-const KOTORE_FIXED_CONTENT_IDS = { guide: "kotore-guide", "menu-guide": "kotore-menu-guide" };
+const KOTORE_FIXED_CONTENT_IDS = { "home-notice": "kotore-home-notice", guide: "kotore-guide", "menu-guide": "kotore-menu-guide" };
 const KOTORE_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 const KOTORE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const PASSWORD_MIGRATION_STATUS_PROPERTY = "PASSWORD_MIGRATION_STATUS";
@@ -3930,6 +3930,7 @@ function getPublishedKotoreContents_(data) {
   return {
     result: "success",
     notices: published.filter(content => content.contentType === "notice").sort((a, b) => String(b.publishedAt).localeCompare(String(a.publishedAt))).map(publicContent),
+    homeNotice: published.find(content => content.contentType === "home-notice") ? publicContent(published.find(content => content.contentType === "home-notice")) : null,
     guide: published.find(content => content.contentType === "guide") ? publicContent(published.find(content => content.contentType === "guide")) : null,
     menuGuide: published.find(content => content.contentType === "menu-guide") ? publicContent(published.find(content => content.contentType === "menu-guide")) : null,
     serverTime: now.toISOString(), sessionExpiresAt: session.sessionExpiresAt,
@@ -4439,7 +4440,8 @@ function setupKotoreContentSheets() {
   Object.keys(KOTORE_FIXED_CONTENT_IDS).forEach(type => {
     const id = KOTORE_FIXED_CONTENT_IDS[type];
     if (!existingIds.has(id)) {
-      const title = type === "guide" ? "個トレの仕方" : "個トレメニューの使い方";
+      const fixedTitles = { "home-notice": "ホーム画面のお知らせ", guide: "個トレの仕方", "menu-guide": "個トレメニューの使い方" };
+      const title = fixedTitles[type];
       writeSheetRows_(contentSheet, contentSheet.getLastRow() + 1, [[id, type, "", "", "", "normal", "draft", "", "", now, "system:setup", now, "system:setup", "", "", "", title, "normal", "", ""]], KOTORE_CONTENT_TEXT_COLUMNS);
       existingIds.add(id);
     }
