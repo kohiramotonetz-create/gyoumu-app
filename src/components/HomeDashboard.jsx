@@ -3,6 +3,7 @@ import VersionLabel from './common/VersionLabel.jsx'
 import StudentProfileLink from './common/StudentProfileLink.jsx'
 import { MarkdownRenderer } from './common/KotoreMarkdown.jsx'
 import { buildTeacherHomeProgressDonut, formatTeacherHomeProgressDifference, formatTeacherHomeProgressUnit, TEACHER_HOME_PROGRESS_STATUSES } from '../utils/teacherHomeProgress.js'
+import { isStaffRole } from '../utils/roles.js'
 
 const Icon = ({ name, size = 24, strokeWidth = 2 }) => {
   const paths = {
@@ -86,7 +87,7 @@ function ActionItems({ progressState, onOpenProgressStatus }) {
   </div>
 }
 
-function TeacherAnnouncements({ noticeState, GAS_URL, API_KEY, sessionToken, onSessionExpired }) {
+function HomeAnnouncements({ noticeState, GAS_URL, API_KEY, sessionToken, onSessionExpired }) {
   const [expanded, setExpanded] = useState(false)
   const homeNotice = noticeState?.homeNotice
   const markdown = String(homeNotice?.publishedMarkdown || '')
@@ -146,15 +147,17 @@ export default function HomeDashboard({ userName, role, progressState, noticeSta
   const dateText = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }).format(now)
   const updatedAt = progressState.updatedAt ? new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short' }).format(progressState.updatedAt) : '未取得'
   const greeting = <section className="home-greeting"><h1>おはようございます、{userName} 先生！ <span className="home-greeting__sun"><Icon name="sun" size={29} /></span></h1><div className="home-greeting__meta"><span>{dateText}</span></div></section>
+  const announcements = isStaffRole(role) ? <HomeAnnouncements noticeState={noticeState} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} /> : null
   if (role === 'teacher') return <div className="home-dashboard home-dashboard--teacher">
     {greeting}
-    <TeacherAnnouncements noticeState={noticeState} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} onSessionExpired={onSessionExpired} />
+    {announcements}
     <TeacherAttentionStudents progressState={progressState} onOpenProgressStatus={onOpenProgressStatus} />
     <ProgressSection teacher progressState={progressState} onRefreshProgress={onRefreshProgress} onOpenProgressStatus={onOpenProgressStatus} updatedAt={updatedAt} />
     <VersionLabel />
   </div>
   return <div className="home-dashboard">
     {greeting}
+    {announcements}
 
     <section className="home-summary-grid" aria-label="サマリー">
       {Object.keys(variants).map(variant => <SummaryCard key={variant} variant={variant} />)}

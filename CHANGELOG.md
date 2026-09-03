@@ -22,13 +22,13 @@ gyoumu-appにおける個トレFrontend、GAS、スプレッドシート／マ�
   - アカウント種別・権限整理とgeneral role追加（Issue番号未割当）
   - teacher向け講師ホームの確認・対応優先UI（Issue番号未割当）
   - legacyアカウント管理経路の廃止（Issue番号未割当）
-  - teacherホーム専用お知らせ（Issue番号未割当）
+  - 全講師ホーム共通のお知らせ（Issue番号未割当）
 - 操作応答: 丸付け・質問待ちは対応開始API成功後に対象行だけを即時更新し、処理中表示、二重操作防止、5秒pollingと他ユーザー更新の同期、古いpolling responseによる巻き戻り防止を両立した。1対1ネッツ進捗は選択単元を制御stateで保持し、教材の正式単元名を範囲選択へ表示する。
 - Detail UX／性能: 学校進捗・ネッツ進捗・履歴はdialogを直ちに開いて対象生徒だけをlazy loadする。Detail request内で認証contextを再利用し、認証4マスターのvaluesをrequest-scoped snapshotとして共有して、重複した`getUserAuthContexts_()`、`getLastRow()`、`getLastColumn()`、`getValues()`を削減した。既存認証・権限・API・Spreadsheet構造は維持する。
 - 講師ホーム: 進捗summaryをログイン時に1回取得して`TeacherView`のReactメモリstateへ保持し、Home復帰時の自動再取得を廃止した。「データ更新」時だけ旧データを維持したまま再取得し、成功時刻を表示する。logout／session変更時はcacheを破棄し、localStorage等は使用しない。
 - アカウント・権限: 正式roleへ`general`を追加し、staff共通機能、特定staff機能、admin専用機能を明示的に分離した。head-teacher／generalは生徒情報・講師情報・新規アカウントを利用できるが、管理対象はstudent／teacherだけに限定し、上位staffの一覧・作成・編集・role変更・削除をGASでも拒否する。非admin UIには内部roleを表示せず、実セッション失効と権限不足を別のAPIエラーとして扱う。模範解答はgeneral／adminだけを許可する。
 - legacy整理: 現行UI・Production・関連clientから未使用の`AccountGenerator`と、APIキーだけで旧シートを直接操作していた`createAccount`／`getAccountsForDelete`／`deleteAccount`／`deleteAccountsBulk`を廃止した。現行の管理セッション・role認可・4マスター整合性検証・論理削除へ一本化し、migration／diagnostics／rollback用の互換helperは維持する。
-- teacherホーム: 中央を「ホーム画面専用お知らせ→対応が必要な生徒（遅れ／要注意を各5件）→進捗状況」の順へ変更し、teacherだけ未設定4サマリーカードと抽象的な対応項目を非表示にした。ホーム専用お知らせは既存の個トレメニュー用お知らせと別の固定コンテンツとして、既存Markdown・Drive画像・下書き／公開処理を再利用する。`指導データ貼り付け`の講師名・生徒名を空白正規化して今月の担当生徒へsummaryを限定し、既存summaryキャッシュ、手動更新、状態別一覧、生徒プロフィール導線を再利用する。安全なシート作成helperは追加したが未実行で、他staff roleのassignedSchools集計は維持する。
+- 講師ホーム: teacherの中央を「ホーム画面専用お知らせ→対応が必要な生徒（遅れ／要注意を各5件）→進捗状況」の順へ変更し、teacherだけ未設定4サマリーカードと抽象的な対応項目を非表示にした。ホーム専用お知らせはteacher／head-teacher／general／adminの全講師ホーム最上部へ共通表示し、既存の個トレメニュー用お知らせとは別の固定コンテンツとして、既存Markdown・Drive画像・下書き／公開処理を再利用する。`指導データ貼り付け`の講師名・生徒名を空白正規化して今月の担当生徒へsummaryを限定し、既存summaryキャッシュ、手動更新、状態別一覧、生徒プロフィール導線を再利用する。安全なシート作成helperは追加したが未実行で、他staff roleのassignedSchools集計と既存ホーム構成は維持する。
 - Version表示: 共通`VersionLabel`の正本は`Version 4.3.2`を維持。今回のアカウント権限整理にはGAS認可変更を含むが、Spreadsheet構造・本番データ・student-appは変更しない。
 
 ### v4.3.1 - 2026-08-31

@@ -64,7 +64,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   const [homeProgressData, setHomeProgressData] = useState(null);
   const [homeProgressStatus, setHomeProgressStatus] = useState('behind');
   const [homeProgressState, setHomeProgressState] = useState({ loaded: false, loading: false, refreshing: false, error: '', data: null, updatedAt: null });
-  const [homeNoticeState, setHomeNoticeState] = useState({ loading: role === 'teacher', error: '', notices: [], homeNotice: null });
+  const [homeNoticeState, setHomeNoticeState] = useState({ loading: isStaffRole(role), error: '', notices: [], homeNotice: null });
   const schools = ALL_SCHOOLS;
   const availableAssignedSchools = useMemo(() => Array.isArray(assignedSchools) && assignedSchools.length > 0
     ? assignedSchools
@@ -121,7 +121,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   }, [availableAssignedSchools, homeProgressState.error, homeProgressState.loaded, homeProgressState.loading, loadHomeProgress, role]);
 
   useEffect(() => {
-    if (role !== 'teacher') return undefined;
+    if (!isStaffRole(role)) return undefined;
     let active = true;
     setHomeNoticeState({ loading: true, error: '', notices: [], homeNotice: null });
     axios.post(GAS_URL, JSON.stringify({ action: 'getPublishedKotoreContents', apiKey: API_KEY, sessionToken, contentTypes: ['notice', 'home-notice'] }), { headers: { 'Content-Type': 'text/plain' }, timeout: 30000 })

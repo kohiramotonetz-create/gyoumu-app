@@ -103,7 +103,7 @@ test('teacherホームだけ今日の確認順に再構成し担当summaryを遅
   const teacher = read('../src/TeacherView.jsx');
   const home = read('../src/components/HomeDashboard.jsx');
   assert.match(home, /if \(role === 'teacher'\)/);
-  assert.match(home, /TeacherAnnouncements[\s\S]*TeacherAttentionStudents[\s\S]*ProgressSection/);
+  assert.match(home, /\{announcements\}[\s\S]*TeacherAttentionStudents[\s\S]*ProgressSection/);
   assert.match(home, /filter\(item => item\.status === status\)/);
   assert.match(home, /previewItems = items\.slice\(0, 5\)/);
   assert.match(home, /status="behind"/);
@@ -116,13 +116,17 @@ test('teacherホームだけ今日の確認順に再構成し担当summaryを遅
   assert.doesNotMatch(home, /getOneToOneProgressDetail/);
 });
 
-test('teacherホーム専用Markdownは既存noticeと分離し公開APIを1回だけ利用する', () => {
+test('全staffホームの共通Markdownは既存noticeと分離し公開APIを1回だけ利用する', () => {
   const teacher = read('../src/TeacherView.jsx');
   const home = read('../src/components/HomeDashboard.jsx');
+  const roles = read('../src/utils/roles.js');
   assert.equal((teacher.match(/action: 'getPublishedKotoreContents'/g) || []).length, 1);
-  assert.match(teacher, /role !== 'teacher'/);
+  assert.match(teacher, /if \(!isStaffRole\(role\)\) return undefined/);
   assert.match(teacher, /contentTypes: \['notice', 'home-notice'\]/);
   assert.match(teacher, /homeNotice: contents\.homeNotice/);
+  assert.match(home, /const announcements = isStaffRole\(role\)/);
+  assert.equal((home.match(/\{announcements\}/g) || []).length, 2);
+  for (const role of ['teacher', 'head-teacher', 'general', 'admin']) assert.match(roles, new RegExp(`['"]${role}['"]`));
   assert.match(home, /<MarkdownRenderer markdown=\{markdown\}/);
   assert.match(home, /現在お知らせはありません/);
   assert.match(home, /もっと見る/);
