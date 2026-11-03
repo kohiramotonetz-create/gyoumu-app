@@ -9,6 +9,8 @@ import AccountManagement from './components/AccountManagement.jsx'
 import SchoolProgressTracker from './components/SchoolProgressManager.jsx'
 import AppUsageTracker from './components/AppUsageTracker.jsx'
 import SukimakunPermissionManager from './components/SukimakunPermissionManager.jsx'
+import SukimakunManagement from './components/SukimakunManagement.jsx'
+import { isSukimakunHash } from './utils/sukimakunNavigation.js'
 import CampTrainingManager from './components/CampTrainingManager.jsx'
 import OneToOneProgressManager from './components/OneToOneProgressManager.jsx'
 import AcademicResultsManager from './components/AcademicResultsManager.jsx'
@@ -37,6 +39,7 @@ const WIDE_CONTENT_IDS = new Set([
   'camp-training',
   'test-review-check',
   'sukimakun-permissions',
+  'sukimakun-management',
   'notifications',
   'kotore-admin',
   'home-progress-list',
@@ -45,7 +48,7 @@ const MENU_ICON_NAMES = {
   home: 'home', notices: 'megaphone', notifications: 'target', 'app-usage': 'clipboard',
   'school-progress': 'school', 'one-to-one-progress': 'chart', 'create-account': 'user', passwords: 'key',
   manual: 'book', 'takamatsu-staff': 'building', 'test-review-check': 'clipboard', 'kotore-admin': 'settings',
-  'sukimakun-permissions': 'settings', 'academic-results': 'chart', 'camp-training': 'alert'
+  'sukimakun-management': 'settings', 'sukimakun-permissions': 'settings', 'academic-results': 'chart', 'camp-training': 'alert'
 };
 const MENU_ICON_PATHS = {
   home:<><path d="m3 11 9-8 9 8"/><path d="M5 10v11h14V10M9 21v-7h6v7"/></>, target:<><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M15 9l6-6M17 3h4v4"/></>, school:<><path d="M3 10 12 5l9 5-9 5z"/><path d="M7 12v5c3 2 7 2 10 0v-5M21 10v6"/></>, user:<><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>, key:<><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16 4l3 3M14 6l3 3"/></>, book:<><path d="M4 5a3 3 0 0 1 3-3h5v18H7a3 3 0 0 0-3 3zM20 5a3 3 0 0 0-3-3h-5v18h5a3 3 0 0 1 3 3z"/></>, building:<><path d="M4 21V4h12v17M16 9h4v12M8 8h4M8 12h4M8 16h4M2 21h20"/></>, settings:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3V3h4v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></>
@@ -58,7 +61,7 @@ function NavIcon({ id }) {
 // 【修正箇所】引数に「school」を正しく追加して受け取れるようにする
 export default function TeacherView({ userName, role, unit, school, assignedSchools, sessionToken, handleLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 1200);
-  const [activeContent, setActiveContent] = useState('home');
+  const [activeContent, setActiveContent] = useState(() => isSukimakunHash(window.location.hash) ? 'sukimakun-management' : 'home');
   const [profileRoute, setProfileRoute] = useState(() => parseStudentProfileHash(window.location.hash));
   const [notificationRefresh, setNotificationRefresh] = useState(null);
   const [homeProgressData, setHomeProgressData] = useState(null);
@@ -142,7 +145,9 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     const syncHash = () => {
       const route = parseStudentProfileHash(window.location.hash);
       setProfileRoute(route);
-      if (!route && window.history.state?.studentProfileSource) setActiveContent(window.history.state.studentProfileSource);
+      if (isSukimakunHash(window.location.hash)) setActiveContent('sukimakun-management');
+      if (!route && !isSukimakunHash(window.location.hash) && window.history.state?.studentProfileSource) setActiveContent(window.history.state.studentProfileSource);
+      else if (!route && !isSukimakunHash(window.location.hash)) setActiveContent(current => current === 'sukimakun-management' ? 'home' : current);
     };
     window.addEventListener('hashchange', syncHash);
     return () => window.removeEventListener('hashchange', syncHash);
@@ -196,7 +201,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     { id: 'manual', label: 'スタッフマニュアル', icon: '📖', isLink: true, url: 'https://morning-hoverfly-7d7.notion.site/22187fb597ea8051a617cc4850365bd9?pvs=74' }, 
     { id: 'takamatsu-staff', label: '高松スタッフ(SharePoint)', icon: '🏢', isLink: true, url: 'https://edunetz.sharepoint.com/sites/takamatustaff/SitePages/CollabHome.aspx?ga=1' },
     { id: 'test-review-check', label: 'テスト振り返り確認', icon: '📝' },
-    { id: 'sukimakun-permissions', label: 'スキマ君利用設定', icon: '⚙️', adminOnly: true },
+    { id: 'sukimakun-management', label: 'スキマ君管理', icon: '⚙️', adminOnly: true },
     { id: 'academic-results', label: '学校成績管理', icon: '📊', adminOnly: true },
   ];
 
@@ -204,7 +209,7 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
     if (role === 'admin') {
       return [...baseMenuItems, CAMP_MENU_ITEM, ...adminMenuItems];
     } else if (role === 'head-teacher' || role === 'general') {
-      const staffExtensions = adminMenuItems.filter(item => ['create-account', 'test-review-check', 'sukimakun-permissions', 'academic-results', 'manual', 'takamatsu-staff'].includes(item.id));
+      const staffExtensions = adminMenuItems.filter(item => ['create-account', 'test-review-check', 'sukimakun-management', 'academic-results', 'manual', 'takamatsu-staff'].includes(item.id));
       return [...baseMenuItems, CAMP_MENU_ITEM, ...staffExtensions];
     }
     return baseMenuItems;
@@ -213,12 +218,12 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
   const navSections = [
     { label:'日常業務', ids:['notifications','school-progress','app-usage','one-to-one-progress'] },
     { label:'季節業務', ids:['camp-training','test-review-check','academic-results'] },
-    { label:'管理業務', ids:['create-account','sukimakun-permissions','passwords','kotore-admin'] },
+    { label:'管理業務', ids:['create-account','sukimakun-management','passwords','kotore-admin'] },
     { label:'資料・情報', ids:['notices','manual','takamatsu-staff'] },
   ];
   const chooseContent = (item) => {
     if (item.isLink) window.open(item.url, '_blank');
-    else { setActiveContent(item.id); if (profileRoute) window.location.hash = ''; }
+    else { setActiveContent(item.id); if (item.id === 'sukimakun-management') window.location.hash = '/sukimakun'; else if (profileRoute || isSukimakunHash(window.location.hash)) window.location.hash = ''; }
     if (window.innerWidth < 1200) setIsSidebarOpen(false);
   };
   const openHomeProgressStatus = (status, data) => {
@@ -332,6 +337,8 @@ export default function TeacherView({ userName, role, unit, school, assignedScho
                 styles={styles}
               />
             )}
+
+            {activeContent === 'sukimakun-management' && <SukimakunManagement key={sessionToken} role={role} GAS_URL={GAS_URL} API_KEY={API_KEY} sessionToken={sessionToken} assignedSchools={availableAssignedSchools} styles={styles} onSessionExpired={handleLogout} />}
 
             {activeContent === 'sukimakun-permissions' && isPrivilegedStaffRole(role) && (
               <SukimakunPermissionManager

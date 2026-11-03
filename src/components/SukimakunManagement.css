@@ -1,0 +1,21 @@
+.sukimakun-management :is(h1, h2),
+.sukimakun-registration :is(h1, h2) { color: var(--text-primary, #111827); }
+.sukimakun-management .kotore-admin-card-grid { margin-top: 24px; }
+.sukimakun-management .kotore-admin-card { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px 10px; padding: 18px; }
+.sukimakun-management .kotore-admin-card > span { grid-row: 1 / 4; width: 44px; height: 44px; }
+.sukimakun-management .kotore-admin-card > strong { grid-column: 2 / -1; font-size: 16px; }
+.sukimakun-management .kotore-admin-card > p { grid-column: 2 / -1; }
+.sukimakun-management .kotore-admin-card > small { grid-column: 2; grid-row: 3; justify-self: start; }
+.sukimakun-management .kotore-admin-card > b { grid-row: 3; }
+.sukimakun-management .app-usage-student-card h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.sukimakun-filters { grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(0, 2fr) auto; }
+.sukimakun-registration h1 { font-size: 27px; }
+.sukimakun-registration__panel { padding: 24px; border: 1px solid #dbe3e9; border-radius: 9px; background: var(--surface, #fff); }
+.sukimakun-registration__panel h2 { margin-top: 0; overflow-wrap: anywhere; }
+.sukimakun-registration__panel p { color: var(--text-secondary, #526174); line-height: 1.7; }
+@media(max-width: 800px) {
+  .sukimakun-filters { grid-template-columns: minmax(0, 1fr); }
+  .sukimakun-filters__space { display: none; }
+}
+
+.sukimakun-preparation { margin: 16px 0; padding: 12px 16px; border-left: 3px solid var(--primary, #087a45); border-radius: 4px; background: var(--primary-light, #eaf5ef); color: var(--text-secondary, #40506a); line-height: 1.7; overflow-wrap: anywhere; }

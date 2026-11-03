@@ -25,7 +25,7 @@ test('サイドバーは個トレ進捗と模範解答の独立入口を除き�
   const source = read('../src/TeacherView.jsx')
   assert.doesNotMatch(source, /label: '個トレ進捗チェック'/)
   assert.doesNotMatch(source, /label: '個トレ２（模範解答）'/)
-  for (const label of ['合宿メニュー', 'テスト振り返り確認', '学校成績管理', '学校進捗チェック', 'アプリ利用チェック', '1対1進捗チェック', 'アカウント管理', 'スキマ君利用設定', '各種パスワード', 'お知らせ', 'スタッフマニュアル', '高松スタッフ(SharePoint)']) assert.equal(source.includes(label), true, `${label}を維持する`)
+  for (const label of ['合宿メニュー', 'テスト振り返り確認', '学校成績管理', '学校進捗チェック', 'アプリ利用チェック', '1対1進捗チェック', 'アカウント管理', 'スキマ君管理', '各種パスワード', 'お知らせ', 'スタッフマニュアル', '高松スタッフ(SharePoint)']) assert.equal(source.includes(label), true, `${label}を維持する`)
   assert.match(source, /activeContent === 'kotore-admin' && role === 'admin'/)
 })
 
