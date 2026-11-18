@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import VersionLabel from './components/common/VersionLabel.jsx';
 
+const LOCAL_PREVIEW = import.meta.env.DEV && import.meta.env.VITE_SUKIMAKUN_MISSION_MOCK === 'true';
+const PREVIEW_USERS = LOCAL_PREVIEW ? [
+  ['990001', 'admin'],
+  ['990002', 'general'],
+  ['990003', 'head-teacher'],
+  ['990004', 'teacher'],
+] : [];
+
 export default function Login({ userId, setUserId, password, setPassword, handleLogin }) {
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -52,6 +60,18 @@ export default function Login({ userId, setUserId, password, setPassword, handle
         <h1 style={styles.title}>個別ミッショントレーニング</h1>
         
         <div style={styles.inputGroup}>
+          {LOCAL_PREVIEW && (
+            <label style={{ display: 'grid', gap: 6, color: '#222', textAlign: 'left' }}>
+              ローカル検証用の架空ユーザー
+              <select value={PREVIEW_USERS.some(([id]) => id === userId) ? userId : ''} onChange={event => {
+                setUserId(event.target.value);
+                setPassword(event.target.value ? 'mock-only' : '');
+              }}>
+                <option value="">権限を選択してください</option>
+                {PREVIEW_USERS.map(([id, role]) => <option key={id} value={id}>{role}</option>)}
+              </select>
+            </label>
+          )}
           <input 
             type="text" 
             placeholder="生徒番号" 

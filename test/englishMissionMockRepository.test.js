@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createEnglishMissionMockRepository } from '../src/data/englishMissionMockRepository.js';
+import { createEnglishMissionRepository } from '../src/data/englishMissionRepository.js';
+import { buildEnglishMissionWeeks, catalog, newEnglishMissionWeek } from '../src/utils/englishMissionPlanning.js';
+const target={scopeSchools:['栗林'],attendingSchoolName:'合成中学校',targetGrade:'中３',subject:'english'};
+const unit=catalog.units[0];
+const weeks=buildEnglishMissionWeeks('2026-11-05',[{...newEnglishMissionWeek(),materialGrade:unit.grade,startKey:unit.key,endKey:unit.key}]);
+for(const role of ['admin','general','head-teacher'])test(`repository verified save/get/edit ${role}`,async()=>{const repo=createEnglishMissionMockRepository({getActor:()=>({id:'099001',role,assignedSchools:['栗林']})});const request={target,weeks,operationId:'register',mode:'create'};const p=await repo.prepare(request);const saved=await repo.saveBatch({...request,confirmationToken:p.confirmationToken,expectedRevision:p.revision});assert.equal(saved.storage,'mock-server');const list=await repo.list(target);assert.equal(list.records.length,1);const edit={target,weeks:[{...list.records[0],expectedVersion:1}],operationId:'edit',mode:'update'};const ep=await repo.prepare(edit);const updated=await repo.updateMission({...edit,confirmationToken:ep.confirmationToken,expectedRevision:ep.revision});assert.equal(updated.records[0].version,2);assert.equal((await repo.getOperationStatus({target,operationId:'edit'})).state,'COMMITTED');});
+for(const role of ['teacher','student'])test(`repository refuses ${role}`,async()=>{const repo=createEnglishMissionMockRepository({getActor:()=>({id:'099002',role,assignedSchools:['栗林']})});await assert.rejects(()=>repo.list(target),{code:'AUTHORIZATION_ERROR'});});
+test('repository preserves structured conflict details',async()=>{const repo=createEnglishMissionRepository({invoke:async()=>({result:'error',code:'PERIOD_CONFLICT',message:'conflict',conflicts:[{startDate:'2026-11-05'}]})});await assert.rejects(()=>repo.saveBatch({}),e=>e.code==='PERIOD_CONFLICT'&&e.details.conflicts.length===1);});
+test('repository does not claim success after transport loss',async()=>{const repo=createEnglishMissionRepository({invoke:async()=>{throw Error('offline');}});await assert.rejects(()=>repo.saveBatch({}),{code:'TRANSPORT_UNKNOWN'});});
+for(const result of [null,{}, {result:'success'}, {result:'success',storage:'production-fake'}])test(`repository malformed storage response ${JSON.stringify(result)}`,async()=>{const repo=createEnglishMissionRepository({invoke:async()=>result});await assert.rejects(()=>repo.list(target),{code:'INVALID_RESPONSE'});});

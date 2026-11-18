@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import SchoolSelect from './common/SchoolSelect.jsx';
 import GradeSelect from './common/GradeSelect.jsx';
@@ -11,11 +11,18 @@ import './AppUsageTracker.css';
 import './KotoreAdmin.css';
 import './SukimakunManagement.css';
 
+import { createEnglishMissionHttpRepository } from '../data/englishMissionRepository.js';
+
+const LOCAL_MISSION_MOCK = import.meta.env.DEV && import.meta.env.VITE_SUKIMAKUN_MISSION_MOCK === 'true';
+// Enable only after the Stage2 GAS deployment has been approved and verified.
+const ENABLE_GAS_MISSIONS = false;
+const SHOW_MISSION_EDITOR = LOCAL_MISSION_MOCK || ENABLE_GAS_MISSIONS;
+const EnglishMissionRegistration = SHOW_MISSION_EDITOR ? lazy(() => import('./EnglishMissionRegistration.jsx')) : null;
 const PREPARATION_NOTICE = '現在は学校・学年別の対象確認のみ利用できます。ミッションの登録・保存・配信機能は準備中です。';
 
 const navigate = path => { window.location.hash = path; };
 
-function MissionRegistrationFrame({ route, GAS_URL, API_KEY, sessionToken, onSessionExpired }) {
+function MissionRegistrationFrame({ route, GAS_URL, API_KEY, sessionToken, onSessionExpired, missionRepository }) {
   const [state, setState] = useState({ loading: true, error: '', group: null, requiresReauthentication: false });
   useEffect(() => {
     const controller = new AbortController();
@@ -25,21 +32,32 @@ function MissionRegistrationFrame({ route, GAS_URL, API_KEY, sessionToken, onSes
         readSukimakunMissionResponse(data);
         const group = data.groups?.find(item => item.attendingSchoolName === route.attendingSchoolName && item.grade.normalize('NFKC') === route.grade.normalize('NFKC'));
         if (!group) throw new Error('選択した校舎内に対象の学校・学年がありません。');
-        setState({ loading: false, error: '', group, requiresReauthentication: false });
+        if (group.schools.some(school => !data.schools.includes(school))) throw new Error('対象校舎の応答を確認してください。');
+        setState({ loading: false, error: '', group, scopeSchools: data.schools, requiresReauthentication: false });
       }).catch(error => { if (!controller.signal.aborted) setState({ loading: false, error: error.message || '対象を確認できませんでした。', group: null, requiresReauthentication: Boolean(error.requiresReauthentication) }); });
     return () => controller.abort();
   }, [API_KEY, GAS_URL, route.attendingSchoolName, route.grade, route.school, sessionToken]);
   return <section className="sukimakun-registration">
     <button type="button" className="kotore-back-button" onClick={() => navigate('/sukimakun/missions')}>← ミッション管理へ戻る</button>
     <h1>ミッション登録・確認</h1>
-    <p className="sukimakun-preparation">{PREPARATION_NOTICE}</p>
+    {!SHOW_MISSION_EDITOR && <p className="sukimakun-preparation">{PREPARATION_NOTICE}</p>}
     {state.loading && <p role="status">対象の学校・学年を確認しています。</p>}
     {state.error && <div className="app-usage-error" role="alert">{state.error}{state.requiresReauthentication && <button type="button" onClick={onSessionExpired}>再ログイン</button>}</div>}
-    {state.group && <div className="sukimakun-registration__panel"><h2>{state.group.attendingSchoolName}{'　'}{formatSukimakunMissionGrade(state.group.grade)}</h2><p>対象校舎：{state.group.schools.join('、')}</p><p>対象生徒：{state.group.studentCount}名</p><p>最終登録日：未登録</p></div>}
+    {state.group && <div className="sukimakun-registration__panel"><h2>{state.group.attendingSchoolName}{'　'}{formatSukimakunMissionGrade(state.group.grade)}</h2><p>対象校舎：{state.group.schools.join('、')}</p><p>対象生徒：{state.group.studentCount}名</p>{!SHOW_MISSION_EDITOR && <p>最終登録日：未登録</p>}</div>}
+    {SHOW_MISSION_EDITOR && state.group && <Suspense fallback={<p role="status">英語ミッション設定を読み込んでいます。</p>}><EnglishMissionRegistration target={{ scopeSchools: state.scopeSchools, attendingSchoolName: state.group.attendingSchoolName, targetGrade: formatSukimakunMissionGrade(state.group.grade), subject: 'english' }} repository={missionRepository} localPreview={LOCAL_MISSION_MOCK} /></Suspense>}
   </section>;
 }
 
 export default function SukimakunManagement({ role, GAS_URL, API_KEY, sessionToken, assignedSchools = [], styles, onSessionExpired }) {
+  const missionRepository = useMemo(() => {
+    if (!SHOW_MISSION_EDITOR) return null;
+    return createEnglishMissionHttpRepository({
+      url: LOCAL_MISSION_MOCK ? '/mock-stage2-gas' : GAS_URL,
+      apiKey: API_KEY,
+      sessionToken,
+      expectedStorage: LOCAL_MISSION_MOCK ? 'mock-server' : 'gas',
+    });
+  }, [GAS_URL, API_KEY, sessionToken]);
   const [route, setRoute] = useState(() => parseSukimakunHash(window.location.hash));
   const [school, setSchool] = useState('');
   const [grades, setGrades] = useState([]);
@@ -73,19 +91,19 @@ export default function SukimakunManagement({ role, GAS_URL, API_KEY, sessionTok
   const resetResults = () => { setResult(null); setError(''); };
   if (route.view === 'permissions') return <div><button type="button" className="kotore-back-button" onClick={() => navigate('/sukimakun')}>← スキマ君管理へ戻る</button><SukimakunPermissionManager {...{ GAS_URL, API_KEY, sessionToken, assignedSchools, styles, onSessionExpired }} /></div>;
   if (route.view === 'register' && !canAccessSukimakunMissionSchool(role, route.school, assignedSchools)) return <div><p role="alert">指定された校舎のミッション管理を利用する権限がありません。</p><button type="button" onClick={() => navigate('/sukimakun/missions')}>ミッション管理へ戻る</button></div>;
-  if (route.view === 'register') return <MissionRegistrationFrame key={window.location.hash} {...{ route, GAS_URL, API_KEY, sessionToken, onSessionExpired }} />;
+  if (route.view === 'register') return <MissionRegistrationFrame key={window.location.hash} {...{ route, GAS_URL, API_KEY, sessionToken, onSessionExpired, missionRepository }} />;
   if (route.view === 'invalid') return <div><p role="alert">ページの指定が正しくありません。</p><button type="button" onClick={() => navigate('/sukimakun')}>スキマ君管理へ戻る</button></div>;
   if (route.view === 'home') return <section className="kotore-admin-home sukimakun-management" aria-labelledby="sukimakun-title">
     <header><h1 id="sukimakun-title">スキマ君管理</h1><p>スキマ君の利用設定と、学校・学年別の対象を確認できます。</p></header>
     <div className="kotore-admin-card-grid">
       <button type="button" className="kotore-admin-card" onClick={() => navigate('/sukimakun/permissions')}><span aria-hidden="true">⚙</span><strong>スキマ君利用設定</strong><small>設定可能</small><p>生徒ごとに利用できるコンテンツを設定します。</p><b aria-hidden="true">›</b></button>
-      <button type="button" className="kotore-admin-card" onClick={() => navigate('/sukimakun/missions')}><span aria-hidden="true">◎</span><strong>スキマ君ミッション管理</strong><small>確認可能</small><p>{PREPARATION_NOTICE}</p><b aria-hidden="true">›</b></button>
+      <button type="button" className="kotore-admin-card" onClick={() => navigate('/sukimakun/missions')}><span aria-hidden="true">◎</span><strong>スキマ君ミッション管理</strong><small>{ENABLE_GAS_MISSIONS ? '登録可能' : LOCAL_MISSION_MOCK ? 'ローカル検証' : '確認可能'}</small><p>{ENABLE_GAS_MISSIONS ? '学校・学年別の英語ミッションを登録できます。' : LOCAL_MISSION_MOCK ? '学校・学年別の英語ミッションをこのPCに登録できます。' : PREPARATION_NOTICE}</p><b aria-hidden="true">›</b></button>
     </div>
   </section>;
   return <section className="app-usage sukimakun-management" aria-busy={loading}>
     <button type="button" className="kotore-back-button" onClick={() => navigate('/sukimakun')}>← スキマ君管理へ戻る</button>
     <header className="app-usage-header"><div className="app-usage-header__title"><div><h1>スキマ君ミッション管理</h1><p>{role === 'admin' ? '全校舎' : '担当校舎'}の生徒を学校・学年ごとに表示します。</p></div></div></header>
-    <p className="sukimakun-preparation">{PREPARATION_NOTICE}</p>
+    <p className="sukimakun-preparation">{ENABLE_GAS_MISSIONS ? '英語ミッションを学校・学年ごとに設定できます。' : LOCAL_MISSION_MOCK ? '学校・学年別の英語ミッションをこのPCに保存できます。' : PREPARATION_NOTICE}</p>
     <section className="app-usage-filters sukimakun-filters" aria-label="表示条件">
       <label>校舎<SchoolSelect assignedOnly={role !== 'admin'} showAssignedOptions={role !== 'admin'} showAllSchoolsOption={role === 'admin'} assignedSchools={assignedSchools} value={school} disabled={loading} onChange={event => { setSchool(event.target.value); resetResults(); }} /></label>
       <label>学年<GradeSelect value={grades} disabled={loading} onChange={value => { setGrades(value); resetResults(); }} /></label>
