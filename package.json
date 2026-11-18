@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:sukimakun": "vite --config vite.sukimakun-preview.config.js",
+    "preview:sukimakun:reset": "node scripts/resetSukimakunPreview.mjs"
   },
   "dependencies": {
     "axios": "^1.13.6",

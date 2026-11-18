@@ -20,7 +20,7 @@ function createSukimakunPreviewMock(allSchools) {
       if (payload.password !== 'mock-only' || !roles[payload.userId]) return { result: 'fail', message: '合成アカウントでログインしてください' };
       const role = roles[payload.userId], assignedSchools = payload.userId === '990005' ? [] : ['栗林', '番町'];
       const sessionToken = 'synthetic-' + payload.userId;
-      sessions.set(sessionToken, { role, assignedSchools });
+      sessions.set(sessionToken, { role, assignedSchools, userId: payload.userId });
       return success({ role, school: assignedSchools[0] || '', assignedSchools, sessionToken, name: '合成職員', isInitial: false });
     }
     if (payload.action === 'getPublishedKotoreContents') return success({ notices: [], homeNotice: null });
@@ -51,6 +51,6 @@ function createSukimakunPreviewMock(allSchools) {
     if (payload.action.startsWith('getStudentProfile')) return success({ subjects: [], items: [], currentContents: [], schoolYears: [] });
     return { result: 'error', code: 'SYNTHETIC_ACTION_NOT_IMPLEMENTED', message: 'この合成検証では対象外の操作です' };
   }
-  return { handle, setMode: value => { if (!['normal', 'error', 'expired', 'malformed'].includes(value)) throw Error('Unknown synthetic mode'); mode = value; }, stats: () => ({ mode, requests: requests.slice() }) };
+  return { handle, getSession: token => { const session = sessions.get(token); if (!session || mode === 'expired') return null; return { ...session, sessionExpiresAt: expiry(), userContexts: students.map(s => ({ ...s, role: 'student' })) }; }, setMode: value => { if (!['normal', 'error', 'expired', 'malformed'].includes(value)) throw Error('Unknown synthetic mode'); mode = value; }, stats: () => ({ mode, requests: requests.slice() }) };
 }
 module.exports = { createSukimakunPreviewMock };

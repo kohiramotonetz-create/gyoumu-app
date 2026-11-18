@@ -1,0 +1,110 @@
+スキマ君ミッション管理 Stage2 英語ミッション 保存・取得・編集
+状態: 独立ローカル候補（週単位削除を含む）。通常ProductionはStage1表示。個トレ・スキマ君・共通GAS v194は未変更。
+
+1. 接続境界
+通常ビルドから保存UI、教材カタログ、追加API接続を除外する。
+ローカルは vite.sukimakun-preview.config.js の127.0.0.1限定、環境変数ファイル無効、同一オリジンCSPを使う。
+ブラウザのRepositoryとサーバーの保存処理を分離し、PreviewはHTTPで合成セッションを検証する。
+Previewは専用JSONに履歴を保存する。ブラウザには結果不明の操作ID・対象・種別と、削除時の対象ID・版を保持する。
+GAS用Repositoryは既存postManagementActionでJSON文字列をtext/plainで直接POSTし、保存先gasの応答を検証する。
+通常ビルドではENABLE_GAS_MISSIONSをfalseに固定。ローカルPreviewの保存先は同一オリジンのモックAPI。
+GAS候補は保存済み実配備v194全ソースから生成。既存doPostのAPIキー確認後に追加actionだけを分岐し、
+既存requirePrivilegedStaffSession_と担当校舎解決関数を呼ぶ。ログイン、既存API、manifestは変えない。
+生成: node scripts/buildEnglishMissionGas.mjs <独立出力先> <保存済み実配備v194フォルダ>
+
+2. 教材の正本
+student-app/public/wordlist.csv。カタログのsourceにcommit、blob、取得日、SHA-256を記録。
+23 Unit、108区分、1,505語句。中１43区分665語句、中２35区分433語句、中３30区分407語句。
+CSV初出順と原文キーを保持。中１Unit９Scene5 Real Life English の末尾空白もキーの一部。
+サーバーは教材版、開始・終了キー、同一教材学年、連番の展開結果を検証し、語句数を再計算する。
+実行時に教材の外部取得は行わない。教材更新時は新旧版の照合・編集手順を別途確認する。
+
+3. 対象グループ
+{scopeSchools, attendingSchoolName, targetGrade, subject:'english'}。
+Stage1のresponse.schoolsを校舎範囲とし、group.schoolsは現在生徒がいる校舎の表示に使う。
+正式校舎名の重複を除き昇順で固定、学校名はStage1同様に前後空白を除去、学年は正式な全角表記。
+groupId = 'g-' + SHA-256(JSON.stringify([1,scopeSchools,attendingSchoolName,targetGrade,subject]))。
+保存・照合にclient指定のgroupId、role、担当校舎は使わない。
+新規は現行の認証マスター内に、その校舎集合・B列所属校舎・E列学年・H列通学校名に合う有効な生徒が必要。
+同名学校を選択範囲で集約する。保存後に担当校舎や在籍が変化しても保存済み校舎集合は変更しない。
+閲覧・編集・削除には保存された校舎全体の現在権限が必要。adminは全正式校舎、general/head-teacherは担当校舎のみ。
+別の管理者でも同じ集合なら同一ID。対象集合が異なる登録は別グループ。
+一覧は完全一致のrecordsと、同じ学校・学年・教科で現権限内の別校舎集合のrelatedRecordsを分けて返す。
+異なる集合に所属生徒が重なりうる点は配信工程の未確定事項。今回は配信しない。
+
+4. シート（専用2枚、既存マスター変更なし）
+英語ミッション履歴 A:G:
+  operationId / missionId / version / groupId / ordinal / recordJson / recordHash
+  recordJson: missionId, batchId, operationId, groupId, targetKey, target, weekNumber,
+  startDate, endDate, timeZone, catalogVersion, materials, wordCount, version,
+  createdAt, createdBy, updatedAt, updatedBy。学校・学年・教科・固定校舎集合はtarget内。
+  recordHashはJSONのSHA-256。ordinalは操作内の0始まり順序。
+英語ミッション操作 A:L:
+  operationId / actorIdJson / groupId / mode / requestHash / baseRevision / commitRevision /
+  recordCount / recordsDigest / createdAt / updatedAt / state
+  actorIdJsonはIDをJSON文字列化し先頭ゼロを保持。state: PREPARED / COMMITTED / ABORTED。
+  missionIdは週ごと、batchIdは初回一括保存ごと、operationIdは作成・更新・削除要求ごと。
+  初版1、編集・削除時+1。missionId、batchId、作成者・作成時刻、期間、週番号を維持する。
+  削除版のrecordJsonにstatus:DELETED、deletedAt、deletedByを追加する。旧データの状態なしは有効。
+  期間は日付文字列YYYY-MM-DD、Asia/Tokyoの暦日。開始日＋6日、週間の開始日は7日差。
+
+5. 追加actionと例（認証情報は省略）
+すべて既存APIキーと管理セッションを検証。teacher/student/未ログインを拒否。
+getSukimakunEnglishMissions {target, includeAccessibleScopes:true}
+  → {result:'success', storage:'gas', records:[...], relatedRecords:[...], revision:2, catalogVersion, sessionExpiresAt}
+previewSukimakunEnglishMissionBatch {mode:'create', operationId:'client-uuid', target, weeks:[{weekNumber:1,
+  startDate:'2026-11-05', endDate:'2026-11-11', catalogVersion, materials:[{materialGrade:'中１',
+  startUnitKey:'中１Unit１part1',endUnitKey:'中１Unit１part2',unitKeys:['中１Unit１part1','中１Unit１part2']}]}]}
+  → {result:'success', canSave:true, duplicates:[], conflicts:[], revision:0, operationId,
+       requestHash, confirmationToken, confirmationExpiresAt, sessionExpiresAt, storage:'gas'}
+saveSukimakunEnglishMissionBatch {上記と同一target/weeks/operationId, expectedRevision:0, confirmationToken, duplicatesAcknowledged:false}
+  → {result:'success', state:'COMMITTED', operationId, revision:1, records:[...], storage:'gas', sessionExpiresAt}
+updateSukimakunEnglishMission 同じ契約。previewのmode:'update'。weeksは1件、既存missionIdとexpectedVersionを追加。
+deleteSukimakunEnglishMission {target, operationId, missionId, expectedVersion}
+  → {result:'success', state:'COMMITTED', operationId, revision, records:[削除済みの版1件], storage, sessionExpiresAt}
+  認証と対象範囲をロック内で再確認し、指定IDの最新が有効で、期待版が一致する場合に削除版を追記する。
+getSukimakunEnglishMissionOperation {target, operationId} → state:NOT_FOUND/PREPARED/ABORTED/COMMITTED。
+  対象範囲を再認可し、記録がある操作は登録者本人またはadminのみ照会可能。
+recoverSukimakunEnglishMissionOperation {target, operationId} → adminのみ。PREPAREDを論理中止、COMMITTEDは変更しない。
+  復旧用のAPI。一般UIから操作せず、確定済みの削除版を戻す機能は追加しない。
+
+6. 確認と保存
+期間は開始・終了を含め、完全一致の対象グループ＋教科で1日でも重なればPERIOD_CONFLICT。
+バッチの1週でも衝突したら書込み前に全件拒否。隣接翌日は可、別グループは衝突扱いしない。
+単元は今回の週同士と同一グループの既存別週を比較。同じmissionIdの旧版だけは除外。
+重複確認は一操作一回。「同一単元を実施しています。登録しますか？」のOKで許可、キャンセルは無書込み。
+サーバー署名トークンに利用者・現在role・対象・操作ID・種別・内容ハッシュ・対象revision・期限を束縛。
+署名鍵はSUKIMAKUN_ENGLISH_CONFIRMATION_KEY（Script Propertiesに管理者が別工程で設定）。キーは配信しない。
+確認は最長5分、セッション期限まで。重複時は有効な署名と厳密なduplicatesAcknowledged:trueが必要。
+WebアプリではDocumentLockが取得できない実行文脈があるため、保存候補の専用APIはScriptLockで直列化する。
+ブックの取得と履歴の読み込みはScriptLock取得後に行い、ロックを取得できない場合はLOCK_BUSYを返す。
+保存はロック内でセッション・担当範囲・期間・カタログ・更新版・revisionを再検証。
+更新版不一致はVERSION_CONFLICT。最新一覧を取得し、編集ボタンから最新内容を読み直す。無断上書きしない。
+編集可能なのは教材学年と単元範囲。期間変更・一括期間移動は対象外。
+最新が削除版の週を通常一覧・日付衝突・単元重複の判定から除外する。別の有効週との衝突は拒否。
+
+7. 可視性・再送・復旧
+(1) すべて検証 (2) PREPARED操作行 (3) 全週を一括setValues (4) 行数・順序・各ハッシュ・全体ハッシュを再読照合
+(5) 操作行のstateを最後にCOMMITTED (6) 全体を再読してから成功を返す。
+読み取りも同じロックを使い、COMMITTEDかつ照合済みの操作だけを有効扱いする。
+途中で失敗した操作はABORTEDへ。未確定の途中行は保留のまま有効一覧に出さない。実データは削除しない。
+確定済み操作IDと同一内容の再送は元の結果を返す。内容を変えたID再利用は拒否。更新・削除の再送も元の版を返す。別操作IDの削除済み週への要求はMISSION_DELETED。
+削除は別のCOMMITTED操作として1版を追加し、元の一括登録操作と各週の元履歴を変更しない。
+GAS候補の削除では確定マーカー前後にflushと再読照合を行う。flushに失敗して確定が疑われる場合は状態照会を案内する。
+通信結果不明時は新操作を開始せず、操作IDで照会。COMMITTEDなら再取得確認、ABORTEDなら新IDで再確認。
+PREPAREDが残る間は新規書込みを止める。adminが対象・操作IDと履歴を確認し、復旧APIで論理中止して再照合。
+壊れたCOMMITTEDや不完全な操作行を検出した場合は表示・書込みを止める。独立バックアップと監査記録から
+承認済みの手動復旧を行う。Sheetsの物理的な原子性は保証しない。直接編集や復旧中の並行書込みを禁止する。
+一括操作の履歴は追記型。長期運用では行数、読取時間、セル上限、バックアップ量を測定する。
+
+8. エラー
+{result:'error', code:'PERIOD_CONFLICT', message:'登録期間が重複しています。指定した期間には、すでに英語ミッションが登録されています。新規登録はできません。登録済みミッションの内容を変更してください。', conflicts:[{missionId,weekNumber,startDate,endDate}]}
+AUTHENTICATION_ERROR / AUTHORIZATION_ERROR / TARGET_NOT_FOUND / VALIDATION_ERROR / CATALOG_VERSION_ERROR /
+CONFIRMATION_REQUIRED・INVALID・EXPIRED / DUPLICATE_CONFIRMATION_REQUIRED / STALE_REVISION / VERSION_CONFLICT /
+IMMUTABLE_PERIOD / MISSION_DELETED / IDEMPOTENCY_CONFLICT / LOCK_BUSY / OPERATION_ABORTED / OUTCOME_UNKNOWN / RECOVERY_REQUIRED /
+SETUP_REQUIRED / STORAGE_CAPACITY / STORAGE_INTEGRITY_ERROR。秘密値・認証情報・内部例外を返さない。
+
+9. 公開前に残ること
+管理者は別途承認後、Apps Scriptのプロジェクト設定でSUKIMAKUN_ENGLISH_STORAGE_SPREADSHEET_IDに専用ブックのID、SUKIMAKUN_ENGLISH_CONFIRMATION_KEYに独立した十分にランダムな秘密値を設定する。値をGitやフロント環境変数に保存しない。
+承認後、実配備v194・編集HEADとの差分照合、専用2シートと確認鍵の初期設定、実Webアプリ経路での検証、
+同時実行と復旧リハーサル、Production用Repositoryを明示的に有効化。保存と生徒向け配信は別工程。

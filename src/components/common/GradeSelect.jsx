@@ -29,10 +29,13 @@ export default function GradeSelect({
   className,
   style,
   includeGroups = true,
+  allowedGrades,
   placeholder = '選択してください',
 }) {
   const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
-  const options = includeGroups ? [...INDIVIDUAL_GRADE_OPTIONS, ...GROUP_GRADE_OPTIONS] : INDIVIDUAL_GRADE_OPTIONS;
+  const individualOptions = allowedGrades ? INDIVIDUAL_GRADE_OPTIONS.filter(option => allowedGrades.includes(option.label)) : INDIVIDUAL_GRADE_OPTIONS;
+  const groupOptions = allowedGrades ? GROUP_GRADE_OPTIONS.filter(option => option.values.every(grade => allowedGrades.includes(grade))) : GROUP_GRADE_OPTIONS;
+  const options = includeGroups ? [...individualOptions, ...groupOptions] : individualOptions;
   const selectedLabel = options.find(option => sameValues(option.values, selectedValues))?.label || '';
 
   const handleChange = event => {
@@ -44,11 +47,11 @@ export default function GradeSelect({
     <select value={selectedLabel} onChange={handleChange} disabled={disabled} className={className} style={style}>
       <option value="">{placeholder}</option>
       <optgroup label="個別学年">
-        {INDIVIDUAL_GRADE_OPTIONS.map(option => <option key={option.label} value={option.label}>{option.label}</option>)}
+        {individualOptions.map(option => <option key={option.label} value={option.label}>{option.label}</option>)}
       </optgroup>
       {includeGroups && (
         <optgroup label="一括学年">
-          {GROUP_GRADE_OPTIONS.map(option => <option key={option.label} value={option.label}>{option.label}</option>)}
+          {groupOptions.map(option => <option key={option.label} value={option.label}>{option.label}</option>)}
         </optgroup>
       )}
     </select>
