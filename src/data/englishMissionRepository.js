@@ -1,6 +1,6 @@
 import { postManagementAction } from '../utils/managementApi.js';
 
-// Transport is supplied explicitly. Normal Production never instantiates this repository.
+// Transport is supplied explicitly so the response can be checked against the expected storage.
 export function createEnglishMissionRepository({ invoke, expectedStorage }) {
   const call = async (action, payload) => {
     let result;
