@@ -15,7 +15,7 @@ import { createEnglishMissionHttpRepository } from '../data/englishMissionReposi
 
 const LOCAL_MISSION_MOCK = import.meta.env.DEV && import.meta.env.VITE_SUKIMAKUN_MISSION_MOCK === 'true';
 // Enable only after the Stage2 GAS deployment has been approved and verified.
-const ENABLE_GAS_MISSIONS = false;
+const ENABLE_GAS_MISSIONS = true;
 const SHOW_MISSION_EDITOR = LOCAL_MISSION_MOCK || ENABLE_GAS_MISSIONS;
 const EnglishMissionRegistration = SHOW_MISSION_EDITOR ? lazy(() => import('./EnglishMissionRegistration.jsx')) : null;
 const PREPARATION_NOTICE = '現在は学校・学年別の対象確認のみ利用できます。ミッションの登録・保存・配信機能は準備中です。';
